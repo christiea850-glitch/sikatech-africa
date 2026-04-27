@@ -26,6 +26,13 @@ function formatDate(value: string) {
   return d.toLocaleDateString();
 }
 
+function formatDateTime(value?: number) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString();
+}
+
 function todayInputValue() {
   const d = new Date();
   const y = d.getFullYear();
@@ -102,6 +109,7 @@ export default function FrontDeskBookingsPanel() {
   const [amountPaid, setAmountPaid] = useState(0);
   const [notes, setNotes] = useState("");
   const [search, setSearch] = useState("");
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
 
   const bookings = useMemo(() => {
     void version;
@@ -150,6 +158,23 @@ export default function FrontDeskBookingsPanel() {
       );
     });
   }, [bookings, search]);
+
+  const selectedBooking = useMemo(() => {
+    if (!selectedBookingId) return null;
+    return bookings.find((booking) => booking.id === selectedBookingId) || null;
+  }, [bookings, selectedBookingId]);
+
+  const selectedCharges = useMemo(() => {
+    return (selectedBooking?.folioActivity || []).filter(
+      (item) => item.type === "charge"
+    );
+  }, [selectedBooking]);
+
+  const selectedPayments = useMemo(() => {
+    return (selectedBooking?.folioActivity || []).filter(
+      (item) => item.type === "payment"
+    );
+  }, [selectedBooking]);
 
   function resetForm() {
     setGuestName("");
@@ -475,7 +500,14 @@ export default function FrontDeskBookingsPanel() {
             </thead>
             <tbody>
               {filteredBookings.map((b: BookingRecord) => (
-                <tr key={b.id}>
+                <tr
+                  key={b.id}
+                  onClick={() => setSelectedBookingId(b.id)}
+                  style={{
+                    ...styles.clickableRow,
+                    ...(selectedBookingId === b.id ? styles.selectedRow : {}),
+                  }}
+                >
                   <td style={styles.td}>
                     <div style={{ fontWeight: 900 }}>{b.bookingCode}</div>
                     <div style={styles.subMeta}>{b.bookingSource}</div>
@@ -514,6 +546,116 @@ export default function FrontDeskBookingsPanel() {
 
         {filteredBookings.length === 0 ? (
           <div style={styles.empty}>No reservations found.</div>
+        ) : null}
+
+        {selectedBooking ? (
+          <div style={styles.detailPanel}>
+            <div style={styles.detailHeader}>
+              <div>
+                <div style={styles.detailTitle}>{selectedBooking.guestName}</div>
+                <div style={styles.subMeta}>
+                  Room {selectedBooking.roomNo} • {selectedBooking.bookingCode}
+                </div>
+              </div>
+              <button
+                type="button"
+                style={styles.secondaryBtn}
+                onClick={() => setSelectedBookingId(null)}
+              >
+                Close
+              </button>
+            </div>
+
+            <div style={styles.detailGrid}>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Check-In</span>
+                <b>{formatDate(selectedBooking.checkInDate)}</b>
+              </div>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Check-Out</span>
+                <b>{formatDate(selectedBooking.checkOutDate)}</b>
+              </div>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Booking Status</span>
+                <b>{selectedBooking.bookingStatus}</b>
+              </div>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Payment Status</span>
+                <b>{selectedBooking.paymentStatus}</b>
+              </div>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Total Amount</span>
+                <b>{money(selectedBooking.totalAmount)}</b>
+              </div>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Amount Paid</span>
+                <b>{money(selectedBooking.amountPaid)}</b>
+              </div>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Unpaid Balance</span>
+                <b>{money(selectedBooking.balance)}</b>
+              </div>
+            </div>
+
+            <div style={styles.activityGrid}>
+              <div style={styles.activitySection}>
+                <div style={styles.activityTitle}>Room / Folio Charges</div>
+                {selectedCharges.length === 0 ? (
+                  <div style={styles.empty}>No room charges posted.</div>
+                ) : (
+                  selectedCharges.map((charge) => (
+                    <div key={charge.id} style={styles.activityItem}>
+                      <div style={styles.activityTop}>
+                        <b>{charge.title}</b>
+                        <b>{money(charge.amount)}</b>
+                      </div>
+                      <div style={styles.subMeta}>
+                        {formatDateTime(charge.createdAt)}
+                        {charge.transactionId ? ` • ${charge.transactionId}` : ""}
+                      </div>
+                      {charge.items && charge.items.length > 0 ? (
+                        <div style={styles.chargeLines}>
+                          {charge.items.map((line, index) => (
+                            <div key={`${charge.id}-${index}`} style={styles.chargeLine}>
+                              <span>
+                                {line.name} × {line.qty}
+                              </span>
+                              <span>{money(line.total)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div style={styles.activitySection}>
+                <div style={styles.activityTitle}>Payments</div>
+                {selectedBooking.amountPaid > 0 ? (
+                  <div style={styles.activityItem}>
+                    <div style={styles.activityTop}>
+                      <b>Booking payment</b>
+                      <b>{money(selectedBooking.amountPaid)}</b>
+                    </div>
+                    <div style={styles.subMeta}>{selectedBooking.paymentStatus}</div>
+                  </div>
+                ) : null}
+                {selectedPayments.map((payment) => (
+                  <div key={payment.id} style={styles.activityItem}>
+                    <div style={styles.activityTop}>
+                      <b>{payment.title}</b>
+                      <b>{money(payment.amount)}</b>
+                    </div>
+                    <div style={styles.subMeta}>{formatDateTime(payment.createdAt)}</div>
+                  </div>
+                ))}
+                {selectedBooking.amountPaid <= 0 && selectedPayments.length === 0 ? (
+                  <div style={styles.empty}>No payments recorded.</div>
+                ) : null}
+              </div>
+            </div>
+          </div>
         ) : null}
       </div>
     </div>
@@ -660,6 +802,12 @@ const styles: Record<string, CSSProperties> = {
     color: "#0b2a3a",
     fontWeight: 700,
   },
+  clickableRow: {
+    cursor: "pointer",
+  },
+  selectedRow: {
+    background: "rgba(15,23,42,0.04)",
+  },
   subMeta: {
     marginTop: 4,
     fontSize: 12,
@@ -670,6 +818,83 @@ const styles: Record<string, CSSProperties> = {
     marginTop: 12,
     color: "#64748b",
     fontWeight: 800,
+  },
+  detailPanel: {
+    marginTop: 16,
+    padding: 14,
+    borderRadius: 10,
+    background: "#ffffff",
+    border: "1px solid rgba(15,23,42,0.10)",
+  },
+  detailHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "flex-start",
+    marginBottom: 14,
+  },
+  detailTitle: {
+    color: "#111827",
+    fontSize: 18,
+    fontWeight: 900,
+  },
+  detailGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: 10,
+  },
+  detailItem: {
+    display: "grid",
+    gap: 4,
+    padding: 10,
+    borderRadius: 8,
+    background: "rgba(248,250,252,0.9)",
+    color: "#111827",
+    fontWeight: 800,
+  },
+  detailLabel: {
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: 800,
+  },
+  activityGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 12,
+    marginTop: 14,
+  },
+  activitySection: {
+    display: "grid",
+    gap: 10,
+  },
+  activityTitle: {
+    color: "#111827",
+    fontWeight: 900,
+  },
+  activityItem: {
+    padding: 10,
+    borderRadius: 8,
+    background: "rgba(248,250,252,0.9)",
+    border: "1px solid rgba(15,23,42,0.08)",
+  },
+  activityTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    color: "#111827",
+  },
+  chargeLines: {
+    display: "grid",
+    gap: 4,
+    marginTop: 8,
+  },
+  chargeLine: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    color: "#334155",
+    fontSize: 13,
+    fontWeight: 700,
   },
   kpiCard: {
     padding: "16px 18px",
