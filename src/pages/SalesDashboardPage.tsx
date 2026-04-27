@@ -19,6 +19,8 @@ import { useDepartments } from "../departments/DepartmentsContext";
 import { useSales } from "../sales/SalesContext";
 import { useExpenses } from "../expenses/ExpenseContext";
 import { getAllBookings } from "../frontdesk/bookingsStorage";
+import { useShift } from "../shifts/ShiftContext";
+import { normalizeDepartmentKey } from "../lib/departments";
 
 type Tx = any;
 type ExpenseRow = any;
@@ -49,11 +51,11 @@ function lower(value: unknown) {
 }
 
 function formatDepartmentLabel(value: string) {
-  const raw = String(value || "").trim();
-  if (!raw) return "Unknown";
+  const key = normalizeDepartmentKey(value);
+  if (key === "unknown") return "Unknown";
 
-  return raw
-    .split(/[-_\s]+/)
+  return key
+    .split("-")
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
@@ -185,8 +187,18 @@ function getTxTime(t: Tx) {
   return t?.createdAt || t?.timestamp || t?.date || "";
 }
 
-function parseDashboardDate(value: string) {
+function parseDashboardDate(value: string | number) {
+  if (typeof value === "number") {
+    const ms = value < 10_000_000_000 ? value * 1000 : value;
+    return new Date(ms);
+  }
+
   const raw = String(value || "").trim();
+  if (/^\d+$/.test(raw)) {
+    const n = Number(raw);
+    return new Date(n < 10_000_000_000 ? n * 1000 : n);
+  }
+
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
     return new Date(`${raw}T00:00:00`);
   }
@@ -214,7 +226,7 @@ function formatShortDate(value: string) {
   });
 }
 
-function withinDateRange(dateValue: string, startDate: string, endDate: string) {
+function withinDateRange(dateValue: string | number, startDate: string, endDate: string) {
   if (!startDate && !endDate) return true;
   if (!dateValue) return false;
 
@@ -259,6 +271,8 @@ function getSearchBlob(t: Tx) {
     t?.guestName,
     t?.roomNo,
     t?.status,
+    t?.shiftReconciliationStatus,
+    getDepartmentValue(t),
   ]
     .filter(Boolean)
     .join(" ")
@@ -275,6 +289,7 @@ function getExpenseSearchBlob(e: ExpenseRow) {
     e?.enteredBy,
     e?.enteredByName,
     e?.amount,
+    normalizeDepartmentKey(e?.deptKey),
   ]
     .filter(Boolean)
     .join(" ")
@@ -286,7 +301,7 @@ function statusLabel(t: Tx) {
 }
 
 function getDepartmentValue(t: Tx) {
-  return lower(
+  return normalizeDepartmentKey(
     t?.departmentId ||
       t?.departmentName ||
       t?.department ||
@@ -430,6 +445,57 @@ function TransactionItemBreakdown({ tx }: { tx: Tx }) {
   );
 }
 
+function getExpenseDepartmentValue(e: ExpenseRow) {
+  return normalizeDepartmentKey(e?.deptKey || e?.department || "unknown");
+}
+
+function normalizeShiftStatus(status: unknown) {
+  const value = lower(status);
+  if (!value || value === "open") return "open shift";
+  if (value === "accounting_reviewed" || value === "reviewed" || value === "manager_approved") return "reviewed";
+  if (value === "closing_submitted" || value === "submitted" || value === "pending_close" || value === "pending_closing") return "submitted";
+  if (value === "closed") return "reviewed";
+  return value;
+}
+
+function getShiftTime(value: unknown) {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const n = Number(value);
+    if (Number.isFinite(n) && value.trim() !== "") return n;
+    const d = new Date(value).getTime();
+    return Number.isFinite(d) ? d : 0;
+  }
+  return 0;
+}
+
+function getTransactionShiftStatus(t: Tx, shifts: any[]) {
+  const explicit = t?.shiftReconciliationStatus || t?.closingStatus;
+  if (explicit) return normalizeShiftStatus(explicit);
+
+  const shiftId = String(t?.shiftId || "").trim();
+  const txTime = parseDashboardDate(getTxTime(t)).getTime();
+  const txDept = getDepartmentValue(t);
+
+  const directShift = shiftId ? shifts.find((shift: any) => String(shift?.id || "") === shiftId) : null;
+  if (directShift) return normalizeShiftStatus(directShift.status);
+
+  if (Number.isFinite(txTime)) {
+    const matchingShift = shifts.find((shift: any) => {
+      if (normalizeDepartmentKey(shift?.departmentKey) !== txDept) return false;
+      const openedAt = getShiftTime(shift?.openedAt);
+      const closedAt = getShiftTime(shift?.closedAt);
+      if (openedAt && txTime < openedAt) return false;
+      if (closedAt && txTime > closedAt) return false;
+      return openedAt > 0;
+    });
+
+    if (matchingShift) return normalizeShiftStatus(matchingShift.status);
+  }
+
+  return "unclosed";
+}
+
 function ChartCard({
   title,
   helper,
@@ -454,6 +520,7 @@ export default function SalesDashboardPage() {
   const { departments = [] } = useDepartments();
   const { records } = useSales();
   const { records: expenseRecords } = useExpenses();
+  const { shifts } = useShift();
 
   const [search, setSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
@@ -476,6 +543,9 @@ export default function SalesDashboardPage() {
         amount: r.total,
         status: "PAID",
         accountingSource: "direct_sale",
+        deptKey: normalizeDepartmentKey(r.deptKey),
+        department: normalizeDepartmentKey(r.department || r.deptKey),
+        shiftReconciliationStatus: getTransactionShiftStatus(r, shifts),
       }));
 
     const folioRows = getAllBookings().flatMap((booking) =>
@@ -489,8 +559,8 @@ export default function SalesDashboardPage() {
             id: activity.id,
             txId: activity.transactionId || activity.id,
             createdAt: new Date(activity.createdAt).toISOString(),
-            deptKey: "front-desk",
-            department: "front-desk",
+            deptKey: normalizeDepartmentKey("front-desk"),
+            department: normalizeDepartmentKey("front-desk"),
             itemName: activity.title,
             productName: activity.title,
             items: activity.items || [],
@@ -507,17 +577,26 @@ export default function SalesDashboardPage() {
             customerName: booking.guestName,
             customerPhone: booking.guestPhone,
             note: activity.note,
+            shiftReconciliationStatus: getTransactionShiftStatus(
+              {
+                ...activity,
+                createdAt: new Date(activity.createdAt).toISOString(),
+                deptKey: "front-desk",
+                department: "front-desk",
+              },
+              shifts
+            ),
           };
         })
     );
 
     return [...directSales, ...folioRows];
-  }, [records]);
+  }, [records, shifts]);
 
   const departmentOptions = useMemo(() => {
     const fromConfig = (departments || []).map((d: any) => ({
-      value: lower(d?.id || d?.name),
-      label: d?.name || d?.id || "Unknown",
+      value: normalizeDepartmentKey(d?.key || d?.id || d?.name),
+      label: formatDepartmentLabel(d?.name || d?.key || d?.id),
     }));
 
     const txDepts = Array.from(
@@ -530,7 +609,7 @@ export default function SalesDashboardPage() {
     const expenseDepts = Array.from(
       new Set(
         (expenseRecords || [])
-          .map((e: any) => lower(e?.deptKey || "unknown"))
+          .map((e: any) => normalizeDepartmentKey(e?.deptKey || e?.department || "unknown"))
           .filter(Boolean)
       )
     ).map((value) => ({
@@ -583,11 +662,11 @@ export default function SalesDashboardPage() {
       )
       .filter((e: ExpenseRow) => {
         if (departmentFilter === "all") return true;
-        return lower(e?.deptKey) === departmentFilter;
+        return getExpenseDepartmentValue(e) === departmentFilter;
       })
       .filter((e: ExpenseRow) => {
         if (!selectedDeptRow) return true;
-        return lower(e?.deptKey) === selectedDeptRow;
+        return getExpenseDepartmentValue(e) === selectedDeptRow;
       })
       .filter((e: ExpenseRow) => {
         if (!q) return true;
@@ -676,7 +755,7 @@ export default function SalesDashboardPage() {
     }
 
     for (const e of visibleExpenses) {
-      const dept = lower(e?.deptKey || "unknown");
+      const dept = getExpenseDepartmentValue(e);
 
       const current = map.get(dept) || {
         department: dept,
@@ -741,7 +820,7 @@ export default function SalesDashboardPage() {
     const map = new Map<string, { department: string; amount: number }>();
 
     for (const e of visibleExpenses) {
-      const dept = lower(e?.deptKey || "unknown");
+      const dept = getExpenseDepartmentValue(e);
       const current = map.get(dept) || {
         department: dept,
         amount: 0,
@@ -851,9 +930,9 @@ export default function SalesDashboardPage() {
       id: e?.id || "—",
       time: e?.createdAt || "",
       amount: Number(e?.amount) || 0,
-      department: getDepartmentLabel(lower(e?.deptKey || "unknown"), departmentOptions),
+      department: getDepartmentLabel(getExpenseDepartmentValue(e), departmentOptions),
       title: `${getDepartmentLabel(
-        lower(e?.deptKey || "unknown"),
+        getExpenseDepartmentValue(e),
         departmentOptions
       )} expense`,
       subtitle: `${formatCategoryLabel(e?.category || "miscellaneous")} • ${
@@ -2554,6 +2633,10 @@ export default function SalesDashboardPage() {
             />
             <DetailItem label="Status" value={statusLabel(selectedTx)} />
             <DetailItem
+              label="Shift Status"
+              value={selectedTx?.shiftReconciliationStatus || "unclosed"}
+            />
+            <DetailItem
               label="Customer Phone"
               value={selectedTx?.customerPhone || selectedTx?.phone || "—"}
             />
@@ -2581,7 +2664,7 @@ export default function SalesDashboardPage() {
             <DetailItem
               label="Department"
               value={getDepartmentLabel(
-                lower(selectedExpense?.deptKey || "unknown"),
+                getExpenseDepartmentValue(selectedExpense),
                 departmentOptions
               )}
             />

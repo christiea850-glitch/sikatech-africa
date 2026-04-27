@@ -5,6 +5,7 @@ import { useSales } from "../sales/SalesContext";
 import { useExpenses } from "../expenses/ExpenseContext";
 import { useBusinessSetup } from "../setup/BusinessSetupContext";
 import { getAllBookings } from "../frontdesk/bookingsStorage";
+import { formatDepartmentLabel, normalizeDepartmentKey } from "../lib/departments";
 import {
   loadAccountingWorkbenchReviews,
   upsertAccountingWorkbenchReview,
@@ -153,7 +154,7 @@ export default function AccountingWorkbenchPage() {
         id: `sale:${sale.id}`,
         date: sale.createdAt,
         source: "direct_sale",
-        department: sale.deptKey || "unknown",
+        department: normalizeDepartmentKey(sale.deptKey),
         paymentMethod: sale.paymentMethod || "other",
         staff: sale.staffName || sale.staffId || "unknown",
         description: sale.productName || "Sale",
@@ -174,7 +175,7 @@ export default function AccountingWorkbenchPage() {
             id: `folio:${booking.id}:${activity.id}`,
             date: new Date(activity.createdAt).toISOString(),
             source: isPayment ? "guest_payment" : "room_folio_charge",
-            department: "front-desk",
+            department: normalizeDepartmentKey("front-desk"),
             paymentMethod: isPayment ? activity.paymentMethod || "other" : "room_folio",
             staff: "Front Desk",
             description: activity.title || sourceLabel(isPayment ? "guest_payment" : "room_folio_charge"),
@@ -193,7 +194,7 @@ export default function AccountingWorkbenchPage() {
       id: `expense:${expense.id}`,
       date: expense.createdAt,
       source: "expense",
-      department: expense.deptKey || "unknown",
+      department: normalizeDepartmentKey(expense.deptKey),
       paymentMethod: "expense",
       staff: expense.enteredByName || expense.enteredBy || "unknown",
       description: expense.description || expense.category || "Expense",
@@ -214,7 +215,7 @@ export default function AccountingWorkbenchPage() {
       const review = reviewMap.get(row.id);
       const status = review?.status || "unreviewed";
       if (!inRange(row.date, startDate, endDate)) return false;
-      if (department !== "all" && row.department !== department) return false;
+      if (department !== "all" && row.department !== normalizeDepartmentKey(department)) return false;
       if (paymentMethod !== "all" && row.paymentMethod !== paymentMethod) return false;
       if (source !== "all" && row.source !== source) return false;
       if (staff !== "all" && row.staff !== staff) return false;
@@ -415,7 +416,7 @@ export default function AccountingWorkbenchPage() {
         <div style={styles.filterGrid}>
           <Field label="Start Date"><input type="date" style={styles.input} value={startDate} onChange={(e) => setStartDate(e.target.value)} /></Field>
           <Field label="End Date"><input type="date" style={styles.input} value={endDate} onChange={(e) => setEndDate(e.target.value)} /></Field>
-          <Field label="Department"><Select value={department} onChange={setDepartment} options={["all", ...departments]} /></Field>
+          <Field label="Department"><Select value={department} onChange={setDepartment} options={["all", ...departments]} labeler={(v) => v === "all" ? "All" : formatDepartmentLabel(v)} /></Field>
           <Field label="Payment Method"><Select value={paymentMethod} onChange={setPaymentMethod} options={["all", ...paymentMethods]} /></Field>
           <Field label="Source / Type"><Select value={source} onChange={setSource} options={["all", "direct_sale", "room_folio_charge", "guest_payment", "expense"]} labeler={(v) => v === "all" ? "All" : sourceLabel(v as SourceType)} /></Field>
           <Field label="Staff"><Select value={staff} onChange={setStaff} options={["all", ...staffOptions]} /></Field>
@@ -433,7 +434,7 @@ export default function AccountingWorkbenchPage() {
               <tbody>
                 {groupRows.map((row) => (
                   <tr key={row.label}>
-                    <Td>{row.label}</Td><Td>{row.count}</Td><Td>{money(row.revenue)}</Td><Td>{money(row.expenses)}</Td><Td>{money(row.collections)}</Td><Td>{money(row.net)}</Td>
+                    <Td>{groupBy === "department" ? formatDepartmentLabel(row.label) : row.label}</Td><Td>{row.count}</Td><Td>{money(row.revenue)}</Td><Td>{money(row.expenses)}</Td><Td>{money(row.collections)}</Td><Td>{money(row.net)}</Td>
                   </tr>
                 ))}
               </tbody>
@@ -480,7 +481,7 @@ export default function AccountingWorkbenchPage() {
                   >
                     <Td>{new Date(row.date).toLocaleDateString()}</Td>
                     <Td>{sourceLabel(row.source)}</Td>
-                    <Td>{row.department}</Td>
+                    <Td>{formatDepartmentLabel(row.department)}</Td>
                     <Td>{row.paymentMethod}</Td>
                     <Td>{row.staff}</Td>
                     <Td>{row.description}{row.bookingCode ? ` (${row.bookingCode}${row.roomNo ? ` / ${row.roomNo}` : ""})` : ""}</Td>
@@ -530,7 +531,7 @@ export default function AccountingWorkbenchPage() {
           <div style={styles.detailGrid}>
             <DetailItem label="Date" value={formatDateTime(new Date(selectedRecord.date))} />
             <DetailItem label="Source / Type" value={sourceLabel(selectedRecord.source)} />
-            <DetailItem label="Department" value={selectedRecord.department} />
+            <DetailItem label="Department" value={formatDepartmentLabel(selectedRecord.department)} />
             <DetailItem label="Payment Method" value={selectedRecord.paymentMethod} />
             <DetailItem label="Staff" value={selectedRecord.staff} />
             <DetailItem label="Description" value={selectedRecord.description} />
@@ -577,7 +578,7 @@ export default function AccountingWorkbenchPage() {
             <tbody>
               {groupRows.map((row) => (
                 <tr key={row.label}>
-                  <PrintTd>{row.label}</PrintTd>
+                  <PrintTd>{groupBy === "department" ? formatDepartmentLabel(row.label) : row.label}</PrintTd>
                   <PrintTd>{row.count}</PrintTd>
                   <PrintTd>{money(row.revenue)}</PrintTd>
                   <PrintTd>{money(row.expenses)}</PrintTd>
@@ -603,7 +604,7 @@ export default function AccountingWorkbenchPage() {
                   <tr key={row.id}>
                     <PrintTd>{new Date(row.date).toLocaleDateString()}</PrintTd>
                     <PrintTd>{sourceLabel(row.source)}</PrintTd>
-                    <PrintTd>{row.department}</PrintTd>
+                    <PrintTd>{formatDepartmentLabel(row.department)}</PrintTd>
                     <PrintTd>{row.paymentMethod}</PrintTd>
                     <PrintTd>{row.staff}</PrintTd>
                     <PrintTd>{row.description}{row.bookingCode ? ` (${row.bookingCode}${row.roomNo ? ` / ${row.roomNo}` : ""})` : ""}</PrintTd>
