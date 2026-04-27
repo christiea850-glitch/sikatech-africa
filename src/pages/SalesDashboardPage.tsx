@@ -18,6 +18,7 @@ import {
 import { useDepartments } from "../departments/DepartmentsContext";
 import { useSales } from "../sales/SalesContext";
 import { useExpenses } from "../expenses/ExpenseContext";
+import { getAllBookings } from "../frontdesk/bookingsStorage";
 
 type Tx = any;
 type ExpenseRow = any;
@@ -150,6 +151,17 @@ function getPaymentBucket(t: Tx) {
   return "other";
 }
 
+function isRoomFolioSaleRecord(t: Tx) {
+  return (
+    lower(t?.paymentMode) === "post_to_room" ||
+    lower(t?.paymentMethod) === "room_folio"
+  );
+}
+
+function isGuestPayment(t: Tx) {
+  return lower(t?.accountingSource) === "guest_payment";
+}
+
 function getTxAmount(t: Tx) {
   const value =
     Number(t?.grandTotal) ||
@@ -159,6 +171,14 @@ function getTxAmount(t: Tx) {
     0;
 
   return Number.isFinite(value) ? value : 0;
+}
+
+function getRevenueAmount(t: Tx) {
+  return isGuestPayment(t) ? 0 : getTxAmount(t);
+}
+
+function getCollectionAmount(t: Tx) {
+  return lower(t?.accountingSource) === "room_folio_charge" ? 0 : getTxAmount(t);
 }
 
 function getTxTime(t: Tx) {
@@ -234,6 +254,10 @@ function getSearchBlob(t: Tx) {
     t?.productName,
     Array.isArray(t?.items) ? t.items.map((x: any) => x?.name).join(" ") : "",
     t?.paymentMethod,
+    t?.accountingSource,
+    t?.bookingCode,
+    t?.guestName,
+    t?.roomNo,
     t?.status,
   ]
     .filter(Boolean)
@@ -272,10 +296,19 @@ function getDepartmentValue(t: Tx) {
 }
 
 function getStaffLabel(t: Tx) {
+  if (t?.accountingSource === "room_folio_charge") return "Front Desk / Folio";
+  if (t?.accountingSource === "guest_payment") return "Front Desk / Guest Payment";
+
   const id = t?.staffId || t?.employeeId || "—";
   const name = t?.staffName || t?.cashierName || "";
 
   return name ? `${id} / ${name}` : String(id);
+}
+
+function getAccountingSourceLabel(t: Tx) {
+  if (t?.accountingSource === "room_folio_charge") return "Room folio charge";
+  if (t?.accountingSource === "guest_payment") return "Guest payment";
+  return "Direct sale";
 }
 
 function getDepartmentLabel(
@@ -355,13 +388,51 @@ export default function SalesDashboardPage() {
   const [activeTab, setActiveTab] = useState<MainTab>("overview");
 
   const rawTransactions = useMemo(() => {
-    return (records || []).map((r: any) => ({
-      ...r,
-      txId: r.id,
-      itemName: r.productName,
-      amount: r.total,
-      status: "PAID",
-    }));
+    const directSales = (records || [])
+      .filter((r: any) => !isRoomFolioSaleRecord(r))
+      .map((r: any) => ({
+        ...r,
+        txId: r.id,
+        itemName: r.productName,
+        amount: r.total,
+        status: "PAID",
+        accountingSource: "direct_sale",
+      }));
+
+    const folioRows = getAllBookings().flatMap((booking) =>
+      (booking.folioActivity || [])
+        .filter((activity) => activity.type === "charge" || activity.type === "payment")
+        .map((activity) => {
+          const isPayment = activity.type === "payment";
+          const amount = Number(activity.amount) || 0;
+
+          return {
+            id: activity.id,
+            txId: activity.transactionId || activity.id,
+            createdAt: new Date(activity.createdAt).toISOString(),
+            deptKey: "front-desk",
+            department: "front-desk",
+            itemName: activity.title,
+            productName: activity.title,
+            items: activity.items || [],
+            amount,
+            total: amount,
+            paymentMethod: isPayment ? activity.paymentMethod || "other" : "room_folio",
+            paymentMode: isPayment ? "pay_now" : "post_to_room",
+            status: isPayment ? "PAID" : "POSTED_TO_ROOM",
+            accountingSource: isPayment ? "guest_payment" : "room_folio_charge",
+            bookingId: booking.id,
+            bookingCode: booking.bookingCode,
+            roomNo: booking.roomNo,
+            guestName: booking.guestName,
+            customerName: booking.guestName,
+            customerPhone: booking.guestPhone,
+            note: activity.note,
+          };
+        })
+    );
+
+    return [...directSales, ...folioRows];
   }, [records]);
 
   const departmentOptions = useMemo(() => {
@@ -459,8 +530,8 @@ export default function SalesDashboardPage() {
     let other = 0;
 
     for (const t of filteredTransactions) {
-      const amount = getTxAmount(t);
-      revenue += amount;
+      const amount = getCollectionAmount(t);
+      revenue += getRevenueAmount(t);
 
       const bucket = getPaymentBucket(t);
       if (bucket === "cash") cash += amount;
@@ -476,11 +547,15 @@ export default function SalesDashboardPage() {
     );
 
     const netProfit = revenue - expenses;
-    const averageSale =
-      filteredTransactions.length > 0 ? revenue / filteredTransactions.length : 0;
+    const revenueTransactionCount = filteredTransactions.filter(
+      (t: Tx) => getRevenueAmount(t) > 0
+    ).length;
+    const averageSale = revenueTransactionCount > 0 ? revenue / revenueTransactionCount : 0;
+    const collections = cash + momo + card + transfer + other;
 
     return {
       revenue,
+      collections,
       expenses,
       netProfit,
       averageSale,
@@ -517,7 +592,7 @@ export default function SalesDashboardPage() {
       };
 
       current.transactions += 1;
-      current.revenue += getTxAmount(t);
+      current.revenue += getRevenueAmount(t);
       map.set(dept, current);
     }
 
@@ -601,7 +676,7 @@ export default function SalesDashboardPage() {
   }, [visibleExpenses]);
 
   const paymentMix = useMemo(() => {
-    const total = summary.revenue || 1;
+    const total = summary.collections || 1;
 
     return [
       { label: "Cash", value: summary.cash, percent: (summary.cash / total) * 100 },
@@ -682,7 +757,12 @@ export default function SalesDashboardPage() {
       time: getTxTime(t),
       amount: getTxAmount(t),
       department: getDepartmentLabel(getDepartmentValue(t), departmentOptions),
-      title: `${getDepartmentLabel(getDepartmentValue(t), departmentOptions)} sale`,
+      title:
+        t?.accountingSource === "room_folio_charge"
+          ? `Room folio charge - ${t?.roomNo || "room"}`
+          : t?.accountingSource === "guest_payment"
+          ? `Guest payment - ${t?.roomNo || "room"}`
+          : `${getDepartmentLabel(getDepartmentValue(t), departmentOptions)} sale`,
       subtitle: `${getStaffLabel(t)} • ${upper(t?.paymentMethod || "other")}`,
       raw: t,
     }));
@@ -715,7 +795,7 @@ export default function SalesDashboardPage() {
     filteredTransactions.forEach((t) => {
       const key = formatShortDate(getTxTime(t));
       const current = map.get(key) || { label: key, revenue: 0, expenses: 0 };
-      current.revenue += getTxAmount(t);
+      current.revenue += getRevenueAmount(t);
       map.set(key, current);
     });
 
@@ -743,7 +823,7 @@ export default function SalesDashboardPage() {
 
     rawTransactions.forEach((t: Tx) => {
       const d = new Date(getTxTime(t));
-      const amount = getTxAmount(t);
+      const amount = getRevenueAmount(t);
       const dept = getDepartmentValue(t);
 
       if (Number.isNaN(d.getTime())) return;
@@ -796,7 +876,7 @@ export default function SalesDashboardPage() {
       if (Number.isNaN(d.getTime())) return;
 
       const dept = getDepartmentValue(t);
-      const amount = getTxAmount(t);
+      const amount = getRevenueAmount(t);
 
       if (departmentFilter !== "all" && dept !== departmentFilter) return;
       if (selectedDeptRow && dept !== selectedDeptRow) return;
@@ -855,7 +935,7 @@ export default function SalesDashboardPage() {
       if (Number.isNaN(d.getTime())) return;
 
       const hour = d.getHours();
-      const amount = getTxAmount(t);
+      const amount = getRevenueAmount(t);
 
       buckets[hour].sales += amount;
       buckets[hour].transactions += 1;
@@ -1060,6 +1140,7 @@ export default function SalesDashboardPage() {
         : getDepartmentLabel(departmentFilter, departmentOptions),
       kpis: {
         revenue: summary.revenue,
+        collections: summary.collections,
         expenses: summary.expenses,
         netProfit: summary.netProfit,
         transactions: summary.transactions,
@@ -1166,6 +1247,7 @@ export default function SalesDashboardPage() {
 
     lines.push("KEY METRICS");
     lines.push(`Revenue: ${money(exportSummary.kpis.revenue)}`);
+    lines.push(`Collections: ${money(exportSummary.kpis.collections)}`);
     lines.push(`Expenses: ${money(exportSummary.kpis.expenses)}`);
     lines.push(`Net Profit: ${money(exportSummary.kpis.netProfit)}`);
     lines.push(`Transactions: ${exportSummary.kpis.transactions}`);
@@ -2379,6 +2461,9 @@ export default function SalesDashboardPage() {
                 departmentOptions
               )}
             />
+            <DetailItem label="Source" value={getAccountingSourceLabel(selectedTx)} />
+            <DetailItem label="Booking Code" value={selectedTx?.bookingCode || "—"} />
+            <DetailItem label="Room" value={selectedTx?.roomNo || selectedTx?.room || "—"} />
             <DetailItem label="Staff" value={getStaffLabel(selectedTx)} />
             <DetailItem
               label="Payment Method"
