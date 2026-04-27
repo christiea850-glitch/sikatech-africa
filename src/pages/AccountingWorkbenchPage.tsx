@@ -24,6 +24,8 @@ type SourceType =
 type GroupBy = "department" | "paymentMethod" | "staff" | "date" | "source";
 type DetailTab = "overview" | "transaction" | "shift" | "review";
 type PaymentState = "unpaid" | "partial" | "paid";
+type UnclosedShiftPriority = "high" | "medium" | "low";
+type UnclosedShiftAction = "review" | "reconcile" | "close";
 type UnclosedShiftAlert = {
   key: string;
   shiftId?: string;
@@ -33,6 +35,7 @@ type UnclosedShiftAlert = {
   transactionCount: number;
   totalCollected: number;
   status: ShiftTraceStatus;
+  priority: UnclosedShiftPriority;
 };
 
 type AccountingRow = {
@@ -187,6 +190,24 @@ function formatDateRange(startDate: string, endDate: string) {
   return "All dates";
 }
 
+function formatDateHeader(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value || "Unknown date";
+  return date.toLocaleDateString([], { year: "numeric", month: "short", day: "2-digit" });
+}
+
+function resolveUnclosedPriority(alert: Pick<UnclosedShiftAlert, "shiftDate" | "totalCollected" | "transactionCount" | "status">): UnclosedShiftPriority {
+  const date = new Date(`${alert.shiftDate}T00:00:00`).getTime();
+  const ageDays = Number.isFinite(date) ? Math.floor((Date.now() - date) / 86_400_000) : 0;
+  if (alert.totalCollected > 0 && (alert.status === "unclosed" || alert.status === "auto_submitted")) return "high";
+  if (ageDays > 5 || alert.transactionCount === 0) return "low";
+  return "medium";
+}
+
+function priorityLabel(priority: UnclosedShiftPriority) {
+  return priority.charAt(0).toUpperCase() + priority.slice(1);
+}
+
 export default function AccountingWorkbenchPage() {
   const { user } = useAuth();
   const { businessName: setupBusinessName } = useBusinessSetup();
@@ -211,6 +232,8 @@ export default function AccountingWorkbenchPage() {
   const [selectedRecord, setSelectedRecord] = useState<AccountingRow | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("overview");
   const [hoveredRecordId, setHoveredRecordId] = useState<string | null>(null);
+  const [showOlderUnclosedShifts, setShowOlderUnclosedShifts] = useState(false);
+  const [collapsedUnclosedDates, setCollapsedUnclosedDates] = useState<Record<string, boolean>>({});
 
   const allowed = user?.role === "accounting" || user?.role === "admin";
   const businessName = resolveBusinessName(user, setupBusinessName);
@@ -493,16 +516,43 @@ export default function AccountingWorkbenchPage() {
         transactionCount: 0,
         totalCollected: 0,
         status: row.shiftStatus,
+        priority: "medium",
       };
 
       current.transactionCount += 1;
       current.totalCollected += row.collection;
       if (row.shiftStatus === "auto_submitted") current.status = "auto_submitted";
+      current.priority = resolveUnclosedPriority(current);
       map.set(key, current);
     });
 
     return Array.from(map.values()).sort((a, b) => b.shiftDate.localeCompare(a.shiftDate));
   }, [rows, resolvedUnclosedAlerts]);
+
+  const unclosedShiftDateGroups = useMemo(() => {
+    const map = new Map<string, UnclosedShiftAlert[]>();
+    unclosedShiftAlerts.forEach((alert) => {
+      const current = map.get(alert.shiftDate) || [];
+      current.push(alert);
+      map.set(alert.shiftDate, current);
+    });
+
+    return Array.from(map.entries())
+      .map(([date, alerts]) => ({
+        date,
+        label: formatDateHeader(date),
+        count: alerts.length,
+        alerts: alerts.sort((a, b) => {
+          const priorityOrder = { high: 0, medium: 1, low: 2 };
+          return priorityOrder[a.priority] - priorityOrder[b.priority] || b.totalCollected - a.totalCollected;
+        }),
+      }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [unclosedShiftAlerts]);
+
+  const visibleUnclosedShiftDateGroups = showOlderUnclosedShifts
+    ? unclosedShiftDateGroups
+    : unclosedShiftDateGroups.slice(0, 5);
 
   const departments = Array.from(new Set(rows.map((row) => row.department))).sort();
   const paymentMethods = Array.from(new Set(rows.map((row) => row.paymentMethod))).sort();
@@ -603,11 +653,12 @@ export default function AccountingWorkbenchPage() {
     setDetailTab("overview");
   }
 
-  function resolveUnclosedShift(alert: UnclosedShiftAlert) {
+  function handleUnclosedShiftAction(alert: UnclosedShiftAlert, action: UnclosedShiftAction) {
+    const status: ShiftTraceStatus = action === "close" ? "submitted" : "reviewed";
     if (alert.shiftId) {
       recordShiftSubmission({
         shiftId: alert.shiftId,
-        status: "reviewed",
+        status,
         submittedAt: new Date().toISOString(),
         submittedBy: (user as any)?.employeeId || (user as any)?.username || user?.role || "accounting",
         submissionMode: "manual",
@@ -618,6 +669,10 @@ export default function AccountingWorkbenchPage() {
     setResolvedUnclosedAlerts(next);
     saveResolvedUnclosedAlerts(next);
     setTraceVersion((v) => v + 1);
+  }
+
+  function toggleUnclosedDate(date: string) {
+    setCollapsedUnclosedDates((prev) => ({ ...prev, [date]: !prev[date] }));
   }
 
   const reviewedCount = filtered.filter((r) => reviewMap.get(r.id)?.status === "reviewed").length;
@@ -671,22 +726,55 @@ export default function AccountingWorkbenchPage() {
               <h2 style={styles.sectionTitle}>Unclosed shift detected</h2>
               <p style={styles.unclosedText}>Transactions remain visible. Accounting can review and resolve shifts that were not manually closed.</p>
             </div>
-            <span style={styles.badgeWarn}>{unclosedShiftAlerts.length}</span>
+            <div style={styles.unclosedHeaderActions}>
+              <span style={styles.badgeWarn}>{unclosedShiftAlerts.length} shifts</span>
+              {unclosedShiftDateGroups.length > 5 && (
+                <button style={styles.smallBtn} onClick={() => setShowOlderUnclosedShifts((v) => !v)}>
+                  {showOlderUnclosedShifts ? "Hide older shifts" : "View older shifts"}
+                </button>
+              )}
+            </div>
           </div>
           <div style={styles.unclosedList}>
-            {unclosedShiftAlerts.map((alert) => (
-              <div key={alert.key} style={styles.unclosedItem}>
-                <div style={styles.unclosedMeta}>
-                  <span><strong>Staff:</strong> {alert.staffName}</span>
-                  <span><strong>Department:</strong> {formatDepartmentLabel(alert.department)}</span>
-                  <span><strong>Shift date:</strong> {alert.shiftDate}</span>
-                  <span><strong>Transactions:</strong> {alert.transactionCount}</span>
-                  <span><strong>Total collected:</strong> {money(alert.totalCollected)}</span>
-                  <span><strong>Status:</strong> {formatShiftStatus(alert.status)}</span>
+            {visibleUnclosedShiftDateGroups.map((group) => {
+              const collapsed = !!collapsedUnclosedDates[group.date];
+              return (
+                <div key={group.date} style={styles.unclosedDateGroup}>
+                  <button style={styles.unclosedDateHeader} onClick={() => toggleUnclosedDate(group.date)}>
+                    <span>{collapsed ? "+" : "-"} {group.label}</span>
+                    <span style={styles.badgeMuted}>{group.count} shifts</span>
+                  </button>
+                  {!collapsed && (
+                    <div style={styles.unclosedDateBody}>
+                      {group.alerts.map((alert) => (
+                        <div key={alert.key} style={styles.unclosedItem}>
+                          <div style={styles.unclosedMeta}>
+                            <span style={alert.priority === "high" ? styles.priorityHigh : alert.priority === "medium" ? styles.priorityMedium : styles.priorityLow}>
+                              {priorityLabel(alert.priority)}
+                            </span>
+                            <span><strong>Staff:</strong> {alert.staffName}</span>
+                            <span><strong>Department:</strong> {formatDepartmentLabel(alert.department)}</span>
+                            <span><strong>Transactions:</strong> {alert.transactionCount}</span>
+                            <span><strong>Total collected:</strong> {money(alert.totalCollected)}</span>
+                            <span><strong>Status:</strong> {formatShiftStatus(alert.status)}</span>
+                          </div>
+                          <div style={styles.unclosedActions}>
+                            <button style={styles.smallBtn} onClick={() => handleUnclosedShiftAction(alert, "review")}>Review</button>
+                            <button style={styles.smallBtn} onClick={() => handleUnclosedShiftAction(alert, "reconcile")}>Reconcile</button>
+                            <button style={styles.warnBtn} onClick={() => handleUnclosedShiftAction(alert, "close")}>Close Shift</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <button style={styles.smallBtn} onClick={() => resolveUnclosedShift(alert)}>Review / Resolve</button>
+              );
+            })}
+            {!showOlderUnclosedShifts && unclosedShiftDateGroups.length > 5 && (
+              <div style={styles.unclosedOlderNote}>
+                Showing latest 5 days. {unclosedShiftDateGroups.length - 5} older date groups hidden.
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
@@ -1061,10 +1149,19 @@ const styles: Record<string, CSSProperties> = {
   panel: { padding: 16, border: "1px solid rgba(15,23,42,0.08)", borderRadius: 10, background: "#fff" },
   unclosedPanel: { padding: 16, border: "1px solid rgba(217,119,6,0.24)", borderRadius: 10, background: "rgba(255,251,235,0.9)" },
   unclosedHeader: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 12 },
+  unclosedHeaderActions: { display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" },
   unclosedText: { margin: "4px 0 0", color: "#92400e", fontSize: 13, fontWeight: 700 },
   unclosedList: { display: "grid", gap: 8 },
-  unclosedItem: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", padding: 10, border: "1px solid rgba(217,119,6,0.18)", borderRadius: 8, background: "#fff" },
+  unclosedDateGroup: { border: "1px solid rgba(217,119,6,0.18)", borderRadius: 8, background: "#fff", overflow: "hidden" },
+  unclosedDateHeader: { width: "100%", border: "none", background: "#fff7ed", color: "#111827", padding: "10px 12px", display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", fontWeight: 900, cursor: "pointer", textAlign: "left" },
+  unclosedDateBody: { display: "grid", gap: 8, padding: 10 },
+  unclosedItem: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", padding: 10, border: "1px solid rgba(15,23,42,0.08)", borderRadius: 8, background: "#fff" },
   unclosedMeta: { display: "flex", gap: 12, flexWrap: "wrap", color: "#111827", fontSize: 13 },
+  unclosedActions: { display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" },
+  unclosedOlderNote: { color: "#92400e", fontSize: 12, fontWeight: 800, padding: "2px 4px" },
+  priorityHigh: { color: "#b91c1c", background: "rgba(185,28,28,0.10)", borderRadius: 999, padding: "3px 8px", fontWeight: 900 },
+  priorityMedium: { color: "#92400e", background: "rgba(217,119,6,0.12)", borderRadius: 999, padding: "3px 8px", fontWeight: 900 },
+  priorityLow: { color: "#475569", background: "rgba(71,85,105,0.10)", borderRadius: 999, padding: "3px 8px", fontWeight: 900 },
   filterGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 },
   field: { display: "grid", gap: 6 },
   label: { color: "#334155", fontSize: 13, fontWeight: 800 },
