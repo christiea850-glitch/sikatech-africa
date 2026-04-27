@@ -6,7 +6,6 @@ import { submitShiftClosing } from "../api/shiftClosingApi";
 import { useSales, type PaymentMethod } from "./SalesContext";
 import FrontDeskBookingsPanel from "../frontdesk/FrontDeskBookingsPanel";
 import RoomBoardPanel from "../frontdesk/RoomBoardPanel";
-import { UI } from "../styles/ui";
 
 type ItemRow = {
   id: string;
@@ -392,9 +391,13 @@ export default function FrontDeskEntry() {
 
   return (
     <div style={styles.wrap}>
-      <div style={styles.shiftCard}>
-        <div>
-          <div style={styles.title}>Shift</div>
+      <div style={styles.pageHeader}>
+        <div style={styles.headerMain}>
+          <div style={styles.eyebrow}>Front Desk Intelligence</div>
+          <div style={styles.departmentTitle}>Front Desk</div>
+          <div style={styles.subtitle}>
+            Separate room folio operations from food and service charges.
+          </div>
 
           {activeShift?.id ? (
             <div style={styles.shiftText}>
@@ -420,7 +423,7 @@ export default function FrontDeskEntry() {
           ) : null}
         </div>
 
-        <div style={styles.actions}>
+        <div style={styles.headerActions}>
           <button style={styles.btnLight} onClick={onRefresh} disabled={busy}>
             Refresh
           </button>
@@ -436,22 +439,6 @@ export default function FrontDeskEntry() {
           >
             {busy ? "Submitting..." : "Submit Close"}
           </button>
-        </div>
-      </div>
-
-      <div style={styles.hero}>
-        <div>
-          <div style={styles.eyebrow}>Front Desk Intelligence</div>
-          <div style={styles.departmentTitle}>Front Desk</div>
-          <div style={styles.subtitle}>
-            Separate room folio operations from food and service charges.
-          </div>
-        </div>
-
-        <div style={styles.metaRow}>
-          <span style={styles.badge}>Staff: {user.employeeId || "1"}</span>
-          <span style={styles.badge}>Role: {user.role || "staff"}</span>
-          <span style={styles.badge}>Business: {businessId}</span>
         </div>
       </div>
 
@@ -978,29 +965,31 @@ export default function FrontDeskEntry() {
 
 const styles: Record<string, CSSProperties> = {
   wrap: {
-    padding: 18,
+    padding: 20,
     maxWidth: 1240,
     margin: "0 auto",
   },
-  shiftCard: {
+  pageHeader: {
     display: "flex",
     justifyContent: "space-between",
-    gap: 16,
+    gap: 24,
     flexWrap: "wrap",
-    padding: 14,
-    borderRadius: 16,
-    background: "rgba(255,255,255,0.68)",
-    border: "1px solid rgba(11,42,58,0.12)",
+    padding: "22px 24px",
+    borderRadius: 14,
+    background: "linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%)",
+    border: "1px solid rgba(15,23,42,0.08)",
+    boxShadow: "0 12px 30px rgba(15,23,42,0.06)",
+    alignItems: "flex-start",
   },
-  title: {
-    fontSize: 18,
-    fontWeight: 900,
-    color: "#0b2a3a",
+  headerMain: {
+    minWidth: 280,
+    flex: "1 1 560px",
   },
   shiftText: {
-    marginTop: 6,
-    fontWeight: 800,
-    color: "#304a59",
+    marginTop: 14,
+    fontSize: 13,
+    fontWeight: 700,
+    color: "#475569",
   },
   muted: {
     color: "rgba(48,74,89,0.7)",
@@ -1014,92 +1003,75 @@ const styles: Record<string, CSSProperties> = {
   notice: {
     marginTop: 10,
     padding: 10,
-    borderRadius: 12,
+    borderRadius: 8,
     background: "rgba(18,94,60,0.10)",
     border: "1px solid rgba(18,94,60,0.18)",
     color: "#125e3c",
     fontWeight: 800,
   },
-  actions: {
+  headerActions: {
     display: "flex",
-    gap: 10,
+    gap: 8,
     alignItems: "flex-start",
     flexWrap: "wrap",
+    justifyContent: "flex-end",
+    flex: "0 1 390px",
   },
   btnPrimary: {
     border: "none",
     cursor: "pointer",
-    padding: "10px 14px",
-    borderRadius: 12,
-    background: "#0b2a3a",
+    padding: "10px 13px",
+    borderRadius: 8,
+    background: "#111827",
     color: "white",
-    fontWeight: 900,
+    fontWeight: 800,
+    boxShadow: "0 8px 18px rgba(17,24,39,0.16)",
   },
   btnLight: {
-    border: "none",
+    border: "1px solid rgba(15,23,42,0.10)",
     cursor: "pointer",
-    padding: "10px 14px",
-    borderRadius: 12,
-    background: "white",
-    color: "#0b2a3a",
-    fontWeight: 900,
+    padding: "10px 13px",
+    borderRadius: 8,
+    background: "#ffffff",
+    color: "#111827",
+    fontWeight: 800,
   },
   btnDisabled: {
     border: "none",
     cursor: "not-allowed",
-    padding: "10px 14px",
-    borderRadius: 12,
-    background: "rgba(0,0,0,0.08)",
-    color: "rgba(0,0,0,0.35)",
-    fontWeight: 900,
+    padding: "10px 13px",
+    borderRadius: 8,
+    background: "rgba(15,23,42,0.06)",
+    color: "rgba(15,23,42,0.34)",
+    fontWeight: 800,
   },
   btnDanger: {
     border: "none",
     cursor: "pointer",
     padding: "10px 14px",
-    borderRadius: 12,
+    borderRadius: 8,
     background: "rgba(180,38,38,0.12)",
     color: "#992727",
     fontWeight: 900,
   },
-  hero: {
-    marginTop: 14,
-    display: "flex",
-    justifyContent: "space-between",
-    gap: 12,
-    flexWrap: "wrap",
-    alignItems: "flex-start",
-  },
   eyebrow: {
     fontSize: 12,
-    fontWeight: 800,
-    letterSpacing: 1,
+    fontWeight: 700,
+    letterSpacing: 0.8,
     textTransform: "uppercase",
     color: "#64748b",
-    marginBottom: 6,
+    marginBottom: 8,
   },
   departmentTitle: {
-    fontSize: 24,
+    fontSize: 30,
     fontWeight: 900,
-    color: "#0b2a3a",
+    color: "#111827",
   },
   subtitle: {
     marginTop: 6,
-    color: "#425968",
-    fontWeight: 700,
-  },
-  metaRow: {
-    display: "flex",
-    gap: 10,
-    marginTop: 2,
-    flexWrap: "wrap",
-  },
-  badge: {
-    padding: "8px 14px",
-    borderRadius: 999,
-    background: "rgba(209,162,27,0.18)",
-    color: "#0b2a3a",
-    fontWeight: 900,
+    color: "#64748b",
+    fontWeight: 600,
+    lineHeight: 1.5,
   },
   kpiGrid: {
     display: "grid",
@@ -1108,61 +1080,64 @@ const styles: Record<string, CSSProperties> = {
     marginTop: 18,
   },
   kpiCard: {
-    padding: 16,
-    borderRadius: 18,
-    background: "#ffffff",
-    border: "1px solid rgba(11,42,58,0.08)",
-    boxShadow: "0 10px 30px rgba(15, 23, 42, 0.05)",
+    padding: "16px 18px",
+    borderRadius: 12,
+    background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+    border: "1px solid rgba(15,23,42,0.08)",
+    boxShadow: "0 10px 24px rgba(15,23,42,0.055)",
   },
   kpiLabel: {
-    fontSize: 12,
-    fontWeight: 800,
+    fontSize: 11,
+    fontWeight: 700,
     color: "#64748b",
-    marginBottom: 8,
+    marginBottom: 10,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
   kpiValue: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 900,
-    color: "#0b2a3a",
+    color: "#111827",
   },
   tabRow: {
     display: "flex",
-    gap: 10,
+    gap: 18,
     flexWrap: "wrap",
     marginTop: 18,
+    borderBottom: "1px solid rgba(11,42,58,0.12)",
   },
   tabBtn: {
-    border: "1px solid rgba(11,42,58,0.12)",
-    background: "#fff",
+    border: "none",
+    borderBottom: "2px solid transparent",
+    background: "transparent",
     color: "#334155",
-    padding: "10px 14px",
-    borderRadius: 999,
-    fontWeight: 900,
+    padding: "10px 0 9px",
+    borderRadius: 0,
+    fontWeight: 800,
     cursor: "pointer",
   },
   tabBtnActive: {
-    border: "1px solid #0b2a3a",
-    background: "#0b2a3a",
-    color: "#fff",
-    padding: "10px 14px",
-    borderRadius: 999,
+    border: "none",
+    borderBottom: "2px solid #0b2a3a",
+    background: "transparent",
+    color: "#0b2a3a",
+    padding: "10px 0 9px",
+    borderRadius: 0,
     fontWeight: 900,
     cursor: "pointer",
   },
   overviewGrid: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
-    gap: 16,
+    gap: 12,
     marginTop: 14,
   },
   section: {
-    marginTop: 14,
+    marginTop: 12,
     padding: 14,
-    borderRadius: 16,
-    background: "rgba(255,255,255,0.68)",
-    border: "1px solid rgba(11,42,58,0.12)",
+    borderRadius: 8,
+    background: "#ffffff",
+    border: "1px solid rgba(11,42,58,0.10)",
   },
   sectionTitle: {
     fontSize: 18,
@@ -1179,23 +1154,23 @@ const styles: Record<string, CSSProperties> = {
     marginTop: 14,
     display: "grid",
     gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-    gap: 12,
+    gap: 10,
   },
   clickableGrid: {
     marginTop: 14,
     display: "grid",
     gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-    gap: 12,
+    gap: 10,
   },
   infoCard: {
-    padding: 14,
-    borderRadius: 14,
+    padding: 12,
+    borderRadius: 8,
     background: "rgba(248,250,252,0.92)",
     border: "1px solid rgba(11,42,58,0.08)",
   },
   clickCard: {
-    padding: 14,
-    borderRadius: 14,
+    padding: 12,
+    borderRadius: 8,
     background: "rgba(248,250,252,0.92)",
     border: "1px solid rgba(11,42,58,0.08)",
     textAlign: "left",
@@ -1248,7 +1223,7 @@ const styles: Record<string, CSSProperties> = {
     background: "#fff",
     color: "#334155",
     padding: "10px 14px",
-    borderRadius: 12,
+    borderRadius: 8,
     fontWeight: 900,
     cursor: "pointer",
   },
@@ -1257,7 +1232,7 @@ const styles: Record<string, CSSProperties> = {
     background: "#0b2a3a",
     color: "#fff",
     padding: "10px 14px",
-    borderRadius: 12,
+    borderRadius: 8,
     fontWeight: 900,
     cursor: "pointer",
   },
@@ -1288,7 +1263,7 @@ const styles: Record<string, CSSProperties> = {
   input: {
     width: "100%",
     padding: "12px 14px",
-    borderRadius: 12,
+    borderRadius: 8,
     border: "1px solid rgba(11,42,58,0.14)",
     background: "white",
     fontSize: 15,
@@ -1332,7 +1307,7 @@ const styles: Record<string, CSSProperties> = {
     width: 300,
     maxWidth: "100%",
     padding: 14,
-    borderRadius: 14,
+    borderRadius: 8,
     background: "rgba(255,255,255,0.78)",
     border: "1px solid rgba(11,42,58,0.12)",
     display: "flex",
@@ -1348,8 +1323,8 @@ const styles: Record<string, CSSProperties> = {
   },
   summaryChip: {
     padding: "8px 12px",
-    borderRadius: 999,
-    background: "rgba(11,42,58,0.08)",
+    borderRadius: 8,
+    background: "rgba(11,42,58,0.06)",
     color: "#0b2a3a",
     fontWeight: 800,
   },

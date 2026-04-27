@@ -65,6 +65,21 @@ function badgeStyle(color: string): CSSProperties {
   };
 }
 
+function FormSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={styles.formSection}>
+      <div style={styles.formSectionTitle}>{title}</div>
+      <div style={styles.formGrid}>{children}</div>
+    </div>
+  );
+}
+
 export default function FrontDeskBookingsPanel() {
   const [version, setVersion] = useState(0);
   const [msg, setMsg] = useState<string | null>(null);
@@ -209,194 +224,209 @@ export default function FrontDeskBookingsPanel() {
       </div>
 
       <div style={styles.card}>
-        <div style={styles.sectionTitle}>New Reservation</div>
-
-        <div style={styles.formGrid}>
-          <div style={styles.field}>
-            <label style={styles.label}>Guest Name</label>
-            <input
-              style={styles.input}
-              value={guestName}
-              onChange={(e) => setGuestName(e.target.value)}
-              placeholder="Guest full name"
-            />
+        <div style={styles.cardHeader}>
+          <div>
+            <div style={styles.sectionTitle}>New Reservation</div>
+            <div style={styles.sectionSubtitle}>Capture the booking details in a few focused groups.</div>
           </div>
+        </div>
 
-          <div style={styles.field}>
-            <label style={styles.label}>Guest Phone</label>
-            <input
-              style={styles.input}
-              value={guestPhone}
-              onChange={(e) => setGuestPhone(e.target.value)}
-              placeholder="Phone"
-            />
-          </div>
+        <div style={styles.reservationForm}>
+          <FormSection title="Guest">
+            <div style={styles.field}>
+              <label style={styles.label}>Guest Name</label>
+              <input
+                style={styles.input}
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+                placeholder="Guest full name"
+              />
+            </div>
 
-          <div style={styles.field}>
-            <label style={styles.label}>Guest Email</label>
-            <input
-              style={styles.input}
-              value={guestEmail}
-              onChange={(e) => setGuestEmail(e.target.value)}
-              placeholder="Email"
-            />
-          </div>
+            <div style={styles.field}>
+              <label style={styles.label}>Guest Phone</label>
+              <input
+                style={styles.input}
+                value={guestPhone}
+                onChange={(e) => setGuestPhone(e.target.value)}
+                placeholder="Phone"
+              />
+            </div>
 
-          <div style={styles.field}>
-            <label style={styles.label}>Room No</label>
-            <input
-              style={styles.input}
-              value={roomNo}
-              onChange={(e) => setRoomNo(e.target.value)}
-              placeholder="101"
-            />
-          </div>
+            <div style={styles.field}>
+              <label style={styles.label}>Guest Email</label>
+              <input
+                style={styles.input}
+                value={guestEmail}
+                onChange={(e) => setGuestEmail(e.target.value)}
+                placeholder="Email"
+              />
+            </div>
+          </FormSection>
 
-          <div style={styles.field}>
-            <label style={styles.label}>Room Type</label>
-            <select
-              style={styles.input}
-              value={roomType}
-              onChange={(e) => setRoomType(e.target.value)}
-            >
-              <option>Standard</option>
-              <option>Deluxe</option>
-              <option>Executive</option>
-              <option>Suite</option>
-            </select>
-          </div>
+          <FormSection title="Stay">
+            <div style={styles.field}>
+              <label style={styles.label}>Room No</label>
+              <input
+                style={styles.input}
+                value={roomNo}
+                onChange={(e) => setRoomNo(e.target.value)}
+                placeholder="101"
+              />
+            </div>
 
-          <div style={styles.field}>
-            <label style={styles.label}>Booking Source</label>
-            <select
-              style={styles.input}
-              value={bookingSource}
-              onChange={(e) => setBookingSource(e.target.value as BookingSource)}
-            >
-              <option value="walk_in">Walk-in</option>
-              <option value="phone">Phone</option>
-              <option value="online">Online</option>
-              <option value="corporate">Corporate</option>
-              <option value="agent">Agent</option>
-            </select>
-          </div>
+            <div style={styles.field}>
+              <label style={styles.label}>Room Type</label>
+              <select
+                style={styles.input}
+                value={roomType}
+                onChange={(e) => setRoomType(e.target.value)}
+              >
+                <option>Standard</option>
+                <option>Deluxe</option>
+                <option>Executive</option>
+                <option>Suite</option>
+              </select>
+            </div>
 
-          <div style={styles.field}>
-            <label style={styles.label}>Check-In Date</label>
-            <input
-              type="date"
-              style={styles.input}
-              value={checkInDate}
-              onChange={(e) => setCheckInDate(e.target.value)}
-            />
-          </div>
+            <div style={styles.field}>
+              <label style={styles.label}>Booking Source</label>
+              <select
+                style={styles.input}
+                value={bookingSource}
+                onChange={(e) => setBookingSource(e.target.value as BookingSource)}
+              >
+                <option value="walk_in">Walk-in</option>
+                <option value="phone">Phone</option>
+                <option value="online">Online</option>
+                <option value="corporate">Corporate</option>
+                <option value="agent">Agent</option>
+              </select>
+            </div>
 
-          <div style={styles.field}>
-            <label style={styles.label}>Check-Out Date</label>
-            <input
-              type="date"
-              style={styles.input}
-              value={checkOutDate}
-              onChange={(e) => setCheckOutDate(e.target.value)}
-            />
-          </div>
+            <div style={styles.field}>
+              <label style={styles.label}>Check-In Date</label>
+              <input
+                type="date"
+                style={styles.input}
+                value={checkInDate}
+                onChange={(e) => setCheckInDate(e.target.value)}
+              />
+            </div>
 
-          <div style={styles.field}>
-            <label style={styles.label}>Adults</label>
-            <input
-              type="number"
-              min={1}
-              style={styles.input}
-              value={adults}
-              onChange={(e) => setAdults(Math.max(1, Number(e.target.value) || 1))}
-            />
-          </div>
+            <div style={styles.field}>
+              <label style={styles.label}>Check-Out Date</label>
+              <input
+                type="date"
+                style={styles.input}
+                value={checkOutDate}
+                onChange={(e) => setCheckOutDate(e.target.value)}
+              />
+            </div>
 
-          <div style={styles.field}>
-            <label style={styles.label}>Children</label>
-            <input
-              type="number"
-              min={0}
-              style={styles.input}
-              value={children}
-              onChange={(e) => setChildren(Math.max(0, Number(e.target.value) || 0))}
-            />
-          </div>
+            <div style={styles.field}>
+              <label style={styles.label}>Adults</label>
+              <input
+                type="number"
+                min={1}
+                style={styles.input}
+                value={adults}
+                onChange={(e) => setAdults(Math.max(1, Number(e.target.value) || 1))}
+              />
+            </div>
 
-          <div style={styles.field}>
-            <label style={styles.label}>Booking Status</label>
-            <select
-              style={styles.input}
-              value={bookingStatus}
-              onChange={(e) => setBookingStatus(e.target.value as BookingStatus)}
-            >
-              <option value="reserved">Reserved</option>
-              <option value="checked_in">Checked In</option>
-              <option value="checked_out">Checked Out</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="no_show">No Show</option>
-            </select>
-          </div>
+            <div style={styles.field}>
+              <label style={styles.label}>Children</label>
+              <input
+                type="number"
+                min={0}
+                style={styles.input}
+                value={children}
+                onChange={(e) => setChildren(Math.max(0, Number(e.target.value) || 0))}
+              />
+            </div>
+          </FormSection>
 
-          <div style={styles.field}>
-            <label style={styles.label}>Payment Status</label>
-            <select
-              style={styles.input}
-              value={paymentStatus}
-              onChange={(e) => setPaymentStatus(e.target.value as PaymentStatus)}
-            >
-              <option value="unpaid">Unpaid</option>
-              <option value="partial">Partial</option>
-              <option value="paid">Paid</option>
-            </select>
-          </div>
+          <FormSection title="Status">
+            <div style={styles.field}>
+              <label style={styles.label}>Booking Status</label>
+              <select
+                style={styles.input}
+                value={bookingStatus}
+                onChange={(e) => setBookingStatus(e.target.value as BookingStatus)}
+              >
+                <option value="reserved">Reserved</option>
+                <option value="checked_in">Checked In</option>
+                <option value="checked_out">Checked Out</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="no_show">No Show</option>
+              </select>
+            </div>
 
-          <div style={styles.field}>
-            <label style={styles.label}>Room Status</label>
-            <select
-              style={styles.input}
-              value={roomStatus}
-              onChange={(e) => setRoomStatus(e.target.value as RoomStatus)}
-            >
-              <option value="available">Available</option>
-              <option value="occupied">Occupied</option>
-              <option value="reserved">Reserved</option>
-              <option value="dirty">Dirty</option>
-              <option value="out_of_service">Out of Service</option>
-            </select>
-          </div>
+            <div style={styles.field}>
+              <label style={styles.label}>Room Status</label>
+              <select
+                style={styles.input}
+                value={roomStatus}
+                onChange={(e) => setRoomStatus(e.target.value as RoomStatus)}
+              >
+                <option value="available">Available</option>
+                <option value="occupied">Occupied</option>
+                <option value="reserved">Reserved</option>
+                <option value="dirty">Dirty</option>
+                <option value="out_of_service">Out of Service</option>
+              </select>
+            </div>
+          </FormSection>
 
-          <div style={styles.field}>
-            <label style={styles.label}>Total Amount</label>
-            <input
-              type="number"
-              min={0}
-              style={styles.input}
-              value={totalAmount}
-              onChange={(e) => setTotalAmount(Math.max(0, Number(e.target.value) || 0))}
-            />
-          </div>
+          <FormSection title="Payment">
+            <div style={styles.field}>
+              <label style={styles.label}>Payment Status</label>
+              <select
+                style={styles.input}
+                value={paymentStatus}
+                onChange={(e) => setPaymentStatus(e.target.value as PaymentStatus)}
+              >
+                <option value="unpaid">Unpaid</option>
+                <option value="partial">Partial</option>
+                <option value="paid">Paid</option>
+              </select>
+            </div>
 
-          <div style={styles.field}>
-            <label style={styles.label}>Amount Paid</label>
-            <input
-              type="number"
-              min={0}
-              style={styles.input}
-              value={amountPaid}
-              onChange={(e) => setAmountPaid(Math.max(0, Number(e.target.value) || 0))}
-            />
-          </div>
+            <div style={styles.field}>
+              <label style={styles.label}>Total Amount</label>
+              <input
+                type="number"
+                min={0}
+                style={styles.input}
+                value={totalAmount}
+                onChange={(e) => setTotalAmount(Math.max(0, Number(e.target.value) || 0))}
+              />
+            </div>
 
-          <div style={{ ...styles.field, gridColumn: "1 / -1" }}>
-            <label style={styles.label}>Notes</label>
-            <input
-              style={styles.input}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Special request, arrival notes, etc."
-            />
-          </div>
+            <div style={styles.field}>
+              <label style={styles.label}>Amount Paid</label>
+              <input
+                type="number"
+                min={0}
+                style={styles.input}
+                value={amountPaid}
+                onChange={(e) => setAmountPaid(Math.max(0, Number(e.target.value) || 0))}
+              />
+            </div>
+          </FormSection>
+
+          <FormSection title="Notes">
+            <div style={{ ...styles.field, gridColumn: "1 / -1" }}>
+              <label style={styles.label}>Notes</label>
+              <input
+                style={styles.input}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Special request, arrival notes, etc."
+              />
+            </div>
+          </FormSection>
         </div>
 
         <div style={styles.actionRow}>
@@ -487,11 +517,11 @@ const styles: Record<string, CSSProperties> = {
   wrap: {
     display: "grid",
     gap: 16,
-    marginTop: 14,
+    marginTop: 16,
   },
   message: {
     padding: "12px 14px",
-    borderRadius: 12,
+    borderRadius: 8,
     background: "rgba(18,94,60,0.10)",
     border: "1px solid rgba(18,94,60,0.18)",
     color: "#125e3c",
@@ -503,22 +533,50 @@ const styles: Record<string, CSSProperties> = {
     gap: 14,
   },
   card: {
-    padding: 16,
-    borderRadius: 18,
-    background: "rgba(255,255,255,0.88)",
-    border: "1px solid rgba(11,42,58,0.08)",
-    boxShadow: "0 10px 30px rgba(15, 23, 42, 0.04)",
+    padding: 20,
+    borderRadius: 14,
+    background: "linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%)",
+    border: "1px solid rgba(15,23,42,0.08)",
+    boxShadow: "0 12px 30px rgba(15,23,42,0.05)",
+  },
+  cardHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 16,
+    alignItems: "flex-start",
+    marginBottom: 18,
   },
   sectionTitle: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: 900,
-    color: "#0b2a3a",
-    marginBottom: 14,
+    color: "#111827",
+  },
+  sectionSubtitle: {
+    marginTop: 5,
+    color: "#64748b",
+    fontSize: 13,
+    fontWeight: 600,
+    lineHeight: 1.5,
+  },
+  reservationForm: {
+    display: "grid",
+    gap: 18,
+  },
+  formSection: {
+    paddingTop: 18,
+    borderTop: "1px solid rgba(15,23,42,0.08)",
+  },
+  formSectionTitle: {
+    marginBottom: 12,
+    color: "#111827",
+    fontSize: 13,
+    fontWeight: 850,
+    letterSpacing: 0.2,
   },
   formGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-    gap: 12,
+    gridTemplateColumns: "repeat(3, minmax(180px, 1fr))",
+    gap: 16,
   },
   field: {
     display: "flex",
@@ -526,40 +584,45 @@ const styles: Record<string, CSSProperties> = {
     gap: 6,
   },
   label: {
-    fontWeight: 800,
-    color: "#0b2a3a",
+    fontSize: 13,
+    fontWeight: 750,
+    color: "#334155",
   },
   input: {
     width: "100%",
-    padding: "12px 14px",
-    borderRadius: 12,
-    border: "1px solid rgba(11,42,58,0.14)",
-    background: "white",
-    fontSize: 15,
+    padding: "11px 12px",
+    borderRadius: 8,
+    border: "1px solid rgba(15,23,42,0.12)",
+    background: "#ffffff",
+    fontSize: 14,
+    color: "#111827",
   },
   actionRow: {
     display: "flex",
-    gap: 10,
-    marginTop: 16,
+    gap: 8,
+    marginTop: 20,
     flexWrap: "wrap",
+    paddingTop: 18,
+    borderTop: "1px solid rgba(15,23,42,0.08)",
   },
   primaryBtn: {
     border: "none",
     cursor: "pointer",
     padding: "11px 16px",
-    borderRadius: 12,
-    background: "#0b2a3a",
+    borderRadius: 8,
+    background: "#111827",
     color: "white",
-    fontWeight: 900,
+    fontWeight: 800,
+    boxShadow: "0 8px 18px rgba(17,24,39,0.16)",
   },
   secondaryBtn: {
     border: "1px solid rgba(11,42,58,0.18)",
     cursor: "pointer",
     padding: "11px 16px",
-    borderRadius: 12,
+    borderRadius: 8,
     background: "white",
-    color: "#0b2a3a",
-    fontWeight: 900,
+    color: "#111827",
+    fontWeight: 800,
   },
   searchRow: {
     marginBottom: 12,
@@ -602,23 +665,23 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 800,
   },
   kpiCard: {
-    padding: 16,
-    borderRadius: 18,
-    background: "#ffffff",
-    border: "1px solid rgba(11,42,58,0.08)",
-    boxShadow: "0 10px 30px rgba(15, 23, 42, 0.05)",
+    padding: "16px 18px",
+    borderRadius: 12,
+    background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+    border: "1px solid rgba(15,23,42,0.08)",
+    boxShadow: "0 10px 24px rgba(15,23,42,0.055)",
   },
   kpiLabel: {
-    fontSize: 12,
-    fontWeight: 800,
+    fontSize: 11,
+    fontWeight: 700,
     color: "#64748b",
-    marginBottom: 8,
+    marginBottom: 10,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
   kpiValue: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 900,
-    color: "#0b2a3a",
+    color: "#111827",
   },
 };
