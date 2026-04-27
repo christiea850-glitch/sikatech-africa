@@ -18,7 +18,7 @@ export default function Layout() {
 
         <main style={styles.main}>
           <div style={styles.contentWrap}>
-            <div style={styles.contentCard}>
+            <div style={styles.contentCard} className="sk-content-card">
               <Outlet />
             </div>
           </div>
@@ -32,7 +32,7 @@ const styles: Record<string, CSSProperties> = {
   shell: {
     display: "flex",
     minHeight: "100vh",
-    background: "#f6f8fa",
+    background: "var(--sk-bg)",
   },
 
   right: {
@@ -40,13 +40,13 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     minWidth: 0,
-    background: "#f6f8fa",
+    background: "var(--sk-bg)",
   },
 
   main: {
     flex: 1,
-    padding: 20,
-    background: "#f6f8fa",
+    padding: 24,
+    background: "transparent",
   },
 
   contentWrap: {
@@ -56,11 +56,11 @@ const styles: Record<string, CSSProperties> = {
   },
 
   contentCard: {
-    minHeight: "calc(100vh - 96px)",
-    background: "#ffffff",
-    borderRadius: 18,
-    padding: 20,
-    boxShadow: "0 2px 8px rgba(15, 23, 32, 0.05)",
-    border: "1px solid rgba(15, 23, 32, 0.08)",
+    minHeight: "calc(100vh - 126px)",
+    background: "var(--sk-card)",
+    borderRadius: 20,
+    padding: 24,
+    boxShadow: "var(--sk-shadow-md)",
+    border: "1px solid var(--sk-border)",
   },
 };

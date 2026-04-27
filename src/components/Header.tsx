@@ -107,14 +107,18 @@ export default function Header() {
 
 const styles: Record<string, React.CSSProperties> = {
   header: {
-    height: 74,
+    minHeight: 78,
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: "0 20px",
-    background: "#ffffff",
-    borderBottom: "1px solid rgba(15, 23, 32, 0.08)",
-    boxShadow: "0 1px 3px rgba(15, 23, 32, 0.04)",
+    padding: "14px 24px",
+    background: "rgba(255,255,255,0.86)",
+    borderBottom: "1px solid var(--sk-border)",
+    boxShadow: "0 8px 20px rgba(15, 23, 32, 0.05)",
+    backdropFilter: "blur(8px)",
+    position: "sticky",
+    top: 0,
+    zIndex: 20,
     gap: 16,
   },
 
@@ -127,30 +131,31 @@ const styles: Record<string, React.CSSProperties> = {
   },
 
   pageTitle: {
-    fontSize: 16,
-    fontWeight: 800,
-    color: "#0b2a3a",
+    fontSize: 18,
+    fontWeight: 900,
+    color: "var(--sk-navy)",
     lineHeight: 1.1,
   },
 
   date: {
     marginTop: 4,
     fontSize: 12,
-    fontWeight: 600,
-    color: "#6b7a88",
+    fontWeight: 700,
+    color: "var(--sk-text-soft)",
     whiteSpace: "nowrap",
   },
 
   search: {
     width: 420,
     maxWidth: "48vw",
-    padding: "11px 14px",
-    borderRadius: 12,
-    border: "1px solid rgba(15, 23, 32, 0.10)",
+    padding: "12px 14px",
+    borderRadius: 14,
+    border: "1px solid var(--sk-border)",
     outline: "none",
-    background: "#f9fafb",
-    color: "#0f1720",
+    background: "#ffffff",
+    color: "var(--sk-text)",
     fontWeight: 500,
+    boxShadow: "inset 0 1px 1px rgba(15,23,32,0.04)",
   },
 
   right: {
@@ -170,21 +175,21 @@ const styles: Record<string, React.CSSProperties> = {
   userId: {
     fontSize: 13,
     fontWeight: 800,
-    color: "#0b2a3a",
+    color: "var(--sk-navy)",
   },
 
   userRole: {
     fontSize: 12,
     fontWeight: 600,
-    color: "#6b7a88",
+    color: "var(--sk-text-soft)",
     textTransform: "capitalize",
   },
 
   rolePill: {
     padding: "8px 12px",
     borderRadius: 999,
-    background: "rgba(209, 162, 27, 0.14)",
-    color: "#0b2a3a",
+    background: "rgba(209, 162, 27, 0.16)",
+    color: "var(--sk-navy)",
     fontWeight: 800,
     textTransform: "capitalize",
     fontSize: 12,
@@ -192,11 +197,11 @@ const styles: Record<string, React.CSSProperties> = {
   },
 
   logout: {
-    border: "none",
+    border: "1px solid rgba(11, 42, 58, 0.08)",
     cursor: "pointer",
     padding: "10px 14px",
     borderRadius: 12,
-    background: "#0b2a3a",
+    background: "var(--sk-navy)",
     color: "white",
     fontWeight: 800,
   },
