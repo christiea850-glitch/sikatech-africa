@@ -21,6 +21,8 @@ export type BookingSource =
   | "corporate"
   | "agent";
 
+export type FolioPaymentMethod = "cash" | "momo" | "card" | "transfer";
+
 export type BookingRecord = {
   id: string;
   bookingCode: string;
@@ -68,6 +70,7 @@ export type BookingFolioActivity = {
   createdAt: number;
   transactionId?: string;
   source?: string;
+  paymentMethod?: FolioPaymentMethod;
   note?: string;
   items?: Array<{
     name: string;
@@ -403,6 +406,71 @@ export function postRoomChargeToBooking(
 
     return updated;
   });
+
+  saveBookings(next);
+  return updated;
+}
+
+export function recordPaymentToBooking(
+  id: string,
+  input: {
+    amount: number;
+    paymentMethod: FolioPaymentMethod;
+    source?: string;
+    note?: string;
+  }
+) {
+  const amount = Math.max(0, safeNumber(input.amount, 0));
+  const list = getAllBookings();
+  let updated: BookingRecord | null = null;
+  let error: string | null = null;
+
+  const next = list.map((item) => {
+    if (item.id !== id) return item;
+
+    const currentBalance = Math.max(0, safeNumber(item.balance, 0));
+
+    if (amount <= 0) {
+      error = "Enter a payment amount greater than 0.";
+      return item;
+    }
+
+    if (amount > currentBalance) {
+      error = "Payment cannot be greater than the unpaid balance.";
+      return item;
+    }
+
+    const totalAmount = Math.max(0, safeNumber(item.totalAmount, 0));
+    const amountPaid = clamp(safeNumber(item.amountPaid, 0) + amount, 0, totalAmount);
+    const balance = Math.max(0, totalAmount - amountPaid);
+    const paymentMethod = input.paymentMethod;
+
+    const activity: BookingFolioActivity = {
+      id: uid("payment"),
+      type: "payment",
+      title: `Payment - ${paymentMethod}`,
+      amount,
+      createdAt: Date.now(),
+      source: input.source,
+      paymentMethod,
+      note: String(input.note || "").trim() || undefined,
+    };
+
+    updated = {
+      ...item,
+      amountPaid,
+      balance,
+      paymentStatus: balance <= 0 ? "paid" : amountPaid > 0 ? "partial" : "unpaid",
+      folioActivity: [activity, ...(item.folioActivity || [])],
+      updatedAt: Date.now(),
+    };
+
+    return updated;
+  });
+
+  if (error) {
+    throw new Error(error);
+  }
 
   saveBookings(next);
   return updated;

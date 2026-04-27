@@ -8,8 +8,11 @@ import {
   isToday,
   normalizeRoomStatusForBookingStatus,
   paymentStatusColor,
+  recordPaymentToBooking,
   roomStatusColor,
+  type BookingFolioActivity,
   type BookingRecord,
+  type FolioPaymentMethod,
   type BookingSource,
   type BookingStatus,
   type PaymentStatus,
@@ -110,6 +113,10 @@ export default function FrontDeskBookingsPanel() {
   const [notes, setNotes] = useState("");
   const [search, setSearch] = useState("");
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [folioPaymentAmount, setFolioPaymentAmount] = useState(0);
+  const [folioPaymentMethod, setFolioPaymentMethod] =
+    useState<FolioPaymentMethod>("cash");
+  const [folioPaymentNote, setFolioPaymentNote] = useState("");
 
   const bookings = useMemo(() => {
     void version;
@@ -159,22 +166,44 @@ export default function FrontDeskBookingsPanel() {
     });
   }, [bookings, search]);
 
-  const selectedBooking = useMemo(() => {
+  const selectedBooking = useMemo<BookingRecord | null>(() => {
     if (!selectedBookingId) return null;
-    return bookings.find((booking) => booking.id === selectedBookingId) || null;
+    return (
+      bookings.find((booking: BookingRecord) => booking.id === selectedBookingId) ||
+      null
+    );
   }, [bookings, selectedBookingId]);
 
-  const selectedCharges = useMemo(() => {
+  const selectedCharges = useMemo<BookingFolioActivity[]>(() => {
     return (selectedBooking?.folioActivity || []).filter(
       (item) => item.type === "charge"
     );
   }, [selectedBooking]);
 
-  const selectedPayments = useMemo(() => {
+  const selectedPayments = useMemo<BookingFolioActivity[]>(() => {
     return (selectedBooking?.folioActivity || []).filter(
       (item) => item.type === "payment"
     );
   }, [selectedBooking]);
+
+  const selectedAmounts = useMemo(() => {
+    return {
+      totalAmount: Math.max(0, Number(selectedBooking?.totalAmount ?? 0) || 0),
+      amountPaid: Math.max(0, Number(selectedBooking?.amountPaid ?? 0) || 0),
+      balance: Math.max(0, Number(selectedBooking?.balance ?? 0) || 0),
+    };
+  }, [selectedBooking]);
+
+  function resetFolioPaymentForm() {
+    setFolioPaymentAmount(0);
+    setFolioPaymentMethod("cash");
+    setFolioPaymentNote("");
+  }
+
+  function selectBooking(id: string | null) {
+    resetFolioPaymentForm();
+    setSelectedBookingId(id);
+  }
 
   function resetForm() {
     setGuestName("");
@@ -234,6 +263,49 @@ export default function FrontDeskBookingsPanel() {
     setMsg(`Reservation created successfully: ${booking.bookingCode}`);
     resetForm();
     setVersion((v) => v + 1);
+  }
+
+  function handleRecordPayment() {
+    if (!selectedBooking) return;
+
+    const balance = selectedAmounts.balance;
+    const amount = Math.max(0, Number(folioPaymentAmount) || 0);
+
+    if (balance <= 0) {
+      setMsg("This booking has no unpaid balance.");
+      return;
+    }
+
+    if (amount <= 0) {
+      setMsg("Enter a payment amount greater than 0.");
+      return;
+    }
+
+    if (amount > balance) {
+      setMsg("Payment cannot be greater than the unpaid balance.");
+      return;
+    }
+
+    try {
+      recordPaymentToBooking(selectedBooking.id, {
+        amount,
+        paymentMethod: folioPaymentMethod,
+        source: "front-desk",
+        note: folioPaymentNote.trim() || undefined,
+      });
+      const remainingBalance = Math.max(0, balance - amount);
+
+      setMsg(`Payment recorded. Remaining balance: ${money(remainingBalance)}.`);
+      setFolioPaymentAmount(0);
+      setFolioPaymentNote("");
+      setVersion((v) => v + 1);
+    } catch (error: unknown) {
+      setMsg(
+        error instanceof Error && error.message
+          ? error.message
+          : "Unable to record payment."
+      );
+    }
   }
 
   return (
@@ -502,7 +574,7 @@ export default function FrontDeskBookingsPanel() {
               {filteredBookings.map((b: BookingRecord) => (
                 <tr
                   key={b.id}
-                  onClick={() => setSelectedBookingId(b.id)}
+                  onClick={() => selectBooking(b.id)}
                   style={{
                     ...styles.clickableRow,
                     ...(selectedBookingId === b.id ? styles.selectedRow : {}),
@@ -560,7 +632,7 @@ export default function FrontDeskBookingsPanel() {
               <button
                 type="button"
                 style={styles.secondaryBtn}
-                onClick={() => setSelectedBookingId(null)}
+                onClick={() => selectBooking(null)}
               >
                 Close
               </button>
@@ -585,15 +657,15 @@ export default function FrontDeskBookingsPanel() {
               </div>
               <div style={styles.detailItem}>
                 <span style={styles.detailLabel}>Total Amount</span>
-                <b>{money(selectedBooking.totalAmount)}</b>
+                <b>{money(selectedAmounts.totalAmount)}</b>
               </div>
               <div style={styles.detailItem}>
                 <span style={styles.detailLabel}>Amount Paid</span>
-                <b>{money(selectedBooking.amountPaid)}</b>
+                <b>{money(selectedAmounts.amountPaid)}</b>
               </div>
               <div style={styles.detailItem}>
                 <span style={styles.detailLabel}>Unpaid Balance</span>
-                <b>{money(selectedBooking.balance)}</b>
+                <b>{money(selectedAmounts.balance)}</b>
               </div>
             </div>
 
@@ -632,11 +704,71 @@ export default function FrontDeskBookingsPanel() {
 
               <div style={styles.activitySection}>
                 <div style={styles.activityTitle}>Payments</div>
-                {selectedBooking.amountPaid > 0 ? (
+                <div style={styles.paymentForm}>
+                  <div style={styles.field}>
+                    <label style={styles.label}>Amount</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={selectedAmounts.balance}
+                      style={styles.input}
+                      value={folioPaymentAmount}
+                      onChange={(e) =>
+                        setFolioPaymentAmount(
+                          Math.max(0, Number(e.target.value) || 0)
+                        )
+                      }
+                      disabled={selectedAmounts.balance <= 0}
+                    />
+                  </div>
+
+                  <div style={styles.field}>
+                    <label style={styles.label}>Method</label>
+                    <select
+                      style={styles.input}
+                      value={folioPaymentMethod}
+                      onChange={(e) =>
+                        setFolioPaymentMethod(e.target.value as FolioPaymentMethod)
+                      }
+                      disabled={selectedAmounts.balance <= 0}
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="momo">MoMo</option>
+                      <option value="card">Card</option>
+                      <option value="transfer">Transfer</option>
+                    </select>
+                  </div>
+
+                  <div style={styles.field}>
+                    <label style={styles.label}>Note</label>
+                    <input
+                      style={styles.input}
+                      value={folioPaymentNote}
+                      onChange={(e) => setFolioPaymentNote(e.target.value)}
+                      placeholder="Optional"
+                      disabled={selectedAmounts.balance <= 0}
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    style={
+                      selectedAmounts.balance <= 0
+                        ? styles.disabledBtn
+                        : styles.primaryBtn
+                    }
+                    onClick={handleRecordPayment}
+                    disabled={selectedAmounts.balance <= 0}
+                  >
+                    Record Payment
+                  </button>
+                </div>
+
+                {selectedAmounts.amountPaid > 0 ? (
                   <div style={styles.activityItem}>
                     <div style={styles.activityTop}>
                       <b>Booking payment</b>
-                      <b>{money(selectedBooking.amountPaid)}</b>
+                      <b>{money(selectedAmounts.amountPaid)}</b>
                     </div>
                     <div style={styles.subMeta}>{selectedBooking.paymentStatus}</div>
                   </div>
@@ -647,10 +779,16 @@ export default function FrontDeskBookingsPanel() {
                       <b>{payment.title}</b>
                       <b>{money(payment.amount)}</b>
                     </div>
-                    <div style={styles.subMeta}>{formatDateTime(payment.createdAt)}</div>
+                    <div style={styles.subMeta}>
+                      {formatDateTime(payment.createdAt)}
+                      {payment.paymentMethod ? ` • ${payment.paymentMethod}` : ""}
+                    </div>
+                    {payment.note ? (
+                      <div style={styles.subMeta}>{payment.note}</div>
+                    ) : null}
                   </div>
                 ))}
-                {selectedBooking.amountPaid <= 0 && selectedPayments.length === 0 ? (
+                {selectedAmounts.amountPaid <= 0 && selectedPayments.length === 0 ? (
                   <div style={styles.empty}>No payments recorded.</div>
                 ) : null}
               </div>
@@ -773,6 +911,15 @@ const styles: Record<string, CSSProperties> = {
     color: "#111827",
     fontWeight: 800,
   },
+  disabledBtn: {
+    border: "none",
+    cursor: "not-allowed",
+    padding: "11px 16px",
+    borderRadius: 8,
+    background: "rgba(15,23,42,0.08)",
+    color: "rgba(15,23,42,0.38)",
+    fontWeight: 800,
+  },
   searchRow: {
     marginBottom: 12,
   },
@@ -866,6 +1013,15 @@ const styles: Record<string, CSSProperties> = {
   activitySection: {
     display: "grid",
     gap: 10,
+  },
+  paymentForm: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 10,
+    padding: 10,
+    borderRadius: 8,
+    background: "rgba(248,250,252,0.9)",
+    border: "1px solid rgba(15,23,42,0.08)",
   },
   activityTitle: {
     color: "#111827",

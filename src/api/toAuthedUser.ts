@@ -10,6 +10,7 @@ type Role =
   | "assistant_manager"
   | "accounting"
   | "auditor"
+  | "front_desk"
   | "staff";
 
 export type AuthedUser = {
@@ -26,6 +27,7 @@ const ROLES: Role[] = [
   "assistant_manager",
   "accounting",
   "auditor",
+  "front_desk",
   "staff",
 ];
 

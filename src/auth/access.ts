@@ -30,6 +30,12 @@ export const ROLE_ACCESS: Record<Role, readonly ModuleKey[]> = {
     "sales", // staff sales entry is allowed, dashboard redirect handled elsewhere
   ],
 
+  front_desk: [
+    "dashboard",
+    "notifications",
+    "sales",
+  ],
+
   assistant_manager: [
     "dashboard",
     "notifications",
@@ -65,6 +71,7 @@ export const ROLE_ACCESS: Record<Role, readonly ModuleKey[]> = {
  */
 export const CAN_EDIT: Record<Role, boolean> = {
   staff: false,
+  front_desk: false,
   assistant_manager: false,
   auditor: false,
   accounting: true,
@@ -77,6 +84,7 @@ export const CAN_EDIT: Record<Role, boolean> = {
  */
 export const CAN_SEND_ALERTS: Record<Role, boolean> = {
   staff: false,
+  front_desk: false,
   assistant_manager: false,
   auditor: false,
   accounting: true,
