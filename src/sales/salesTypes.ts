@@ -12,6 +12,7 @@ export type LineItem = {
   qty: number;
   unitPrice: number;
   discount: number;
+  lineTotal?: number;
 };
 
 export type TransactionStatus = "OPEN" | "PAID" | "POSTED_TO_ROOM";
@@ -26,6 +27,8 @@ export type Transaction = {
   orderType?: OrderType;
 
   attachToRoom: boolean;
+  bookingId?: string;
+  bookingCode?: string;
   roomNo?: string;
 
   customerName?: string;

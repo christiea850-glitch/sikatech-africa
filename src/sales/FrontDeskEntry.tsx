@@ -11,6 +11,10 @@ import {
   postRoomChargeToBooking,
   type BookingRecord,
 } from "../frontdesk/bookingsStorage";
+import { addTransaction } from "./salesStorage";
+import type { Transaction } from "./salesTypes";
+
+export type { Transaction } from "./salesTypes";
 
 type ItemRow = {
   id: string;
@@ -18,6 +22,16 @@ type ItemRow = {
   qty: number;
   unitPrice: number;
   discount: number;
+};
+
+type ShiftLike = {
+  id?: string | number;
+  status?: string;
+};
+
+type ShiftApiLike = {
+  activeShift?: ShiftLike | null;
+  refreshActiveShift?: () => Promise<void> | void;
 };
 
 type TabKey =
@@ -38,6 +52,16 @@ function transactionUid() {
 
 function money(n: number) {
   return Number.isFinite(n) ? n.toFixed(2) : "0.00";
+}
+
+function getStringField(source: unknown, key: string) {
+  if (!source || typeof source !== "object") return "";
+  const value = (source as Record<string, unknown>)[key];
+  return typeof value === "string" || typeof value === "number" ? String(value) : "";
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
 }
 
 function resolveBusinessId(raw: unknown): number {
@@ -68,6 +92,33 @@ function toPaymentMethod(value: string): PaymentMethod {
       return "credit";
     default:
       return "other";
+  }
+}
+
+function toTransactionPaymentMethod(value: string): Transaction["paymentMethod"] {
+  switch (String(value).toLowerCase()) {
+    case "cash":
+      return "CASH";
+    case "momo":
+      return "MOMO";
+    case "card":
+      return "CARD";
+    case "transfer":
+    case "bank_transfer":
+      return "TRANSFER";
+    default:
+      return undefined;
+  }
+}
+
+function toOrderType(value: string): Transaction["orderType"] {
+  switch (String(value).toLowerCase()) {
+    case "takeaway":
+      return "TAKEAWAY";
+    case "room service":
+      return "ROOM_SERVICE";
+    default:
+      return "DINE_IN";
   }
 }
 
@@ -133,7 +184,7 @@ function findPostableRoomBooking(roomNo: string): BookingRecord | null {
 
 export default function FrontDeskEntry() {
   const { user } = useAuth();
-  const { activeShift, refreshActiveShift } = useShift() as any;
+  const { activeShift, refreshActiveShift } = useShift() as ShiftApiLike;
   const { addSale } = useSales();
 
   const [tab, setTab] = useState<TabKey>("overview");
@@ -155,7 +206,7 @@ export default function FrontDeskEntry() {
     { id: uid(), name: "", qty: 1, unitPrice: 0, discount: 0 },
   ]);
 
-  const businessId = resolveBusinessId((user as any)?.businessId);
+  const businessId = resolveBusinessId(getStringField(user, "businessId"));
   const shiftStatus = String(activeShift?.status || "").toLowerCase();
 
   const isReadOnly =
@@ -330,8 +381,8 @@ export default function FrontDeskEntry() {
           //
         }
       }
-    } catch (e: any) {
-      setMsg(e?.message || "Failed to submit shift closing.");
+    } catch (e: unknown) {
+      setMsg(getErrorMessage(e, "Failed to submit shift closing."));
     } finally {
       setBusy(false);
     }
@@ -379,9 +430,9 @@ export default function FrontDeskEntry() {
     setMsg(null);
 
     try {
-      const staffId = String(user?.employeeId || "staff");
+      const staffId = getStringField(user, "employeeId") || "staff";
       const staffName =
-        String((user as any)?.name || (user as any)?.fullName || "").trim() ||
+        (getStringField(user, "name") || getStringField(user, "fullName")).trim() ||
         undefined;
       const transactionId = transactionUid();
       const effectivePaymentMethod = postToRoom ? "Room Folio" : paymentMethod;
@@ -391,7 +442,16 @@ export default function FrontDeskEntry() {
         qty: Number(item.qty),
         unitPrice: Number(item.unitPrice),
         discount: Number(item.discount || 0),
+        lineTotal: Math.max(
+          0,
+          Number(item.qty) * Number(item.unitPrice) - Number(item.discount || 0)
+        ),
       }));
+      const discountTotal = transactionItems.reduce(
+        (sum, item) => sum + Number(item.discount || 0),
+        0
+      );
+      const billTotal = subtotal;
 
       validItems.forEach((item) => {
         addSale({
@@ -426,13 +486,47 @@ export default function FrontDeskEntry() {
             qty: Number(item.qty),
             unitPrice: Number(item.unitPrice),
             discount: Number(item.discount || 0),
-            total: Math.max(
-              0,
-              Number(item.qty) * Number(item.unitPrice) - Number(item.discount || 0)
-            ),
+            total: Number(item.lineTotal || 0),
           })),
         });
       }
+
+      addTransaction({
+        id: transactionId,
+        type: entryMode,
+        sourceDept: "front-desk",
+        deptKey: "front-desk",
+        customerType: postToRoom || customerType === "Guest" ? "GUEST" : "WALKIN",
+        orderType: toOrderType(orderType),
+        attachToRoom: postToRoom,
+        bookingId: roomBooking?.id,
+        bookingCode: roomBooking?.bookingCode,
+        roomNo: postToRoom ? roomNo.trim() : undefined,
+        customerName:
+          customerName.trim() || (postToRoom ? roomBooking?.guestName : undefined),
+        customerPhone: customerPhone.trim() || undefined,
+        note: note.trim() || undefined,
+        items: transactionItems,
+        subtotal: billTotal,
+        discountTotal,
+        total: billTotal,
+        paymentMode: postToRoom ? "POST_TO_ROOM" : "PAY_NOW",
+        paymentMethod: postToRoom
+          ? undefined
+          : toTransactionPaymentMethod(effectivePaymentMethod),
+        amountPaid: postToRoom ? 0 : billTotal,
+        status: postToRoom ? "POSTED_TO_ROOM" : "PAID",
+        createdAt: Date.now(),
+        createdBy: {
+          employeeId: staffId,
+          role: getStringField(user, "role") || "staff",
+          name: getStringField(user, "name").trim() || undefined,
+          fullName: getStringField(user, "fullName").trim() || undefined,
+        },
+        staffId,
+        staffName,
+        staffLabel: staffName ? `${staffId} / ${staffName}` : staffId,
+      });
 
       const itemCount = validItems.length;
       const extraNotes: string[] = [];
@@ -458,13 +552,13 @@ export default function FrontDeskEntry() {
       setMsg(
         `Front desk entry saved successfully. ${itemCount} item${
           itemCount > 1 ? "s" : ""
-        } recorded. Total: ${money(subtotal)}.${extraText}`
+        } recorded. Total: ${money(billTotal)}.${extraText}`
       );
 
       resetForm();
-      setTab(entryMode === "ROOM" ? "room" : "fnb");
-    } catch (e: any) {
-      setMsg(e?.message || "Failed to save entry.");
+      setTab("entry");
+    } catch (e: unknown) {
+      setMsg(getErrorMessage(e, "Failed to save entry."));
     } finally {
       setBusy(false);
     }

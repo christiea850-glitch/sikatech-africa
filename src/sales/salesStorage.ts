@@ -19,6 +19,11 @@ export function saveTransactions(list: Transaction[]) {
   localStorage.setItem(TX_STORAGE_KEY, JSON.stringify(list));
 }
 
+export function addTransaction(tx: Transaction) {
+  const existing = loadTransactions();
+  saveTransactions([tx, ...existing]);
+}
+
 export function loadAdjustments(): SalesAdjustment[] {
   try {
     const raw = localStorage.getItem(ADJ_STORAGE_KEY);
