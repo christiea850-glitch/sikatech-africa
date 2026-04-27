@@ -23,6 +23,7 @@ type SourceType =
   | "expense";
 type GroupBy = "department" | "paymentMethod" | "staff" | "date" | "source";
 type DetailTab = "overview" | "transaction" | "shift" | "review";
+type WorkbenchTab = "overview" | "unclosed" | "records" | "review";
 type PaymentState = "unpaid" | "partial" | "paid";
 type UnclosedShiftPriority = "high" | "medium" | "low";
 type UnclosedShiftAction = "review" | "reconcile" | "close";
@@ -231,6 +232,7 @@ export default function AccountingWorkbenchPage() {
   const [statementGeneratedAt, setStatementGeneratedAt] = useState(() => new Date());
   const [selectedRecord, setSelectedRecord] = useState<AccountingRow | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("overview");
+  const [activeTab, setActiveTab] = useState<WorkbenchTab>("overview");
   const [hoveredRecordId, setHoveredRecordId] = useState<string | null>(null);
   const [showOlderUnclosedShifts, setShowOlderUnclosedShifts] = useState(false);
   const [collapsedUnclosedDates, setCollapsedUnclosedDates] = useState<Record<string, boolean>>({});
@@ -702,6 +704,15 @@ export default function AccountingWorkbenchPage() {
         </div>
       </div>
 
+      <div style={styles.workbenchTabs}>
+        <WorkbenchTabButton active={activeTab === "overview"} onClick={() => setActiveTab("overview")}>Overview</WorkbenchTabButton>
+        <WorkbenchTabButton active={activeTab === "unclosed"} onClick={() => setActiveTab("unclosed")}>Unclosed Shifts</WorkbenchTabButton>
+        <WorkbenchTabButton active={activeTab === "records"} onClick={() => setActiveTab("records")}>Financial Records</WorkbenchTabButton>
+        <WorkbenchTabButton active={activeTab === "review"} onClick={() => setActiveTab("review")}>Review Status</WorkbenchTabButton>
+      </div>
+
+      {activeTab === "overview" && (
+      <>
       <div style={styles.summaryGrid}>
         <Metric label="Revenue (Earned)" value={money(summary.revenue)} />
         <Metric label="Total Expenses" value={money(summary.expenses)} />
@@ -719,7 +730,39 @@ export default function AccountingWorkbenchPage() {
         <Metric label="Cash Collected" value={money(summary.collections)} />
       </div>
 
-      {unclosedShiftAlerts.length > 0 && (
+      <div style={styles.panel}>
+        <div style={styles.filterGrid}>
+          <Field label="Start Date"><input type="date" style={styles.input} value={startDate} onChange={(e) => setStartDate(e.target.value)} /></Field>
+          <Field label="End Date"><input type="date" style={styles.input} value={endDate} onChange={(e) => setEndDate(e.target.value)} /></Field>
+          <Field label="Department"><Select value={department} onChange={setDepartment} options={["all", ...departments]} labeler={(v) => v === "all" ? "All" : formatDepartmentLabel(v)} /></Field>
+          <Field label="Payment Method"><Select value={paymentMethod} onChange={setPaymentMethod} options={["all", ...paymentMethods]} /></Field>
+          <Field label="Source / Type"><Select value={source} onChange={setSource} options={["all", "room_booking_revenue", "room_folio_charge", "food_service_sale", "department_pos_sale", "guest_payment", "expense"]} labeler={(v) => v === "all" ? "All" : sourceLabel(v as SourceType)} /></Field>
+          <Field label="Staff"><Select value={staff} onChange={setStaff} options={["all", ...staffOptions]} /></Field>
+          <Field label="Review Status"><Select value={reviewStatus} onChange={setReviewStatus} options={["all", "unreviewed", "reviewed", "issue"]} /></Field>
+          <Field label="Shift Status"><Select value={shiftStatusFilter} onChange={setShiftStatusFilter} options={["all", "open", "unclosed", "submitted", "reviewed", "auto_submitted"]} labeler={(v) => v === "all" ? "All" : formatShiftStatus(v)} /></Field>
+          <Field label="Group By"><Select value={groupBy} onChange={(v) => setGroupBy(v as GroupBy)} options={["department", "paymentMethod", "staff", "date", "source"]} /></Field>
+        </div>
+      </div>
+
+      <div style={styles.panel}>
+          <h2 style={styles.sectionTitle}>Grouped Summary</h2>
+          <div style={styles.tableWrap}>
+            <table style={styles.table}>
+              <thead><tr><Th>Group</Th><Th>Count</Th><Th>Revenue</Th><Th>Expenses</Th><Th>Collections</Th><Th>Net</Th></tr></thead>
+              <tbody>
+                {groupRows.map((row) => (
+                  <tr key={row.label}>
+                    <Td>{groupBy === "department" ? formatDepartmentLabel(row.label) : row.label}</Td><Td>{row.count}</Td><Td>{money(row.revenue)}</Td><Td>{money(row.expenses)}</Td><Td>{money(row.collections)}</Td><Td>{money(row.net)}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+      </div>
+      </>
+      )}
+
+      {activeTab === "unclosed" && (
         <div style={styles.unclosedPanel}>
           <div style={styles.unclosedHeader}>
             <div>
@@ -735,81 +778,55 @@ export default function AccountingWorkbenchPage() {
               )}
             </div>
           </div>
-          <div style={styles.unclosedList}>
-            {visibleUnclosedShiftDateGroups.map((group) => {
-              const collapsed = !!collapsedUnclosedDates[group.date];
-              return (
-                <div key={group.date} style={styles.unclosedDateGroup}>
-                  <button style={styles.unclosedDateHeader} onClick={() => toggleUnclosedDate(group.date)}>
-                    <span>{collapsed ? "+" : "-"} {group.label}</span>
-                    <span style={styles.badgeMuted}>{group.count} shifts</span>
-                  </button>
-                  {!collapsed && (
-                    <div style={styles.unclosedDateBody}>
-                      {group.alerts.map((alert) => (
-                        <div key={alert.key} style={styles.unclosedItem}>
-                          <div style={styles.unclosedMeta}>
-                            <span style={alert.priority === "high" ? styles.priorityHigh : alert.priority === "medium" ? styles.priorityMedium : styles.priorityLow}>
-                              {priorityLabel(alert.priority)}
-                            </span>
-                            <span><strong>Staff:</strong> {alert.staffName}</span>
-                            <span><strong>Department:</strong> {formatDepartmentLabel(alert.department)}</span>
-                            <span><strong>Transactions:</strong> {alert.transactionCount}</span>
-                            <span><strong>Total collected:</strong> {money(alert.totalCollected)}</span>
-                            <span><strong>Status:</strong> {formatShiftStatus(alert.status)}</span>
+          {unclosedShiftAlerts.length === 0 ? (
+            <div style={styles.emptyState}>No unclosed shifts detected for the current data.</div>
+          ) : (
+            <div style={styles.unclosedList}>
+              {visibleUnclosedShiftDateGroups.map((group) => {
+                const collapsed = !!collapsedUnclosedDates[group.date];
+                return (
+                  <div key={group.date} style={styles.unclosedDateGroup}>
+                    <button style={styles.unclosedDateHeader} onClick={() => toggleUnclosedDate(group.date)}>
+                      <span>{collapsed ? "+" : "-"} {group.label}</span>
+                      <span style={styles.badgeMuted}>{group.count} shifts</span>
+                    </button>
+                    {!collapsed && (
+                      <div style={styles.unclosedDateBody}>
+                        {group.alerts.map((alert) => (
+                          <div key={alert.key} style={styles.unclosedItem}>
+                            <div style={styles.unclosedMeta}>
+                              <span style={alert.priority === "high" ? styles.priorityHigh : alert.priority === "medium" ? styles.priorityMedium : styles.priorityLow}>
+                                {priorityLabel(alert.priority)}
+                              </span>
+                              <span><strong>Staff:</strong> {alert.staffName}</span>
+                              <span><strong>Department:</strong> {formatDepartmentLabel(alert.department)}</span>
+                              <span><strong>Transactions:</strong> {alert.transactionCount}</span>
+                              <span><strong>Total collected:</strong> {money(alert.totalCollected)}</span>
+                              <span><strong>Status:</strong> {formatShiftStatus(alert.status)}</span>
+                            </div>
+                            <div style={styles.unclosedActions}>
+                              <button style={styles.smallBtn} onClick={() => handleUnclosedShiftAction(alert, "review")}>Review</button>
+                              <button style={styles.smallBtn} onClick={() => handleUnclosedShiftAction(alert, "reconcile")}>Reconcile</button>
+                              <button style={styles.warnBtn} onClick={() => handleUnclosedShiftAction(alert, "close")}>Close Shift</button>
+                            </div>
                           </div>
-                          <div style={styles.unclosedActions}>
-                            <button style={styles.smallBtn} onClick={() => handleUnclosedShiftAction(alert, "review")}>Review</button>
-                            <button style={styles.smallBtn} onClick={() => handleUnclosedShiftAction(alert, "reconcile")}>Reconcile</button>
-                            <button style={styles.warnBtn} onClick={() => handleUnclosedShiftAction(alert, "close")}>Close Shift</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {!showOlderUnclosedShifts && unclosedShiftDateGroups.length > 5 && (
+                <div style={styles.unclosedOlderNote}>
+                  Showing latest 5 days. {unclosedShiftDateGroups.length - 5} older date groups hidden.
                 </div>
-              );
-            })}
-            {!showOlderUnclosedShifts && unclosedShiftDateGroups.length > 5 && (
-              <div style={styles.unclosedOlderNote}>
-                Showing latest 5 days. {unclosedShiftDateGroups.length - 5} older date groups hidden.
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
-      <div style={styles.panel}>
-        <div style={styles.filterGrid}>
-          <Field label="Start Date"><input type="date" style={styles.input} value={startDate} onChange={(e) => setStartDate(e.target.value)} /></Field>
-          <Field label="End Date"><input type="date" style={styles.input} value={endDate} onChange={(e) => setEndDate(e.target.value)} /></Field>
-          <Field label="Department"><Select value={department} onChange={setDepartment} options={["all", ...departments]} labeler={(v) => v === "all" ? "All" : formatDepartmentLabel(v)} /></Field>
-          <Field label="Payment Method"><Select value={paymentMethod} onChange={setPaymentMethod} options={["all", ...paymentMethods]} /></Field>
-          <Field label="Source / Type"><Select value={source} onChange={setSource} options={["all", "room_booking_revenue", "room_folio_charge", "food_service_sale", "department_pos_sale", "guest_payment", "expense"]} labeler={(v) => v === "all" ? "All" : sourceLabel(v as SourceType)} /></Field>
-          <Field label="Staff"><Select value={staff} onChange={setStaff} options={["all", ...staffOptions]} /></Field>
-          <Field label="Review Status"><Select value={reviewStatus} onChange={setReviewStatus} options={["all", "unreviewed", "reviewed", "issue"]} /></Field>
-          <Field label="Shift Status"><Select value={shiftStatusFilter} onChange={setShiftStatusFilter} options={["all", "open", "unclosed", "submitted", "reviewed", "auto_submitted"]} labeler={(v) => v === "all" ? "All" : formatShiftStatus(v)} /></Field>
-          <Field label="Group By"><Select value={groupBy} onChange={(v) => setGroupBy(v as GroupBy)} options={["department", "paymentMethod", "staff", "date", "source"]} /></Field>
-        </div>
-      </div>
-
-      <div style={styles.grid2}>
-        <div style={styles.panel}>
-          <h2 style={styles.sectionTitle}>Grouped Summary</h2>
-          <div style={styles.tableWrap}>
-            <table style={styles.table}>
-              <thead><tr><Th>Group</Th><Th>Count</Th><Th>Revenue</Th><Th>Expenses</Th><Th>Collections</Th><Th>Net</Th></tr></thead>
-              <tbody>
-                {groupRows.map((row) => (
-                  <tr key={row.label}>
-                    <Td>{groupBy === "department" ? formatDepartmentLabel(row.label) : row.label}</Td><Td>{row.count}</Td><Td>{money(row.revenue)}</Td><Td>{money(row.expenses)}</Td><Td>{money(row.collections)}</Td><Td>{money(row.net)}</Td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
+      {activeTab === "review" && (
         <div style={styles.panel}>
           <h2 style={styles.sectionTitle}>Review Status</h2>
           <div style={styles.reviewStats}>
@@ -818,8 +835,9 @@ export default function AccountingWorkbenchPage() {
             <Metric label="Flagged" value={String(flaggedCount)} />
           </div>
         </div>
-      </div>
+      )}
 
+      {activeTab === "records" && (
       <div style={styles.panel}>
         <h2 style={styles.sectionTitle}>Financial Records</h2>
         <div style={styles.tableWrap}>
@@ -893,6 +911,7 @@ export default function AccountingWorkbenchPage() {
           </table>
         </div>
       </div>
+      )}
       </div>
 
       {selectedRecord && (
@@ -1103,6 +1122,14 @@ function PaymentBadge({ state }: { state: PaymentState }) {
   return <span style={style}>{paymentStateLabel(state)}</span>;
 }
 
+function WorkbenchTabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button style={active ? styles.workbenchTabActive : styles.workbenchTab} onClick={onClick}>
+      {children}
+    </button>
+  );
+}
+
 function DetailTabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button style={active ? styles.drawerTabActive : styles.drawerTab} onClick={onClick}>
@@ -1142,6 +1169,9 @@ const styles: Record<string, CSSProperties> = {
   actions: { display: "flex", gap: 8, flexWrap: "wrap" },
   primaryBtn: { border: "none", background: "#111827", color: "#fff", borderRadius: 8, padding: "10px 14px", fontWeight: 800, cursor: "pointer" },
   secondaryBtn: { border: "1px solid rgba(15,23,42,0.14)", background: "#fff", color: "#111827", borderRadius: 8, padding: "10px 14px", fontWeight: 800, cursor: "pointer" },
+  workbenchTabs: { display: "flex", gap: 8, flexWrap: "wrap", padding: 4, border: "1px solid rgba(15,23,42,0.08)", borderRadius: 999, background: "#fff", width: "fit-content" },
+  workbenchTab: { border: "1px solid transparent", background: "#fff", color: "#334155", borderRadius: 999, padding: "9px 13px", fontWeight: 900, cursor: "pointer", fontSize: 13 },
+  workbenchTabActive: { border: "1px solid #111827", background: "#111827", color: "#fff", borderRadius: 999, padding: "9px 13px", fontWeight: 900, cursor: "pointer", fontSize: 13 },
   summaryGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 },
   metric: { padding: 14, border: "1px solid rgba(15,23,42,0.08)", borderRadius: 10, background: "#fff", boxShadow: "0 8px 20px rgba(15,23,42,0.04)" },
   metricLabel: { color: "#64748b", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.4 },
@@ -1159,6 +1189,7 @@ const styles: Record<string, CSSProperties> = {
   unclosedMeta: { display: "flex", gap: 12, flexWrap: "wrap", color: "#111827", fontSize: 13 },
   unclosedActions: { display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" },
   unclosedOlderNote: { color: "#92400e", fontSize: 12, fontWeight: 800, padding: "2px 4px" },
+  emptyState: { padding: 14, border: "1px solid rgba(15,23,42,0.08)", borderRadius: 8, background: "#fff", color: "#64748b", fontWeight: 800 },
   priorityHigh: { color: "#b91c1c", background: "rgba(185,28,28,0.10)", borderRadius: 999, padding: "3px 8px", fontWeight: 900 },
   priorityMedium: { color: "#92400e", background: "rgba(217,119,6,0.12)", borderRadius: 999, padding: "3px 8px", fontWeight: 900 },
   priorityLow: { color: "#475569", background: "rgba(71,85,105,0.10)", borderRadius: 999, padding: "3px 8px", fontWeight: 900 },
