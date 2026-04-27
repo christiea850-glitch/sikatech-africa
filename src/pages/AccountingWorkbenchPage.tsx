@@ -186,7 +186,7 @@ export default function AccountingWorkbenchPage() {
   }, [rows, reviewMap, startDate, endDate, department, paymentMethod, source, staff, reviewStatus]);
 
   const summary = useMemo(() => {
-    return filtered.reduce(
+    const totals = filtered.reduce(
       (acc, row) => {
         acc.revenue += row.revenue;
         acc.expenses += row.expense;
@@ -213,6 +213,11 @@ export default function AccountingWorkbenchPage() {
         guestPayments: 0,
       }
     );
+
+    return {
+      ...totals,
+      netProfit: totals.revenue - totals.expenses,
+    };
   }, [filtered]);
 
   const groupRows = useMemo(() => {
@@ -310,7 +315,7 @@ export default function AccountingWorkbenchPage() {
       filters: { startDate, endDate, department, paymentMethod, source, staff, reviewStatus },
       summary: {
         ...summary,
-        netProfit: summary.revenue - summary.expenses,
+        netProfit: summary.netProfit,
         records: filtered.length,
       },
       groups: groupRows,
@@ -339,7 +344,7 @@ export default function AccountingWorkbenchPage() {
       <div style={styles.summaryGrid}>
         <Metric label="Total Revenue" value={money(summary.revenue)} />
         <Metric label="Total Expenses" value={money(summary.expenses)} />
-        <Metric label="Net Profit" value={money(summary.revenue - summary.expenses)} />
+        <Metric label="Net Profit" value={money(summary.netProfit)} />
         <Metric label="Total Cash" value={money(summary.cash)} />
         <Metric label="Total MoMo" value={money(summary.momo)} />
         <Metric label="Total Card" value={money(summary.card)} />
