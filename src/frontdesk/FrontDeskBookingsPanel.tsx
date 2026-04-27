@@ -6,6 +6,7 @@ import {
   getAllBookings,
   isFuture,
   isToday,
+  normalizeRoomStatusForBookingStatus,
   paymentStatusColor,
   roomStatusColor,
   type BookingRecord,
@@ -198,7 +199,7 @@ export default function FrontDeskBookingsPanel() {
       bookingSource,
       bookingStatus,
       paymentStatus,
-      roomStatus,
+      roomStatus: normalizeRoomStatusForBookingStatus(bookingStatus, roomStatus),
       totalAmount,
       amountPaid,
       notes: notes.trim() || undefined,
@@ -353,7 +354,13 @@ export default function FrontDeskBookingsPanel() {
               <select
                 style={styles.input}
                 value={bookingStatus}
-                onChange={(e) => setBookingStatus(e.target.value as BookingStatus)}
+                onChange={(e) => {
+                  const next = e.target.value as BookingStatus;
+                  setBookingStatus(next);
+                  setRoomStatus((prev) =>
+                    normalizeRoomStatusForBookingStatus(next, prev)
+                  );
+                }}
               >
                 <option value="reserved">Reserved</option>
                 <option value="checked_in">Checked In</option>

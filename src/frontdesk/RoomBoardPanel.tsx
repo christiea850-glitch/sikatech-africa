@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import {
   getAllBookings,
+  normalizeRoomStatusForBookingStatus,
   roomStatusColor,
   updateBooking,
   type BookingRecord,
+  type BookingStatus,
   type RoomStatus,
 } from "./bookingsStorage";
 
@@ -22,6 +24,7 @@ type RoomCard = {
   guestName?: string;
   bookingId?: string;
   bookingCode?: string;
+  bookingStatus?: BookingStatus;
   checkInDate?: string;
   checkOutDate?: string;
   paymentStatus?: string;
@@ -82,8 +85,36 @@ function canShowGuest(status: RoomBoardStatus) {
   return status === "occupied" || status === "reserved";
 }
 
+function bookingSortTime(booking: BookingRecord) {
+  return Number(booking.updatedAt || booking.createdAt || 0);
+}
+
+function isPostStayStatus(status: RoomBoardStatus) {
+  return status === "dirty" || status === "available";
+}
+
+function pickRoomBooking(
+  current: BookingRecord | undefined,
+  next: BookingRecord
+) {
+  if (!current) return next;
+
+  const currentStatus = normalizeStatus(current.roomStatus);
+  const nextStatus = normalizeStatus(next.roomStatus);
+  const currentTime = bookingSortTime(current);
+  const nextTime = bookingSortTime(next);
+
+  if (nextTime !== currentTime) return nextTime > currentTime ? next : current;
+  if (isPostStayStatus(nextStatus) !== isPostStayStatus(currentStatus)) {
+    return isPostStayStatus(nextStatus) ? next : current;
+  }
+
+  return next.createdAt > current.createdAt ? next : current;
+}
+
 function buildRoomBoard(bookings: BookingRecord[]): RoomCard[] {
   const map = new Map<string, RoomCard>();
+  const latestByRoom = new Map<string, BookingRecord>();
 
   DEFAULT_ROOMS.forEach((room) => {
     map.set(room.roomNo, {
@@ -96,6 +127,10 @@ function buildRoomBoard(bookings: BookingRecord[]): RoomCard[] {
   bookings.forEach((b) => {
     const roomNo = String(b.roomNo || "").trim();
     if (!roomNo) return;
+    latestByRoom.set(roomNo, pickRoomBooking(latestByRoom.get(roomNo), b));
+  });
+
+  latestByRoom.forEach((b, roomNo) => {
 
     const status = normalizeStatus(b.roomStatus);
 
@@ -106,6 +141,7 @@ function buildRoomBoard(bookings: BookingRecord[]): RoomCard[] {
       guestName: canShowGuest(status) ? b.guestName : undefined,
       bookingId: b.id,
       bookingCode: canShowGuest(status) ? b.bookingCode : undefined,
+      bookingStatus: b.bookingStatus,
       checkInDate: canShowGuest(status) ? b.checkInDate : undefined,
       checkOutDate: canShowGuest(status) ? b.checkOutDate : undefined,
       paymentStatus: canShowGuest(status) ? b.paymentStatus : undefined,
@@ -174,6 +210,35 @@ export default function RoomBoardPanel() {
       return;
     }
 
+    if (status === "available") {
+      if (
+        selectedRoom.bookingStatus === "checked_in" ||
+        selectedRoom.status === "occupied"
+      ) {
+        setMsg("Check out the guest before marking the room available.");
+        return;
+      }
+
+      if (selectedRoom.bookingStatus === "reserved") {
+        setMsg("This room has an active reservation. Update the reservation before marking it available.");
+        return;
+      }
+    }
+
+    if (status === "dirty") {
+      if (
+        selectedRoom.bookingStatus === "checked_in" ||
+        selectedRoom.status === "occupied"
+      ) {
+        updateBooking(selectedRoom.bookingId, {
+          bookingStatus: "checked_out",
+          roomStatus: normalizeRoomStatusForBookingStatus("checked_out"),
+        });
+        refreshBoard(`Guest checked out and room ${selectedRoom.roomNo} marked dirty.`);
+        return;
+      }
+    }
+
     updateBooking(selectedRoom.bookingId, { roomStatus: status });
     refreshBoard(`Room ${selectedRoom.roomNo} updated to ${status.replace(/_/g, " ")}.`);
   }
@@ -184,9 +249,17 @@ export default function RoomBoardPanel() {
       return;
     }
 
+    if (
+      selectedRoom.bookingStatus !== "reserved" &&
+      selectedRoom.status !== "reserved"
+    ) {
+      setMsg("Only reserved rooms can be checked in from the room board.");
+      return;
+    }
+
     updateBooking(selectedRoom.bookingId, {
       bookingStatus: "checked_in",
-      roomStatus: "occupied",
+      roomStatus: normalizeRoomStatusForBookingStatus("checked_in"),
     });
 
     refreshBoard(`Guest checked in to room ${selectedRoom.roomNo}.`);
@@ -198,9 +271,17 @@ export default function RoomBoardPanel() {
       return;
     }
 
+    if (
+      selectedRoom.bookingStatus !== "checked_in" &&
+      selectedRoom.status !== "occupied"
+    ) {
+      setMsg("Only occupied rooms can be checked out from the room board.");
+      return;
+    }
+
     updateBooking(selectedRoom.bookingId, {
       bookingStatus: "checked_out",
-      roomStatus: "dirty",
+      roomStatus: normalizeRoomStatusForBookingStatus("checked_out"),
     });
 
     refreshBoard(`Guest checked out from room ${selectedRoom.roomNo}.`);

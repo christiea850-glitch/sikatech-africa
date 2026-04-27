@@ -6,6 +6,7 @@ import { submitShiftClosing } from "../api/shiftClosingApi";
 import { useSales, type PaymentMethod } from "./SalesContext";
 import FrontDeskBookingsPanel from "../frontdesk/FrontDeskBookingsPanel";
 import RoomBoardPanel from "../frontdesk/RoomBoardPanel";
+import { getAllBookings, type BookingRecord } from "../frontdesk/bookingsStorage";
 
 type ItemRow = {
   id: string;
@@ -98,6 +99,24 @@ function getEntryMode(transactionType: string) {
     return "ROOM";
   }
   return "FNB";
+}
+
+function findPostableRoomBooking(roomNo: string): BookingRecord | null {
+  const target = String(roomNo || "").trim().toLowerCase();
+  if (!target) return null;
+
+  return (
+    getAllBookings()
+      .filter((booking) => String(booking.roomNo || "").trim().toLowerCase() === target)
+      .filter(
+        (booking) =>
+          (booking.bookingStatus === "checked_in" ||
+            booking.bookingStatus === "reserved") &&
+          (booking.roomStatus === "occupied" || booking.roomStatus === "reserved")
+      )
+      .sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0))[0] ||
+    null
+  );
 }
 
 export default function FrontDeskEntry() {
@@ -324,6 +343,11 @@ export default function FrontDeskEntry() {
 
     if (postToRoom && !roomNo.trim()) {
       setMsg("Enter a room number before posting a charge to room.");
+      return;
+    }
+
+    if (postToRoom && !findPostableRoomBooking(roomNo)) {
+      setMsg("Room posting requires an occupied or reserved room with an active booking.");
       return;
     }
 

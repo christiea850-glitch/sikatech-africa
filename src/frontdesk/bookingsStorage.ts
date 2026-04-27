@@ -147,7 +147,10 @@ export function createBooking(input: {
     bookingStatus: input.bookingStatus || "reserved",
     paymentStatus:
       input.paymentStatus || (balance <= 0 ? "paid" : amountPaid > 0 ? "partial" : "unpaid"),
-    roomStatus: input.roomStatus || deriveRoomStatus(input.bookingStatus || "reserved"),
+    roomStatus: normalizeRoomStatusForBookingStatus(
+      input.bookingStatus || "reserved",
+      input.roomStatus
+    ),
 
     totalAmount,
     amountPaid,
@@ -190,8 +193,11 @@ export function updateBooking(id: string, patch: Partial<BookingRecord>) {
       merged.paymentStatus = balance <= 0 ? "paid" : amountPaid > 0 ? "partial" : "unpaid";
     }
 
-    if (!patch.roomStatus && patch.bookingStatus) {
-      merged.roomStatus = deriveRoomStatus(merged.bookingStatus);
+    if (patch.bookingStatus) {
+      merged.roomStatus = normalizeRoomStatusForBookingStatus(
+        merged.bookingStatus,
+        patch.roomStatus
+      );
     }
 
     return merged;
@@ -313,7 +319,7 @@ export function roomStatusColor(status: RoomStatus) {
   }
 }
 
-function deriveRoomStatus(status: BookingStatus): RoomStatus {
+export function deriveRoomStatus(status: BookingStatus): RoomStatus {
   switch (status) {
     case "checked_in":
       return "occupied";
@@ -328,6 +334,22 @@ function deriveRoomStatus(status: BookingStatus): RoomStatus {
     default:
       return "available";
   }
+}
+
+export function normalizeRoomStatusForBookingStatus(
+  bookingStatus: BookingStatus,
+  roomStatus?: RoomStatus
+): RoomStatus {
+  if (
+    bookingStatus === "checked_in" ||
+    bookingStatus === "checked_out" ||
+    bookingStatus === "cancelled" ||
+    bookingStatus === "no_show"
+  ) {
+    return deriveRoomStatus(bookingStatus);
+  }
+
+  return roomStatus || deriveRoomStatus(bookingStatus);
 }
 
 function generateBookingCode() {
