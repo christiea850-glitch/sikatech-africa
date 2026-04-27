@@ -1,0 +1,98 @@
+/* src/App.css */
+
+/* Make the app shell fill the screen cleanly */
+#root {
+  min-height: 100vh;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* Optional global utility wrappers */
+.sk-page {
+  min-height: 100vh;
+  width: 100%;
+  background: var(--sk-bg);
+  color: var(--sk-text);
+}
+
+.sk-shell {
+  min-height: 100vh;
+  display: flex;
+  width: 100%;
+}
+
+.sk-main {
+  flex: 1;
+  min-width: 0;
+  background: var(--sk-bg);
+}
+
+.sk-content {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* Clean default card utility */
+.sk-card {
+  background: var(--sk-card);
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius-lg);
+  box-shadow: var(--sk-shadow-sm);
+}
+
+/* Simple button helpers */
+.sk-btn-primary {
+  border: none;
+  cursor: pointer;
+  padding: 10px 14px;
+  border-radius: var(--sk-radius-sm);
+  background: var(--sk-navy);
+  color: var(--sk-white);
+  font-weight: 700;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.sk-btn-primary:hover {
+  background: var(--sk-navy-soft);
+}
+
+.sk-btn-primary:active {
+  transform: translateY(1px);
+}
+
+.sk-btn-secondary {
+  border: 1px solid var(--sk-border);
+  cursor: pointer;
+  padding: 10px 14px;
+  border-radius: var(--sk-radius-sm);
+  background: var(--sk-white);
+  color: var(--sk-navy);
+  font-weight: 700;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.sk-btn-secondary:hover {
+  background: #f9fafb;
+}
+
+.sk-btn-secondary:active {
+  transform: translateY(1px);
+}
+
+/* Optional section title helper */
+.sk-section-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--sk-text);
+  margin: 0;
+}
+
+/* Remove old Vite demo styling influence */
+.logo,
+.card,
+.read-the-docs {
+  all: unset;
+}

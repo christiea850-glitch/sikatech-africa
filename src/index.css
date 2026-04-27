@@ -1,0 +1,158 @@
+/* src/index.css */
+
+/* -----------------------------
+   SikaTech Theme Tokens
+------------------------------ */
+:root {
+  --sk-gold: #d1a21b;
+  --sk-gold-dark: #b58413;
+  --sk-navy: #0b2a3a;
+  --sk-navy-soft: #123b4f;
+
+  --sk-text: #0f1720;
+  --sk-text-soft: #5b6b79;
+
+  --sk-white: #ffffff;
+  --sk-bg: #f6f8fa;
+  --sk-card: #ffffff;
+  --sk-border: rgba(15, 23, 32, 0.08);
+
+  --sk-radius-xl: 24px;
+  --sk-radius-lg: 18px;
+  --sk-radius-md: 14px;
+  --sk-radius-sm: 10px;
+
+  --sk-shadow-sm: 0 2px 6px rgba(15, 23, 32, 0.04);
+  --sk-shadow-md: 0 12px 30px rgba(15, 23, 32, 0.08);
+
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--sk-bg);
+  color: var(--sk-text);
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, Arial, sans-serif;
+}
+
+/* Let React app fill screen */
+#root {
+  min-height: 100vh;
+}
+
+/* App background helper */
+.sk-app-bg {
+  min-height: 100vh;
+  width: 100%;
+  background: var(--sk-bg);
+  color: var(--sk-text);
+}
+
+/* Optional gold accent background sections */
+.sk-gold-surface {
+  background: linear-gradient(
+    180deg,
+    rgba(209, 162, 27, 0.16) 0%,
+    rgba(209, 162, 27, 0.08) 100%
+  );
+}
+
+/* Cards */
+.sk-card {
+  background: var(--sk-card);
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius-lg);
+  box-shadow: var(--sk-shadow-sm);
+}
+
+/* Links */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  opacity: 0.92;
+}
+
+/* Buttons */
+button {
+  font-family: inherit;
+}
+
+/* Inputs */
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+input,
+select,
+textarea {
+  color: var(--sk-text);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid rgba(11, 42, 58, 0.12);
+  outline-offset: 1px;
+}
+
+/* Tables */
+table {
+  border-collapse: collapse;
+}
+
+/* Utility text colors */
+.sk-text-soft {
+  color: var(--sk-text-soft);
+}
+
+.sk-text-strong {
+  color: var(--sk-text);
+}
+
+/* Simple scrollbar polish */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(11, 42, 58, 0.18);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
