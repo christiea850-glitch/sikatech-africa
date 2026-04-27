@@ -128,6 +128,7 @@ export default function AccountingWorkbenchPage() {
   const [groupBy, setGroupBy] = useState<GroupBy>("department");
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [statementGeneratedAt, setStatementGeneratedAt] = useState(() => new Date());
+  const [selectedRecord, setSelectedRecord] = useState<AccountingRow | null>(null);
 
   const allowed = user?.role === "accounting" || user?.role === "admin";
   const businessName = resolveBusinessName(user, setupBusinessName);
@@ -464,7 +465,19 @@ export default function AccountingWorkbenchPage() {
                 const review = reviewMap.get(row.id);
                 const status = review?.status || "unreviewed";
                 return (
-                  <tr key={row.id}>
+                  <tr
+                    key={row.id}
+                    style={styles.clickableRow}
+                    tabIndex={0}
+                    role="button"
+                    onClick={() => setSelectedRecord(row)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedRecord(row);
+                      }
+                    }}
+                  >
                     <Td>{new Date(row.date).toLocaleDateString()}</Td>
                     <Td>{sourceLabel(row.source)}</Td>
                     <Td>{row.department}</Td>
@@ -480,11 +493,17 @@ export default function AccountingWorkbenchPage() {
                         style={styles.noteInput}
                         value={noteDrafts[row.id] ?? review?.note ?? ""}
                         onChange={(e) => setNoteDrafts((prev) => ({ ...prev, [row.id]: e.target.value }))}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
                         placeholder="Accounting note"
                       />
                     </Td>
                     <Td>
-                      <div style={styles.rowActions}>
+                      <div
+                        style={styles.rowActions}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      >
                         <button style={styles.smallBtn} onClick={() => updateReview(row, "reviewed")}>Reviewed</button>
                         <button style={styles.warnBtn} onClick={() => updateReview(row, "issue")}>Flag</button>
                         <button style={styles.smallBtn} onClick={() => saveNote(row)}>Save Note</button>
@@ -497,6 +516,34 @@ export default function AccountingWorkbenchPage() {
           </table>
         </div>
       </div>
+
+      {selectedRecord && (
+        <div style={styles.detailPanel}>
+          <div style={styles.detailHeader}>
+            <div>
+              <h2 style={styles.detailTitle}>Financial Record Details</h2>
+              <div style={styles.detailSubtitle}>{sourceLabel(selectedRecord.source)} | {selectedRecord.id}</div>
+            </div>
+            <button style={styles.secondaryBtn} onClick={() => setSelectedRecord(null)}>Close</button>
+          </div>
+
+          <div style={styles.detailGrid}>
+            <DetailItem label="Date" value={formatDateTime(new Date(selectedRecord.date))} />
+            <DetailItem label="Source / Type" value={sourceLabel(selectedRecord.source)} />
+            <DetailItem label="Department" value={selectedRecord.department} />
+            <DetailItem label="Payment Method" value={selectedRecord.paymentMethod} />
+            <DetailItem label="Staff" value={selectedRecord.staff} />
+            <DetailItem label="Description" value={selectedRecord.description} />
+            <DetailItem label="Revenue" value={money(selectedRecord.revenue)} />
+            <DetailItem label="Expense" value={money(selectedRecord.expense)} />
+            <DetailItem label="Collected" value={money(selectedRecord.collection)} />
+            <DetailItem label="Booking Code" value={selectedRecord.bookingCode || "-"} />
+            <DetailItem label="Room Number" value={selectedRecord.roomNo || "-"} />
+            <DetailItem label="Review Status" value={reviewMap.get(selectedRecord.id)?.status || "unreviewed"} />
+            <DetailItem label="Accounting Note" value={noteDrafts[selectedRecord.id] ?? reviewMap.get(selectedRecord.id)?.note ?? "-"} wide />
+          </div>
+        </div>
+      )}
       </div>
 
       <section className="accounting-print-statement" style={styles.printStatement} aria-label="Printable financial statement">
@@ -604,6 +651,15 @@ function Td({ children }: { children: React.ReactNode }) {
   return <td style={styles.td}>{children}</td>;
 }
 
+function DetailItem({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
+  return (
+    <div style={{ ...styles.detailItem, ...(wide ? styles.detailItemWide : {}) }}>
+      <div style={styles.detailLabel}>{label}</div>
+      <div style={styles.detailValue}>{value || "-"}</div>
+    </div>
+  );
+}
+
 function StatementSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section style={styles.printSection}>
@@ -650,6 +706,7 @@ const styles: Record<string, CSSProperties> = {
   table: { width: "100%", borderCollapse: "separate", borderSpacing: 0 },
   th: { textAlign: "left", padding: "10px 8px", borderBottom: "1px solid rgba(15,23,42,0.12)", color: "#64748b", fontSize: 12, textTransform: "uppercase", whiteSpace: "nowrap" },
   td: { padding: "10px 8px", borderBottom: "1px solid rgba(15,23,42,0.08)", color: "#111827", fontSize: 13, fontWeight: 650, verticalAlign: "top", whiteSpace: "nowrap" },
+  clickableRow: { cursor: "pointer" },
   reviewStats: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 },
   noteInput: { minWidth: 180, padding: "8px 9px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.14)" },
   rowActions: { display: "flex", gap: 6, flexWrap: "wrap" },
@@ -659,6 +716,15 @@ const styles: Record<string, CSSProperties> = {
   badgeDanger: { color: "#b91c1c", background: "rgba(185,28,28,0.10)", borderRadius: 999, padding: "4px 8px", fontWeight: 900 },
   badgeMuted: { color: "#475569", background: "rgba(71,85,105,0.10)", borderRadius: 999, padding: "4px 8px", fontWeight: 900 },
   notice: { padding: 16, borderRadius: 10, background: "rgba(185,28,28,0.08)", color: "#991b1b", fontWeight: 900 },
+  detailPanel: { padding: 16, border: "1px solid rgba(15,23,42,0.10)", borderRadius: 10, background: "#fff", boxShadow: "0 8px 20px rgba(15,23,42,0.04)" },
+  detailHeader: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 14 },
+  detailTitle: { margin: 0, color: "#111827", fontSize: 18, fontWeight: 900 },
+  detailSubtitle: { marginTop: 4, color: "#64748b", fontSize: 12, fontWeight: 800 },
+  detailGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 },
+  detailItem: { padding: 12, border: "1px solid rgba(15,23,42,0.08)", borderRadius: 8, background: "#f8fafc" },
+  detailItemWide: { gridColumn: "1 / -1" },
+  detailLabel: { color: "#64748b", fontSize: 11, fontWeight: 900, textTransform: "uppercase", letterSpacing: 0.3 },
+  detailValue: { marginTop: 5, color: "#111827", fontSize: 14, fontWeight: 800, overflowWrap: "anywhere" },
   printStatement: { display: "none", color: "#111827", background: "#fff" },
   printHeader: { display: "flex", justifyContent: "space-between", gap: 24, alignItems: "flex-start", borderBottom: "2px solid #111827", paddingBottom: 18, marginBottom: 18 },
   printBusinessName: { margin: 0, fontSize: 28, color: "#111827", lineHeight: 1.15 },

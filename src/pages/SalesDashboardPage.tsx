@@ -311,6 +311,43 @@ function getAccountingSourceLabel(t: Tx) {
   return "Direct sale";
 }
 
+function getTransactionItems(t: Tx) {
+  const rawItems = Array.isArray(t?.items) ? t.items : [];
+  const items = rawItems
+    .map((item: any, index: number) => {
+      const qty = Number(item?.qty ?? item?.quantity ?? 1) || 1;
+      const unitPrice = Number(item?.unitPrice ?? item?.price ?? item?.rate ?? 0) || 0;
+      const discount = Number(item?.discount ?? 0) || 0;
+      const total =
+        Number(item?.total ?? item?.lineTotal) ||
+        Math.max(0, qty * unitPrice - discount);
+
+      return {
+        id: item?.id || `${index}`,
+        name: item?.name || item?.productName || item?.itemName || "Item",
+        qty,
+        unitPrice,
+        discount,
+        total,
+      };
+    })
+    .filter((item: any) => item.name || item.total > 0);
+
+  if (items.length > 0) return items;
+
+  const name = t?.productName || t?.itemName;
+  if (!name) return [];
+
+  const qty = Number(t?.qty ?? 1) || 1;
+  const unitPrice = Number(t?.unitPrice ?? getTxAmount(t)) || 0;
+  const discount = Number(t?.discount ?? 0) || 0;
+  const total =
+    Number(t?.total ?? t?.amount ?? t?.grandTotal) ||
+    Math.max(0, qty * unitPrice - discount);
+
+  return [{ id: t?.id || t?.txId || "single", name, qty, unitPrice, discount, total }];
+}
+
 function getDepartmentLabel(
   value: string,
   departmentOptions: Array<{ value: string; label: string }>
@@ -347,6 +384,48 @@ function DetailItem({ label, value }: { label: string; value: string }) {
     <div style={styles.detailItem}>
       <div style={styles.detailLabel}>{label}</div>
       <div style={styles.detailValue}>{value || "—"}</div>
+    </div>
+  );
+}
+
+function TransactionItemBreakdown({ tx }: { tx: Tx }) {
+  const items = getTransactionItems(tx);
+
+  if (items.length === 0) {
+    return (
+      <div style={styles.itemBreakdownEmpty}>
+        No item breakdown available for this transaction.
+      </div>
+    );
+  }
+
+  return (
+    <div style={styles.itemBreakdown}>
+      <div style={styles.itemBreakdownTitle}>Item Breakdown</div>
+      <div style={styles.itemBreakdownTableWrap}>
+        <table style={styles.itemBreakdownTable}>
+          <thead>
+            <tr>
+              <th style={styles.itemBreakdownThLeft}>Item</th>
+              <th style={styles.itemBreakdownThRight}>Qty</th>
+              <th style={styles.itemBreakdownThRight}>Unit</th>
+              <th style={styles.itemBreakdownThRight}>Discount</th>
+              <th style={styles.itemBreakdownThRight}>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item: any) => (
+              <tr key={item.id}>
+                <td style={styles.itemBreakdownTdLeft}>{item.name}</td>
+                <td style={styles.itemBreakdownTdRight}>{item.qty}</td>
+                <td style={styles.itemBreakdownTdRight}>{money(item.unitPrice)}</td>
+                <td style={styles.itemBreakdownTdRight}>{money(item.discount)}</td>
+                <td style={styles.itemBreakdownTdRight}>{money(item.total)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -2466,6 +2545,10 @@ export default function SalesDashboardPage() {
             <DetailItem label="Room" value={selectedTx?.roomNo || selectedTx?.room || "—"} />
             <DetailItem label="Staff" value={getStaffLabel(selectedTx)} />
             <DetailItem
+              label="Customer"
+              value={selectedTx?.customerName || selectedTx?.guestName || "-"}
+            />
+            <DetailItem
               label="Payment Method"
               value={selectedTx?.paymentMethod || "—"}
             />
@@ -2476,6 +2559,8 @@ export default function SalesDashboardPage() {
             />
             <DetailItem label="Total" value={money(getTxAmount(selectedTx))} />
           </div>
+
+          <TransactionItemBreakdown tx={selectedTx} />
         </div>
       )}
 
@@ -3195,6 +3280,62 @@ const styles: Record<string, React.CSSProperties> = {
   detailValue: {
     fontSize: 14,
     color: "#0F172A",
+    fontWeight: 700,
+  },
+  itemBreakdown: {
+    marginTop: 16,
+  },
+  itemBreakdownTitle: {
+    fontSize: 14,
+    fontWeight: 800,
+    color: "#0F172A",
+    marginBottom: 8,
+  },
+  itemBreakdownEmpty: {
+    marginTop: 16,
+    padding: 12,
+    border: "1px solid #E9EEF5",
+    borderRadius: 12,
+    background: "#F8FAFC",
+    color: "#64748B",
+    fontSize: 13,
+    fontWeight: 700,
+  },
+  itemBreakdownTableWrap: {
+    overflowX: "auto",
+  },
+  itemBreakdownTable: {
+    width: "100%",
+    borderCollapse: "collapse",
+  },
+  itemBreakdownThLeft: {
+    textAlign: "left",
+    padding: "10px",
+    borderBottom: "1px solid #E9EEF5",
+    color: "#475569",
+    fontSize: 12,
+  },
+  itemBreakdownThRight: {
+    textAlign: "right",
+    padding: "10px",
+    borderBottom: "1px solid #E9EEF5",
+    color: "#475569",
+    fontSize: 12,
+  },
+  itemBreakdownTdLeft: {
+    textAlign: "left",
+    padding: "10px",
+    borderBottom: "1px solid #F1F5F9",
+    color: "#0F172A",
+    fontSize: 13,
+    fontWeight: 700,
+  },
+  itemBreakdownTdRight: {
+    textAlign: "right",
+    padding: "10px",
+    borderBottom: "1px solid #F1F5F9",
+    color: "#0F172A",
+    fontSize: 13,
     fontWeight: 700,
   },
 };
