@@ -13,6 +13,15 @@ export type ShiftTrace = {
 
 const TRACE_KEY = "sikatech_shift_trace_v1";
 const EXPECTED_SHIFT_MS = 12 * 60 * 60 * 1000;
+const EXPECTED_END_FIELDS = [
+  "expectedEndAt",
+  "expectedCloseAt",
+  "scheduledEndAt",
+  "scheduledCloseAt",
+  "shiftEndAt",
+  "endAt",
+  "endsAt",
+];
 
 function readTraceStore(): Record<string, ShiftTrace> {
   try {
@@ -81,6 +90,18 @@ export function normalizeShiftTraceStatus(status: unknown): ShiftTraceStatus {
   return "unclosed";
 }
 
+export function getExpectedShiftEndAt(shift: Record<string, any> | null | undefined) {
+  if (!shift) return 0;
+
+  for (const field of EXPECTED_END_FIELDS) {
+    const value = parseTraceTime(shift[field]);
+    if (value) return value;
+  }
+
+  const openedAt = parseTraceTime(shift.openedAt);
+  return openedAt ? openedAt + EXPECTED_SHIFT_MS : 0;
+}
+
 function findMatchingShift(record: Record<string, any>, shifts: any[]) {
   const shiftId = String(record.shiftId ?? "").trim();
   if (shiftId) {
@@ -120,12 +141,12 @@ export function resolveShiftTrace(record: Record<string, any>, shifts: any[] = [
   let submittedBy = record.submittedBy || stored?.submittedBy || matchingShift?.submittedBy;
   let submissionMode = record.submissionMode || stored?.submissionMode;
 
-  const openedAt = parseTraceTime(matchingShift?.openedAt);
   const hasSubmittedSignal = shiftStatus === "submitted" || shiftStatus === "reviewed";
+  const expectedEndAt = getExpectedShiftEndAt(matchingShift);
 
-  if (!hasSubmittedSignal && openedAt && now - openedAt > EXPECTED_SHIFT_MS) {
+  if (!hasSubmittedSignal && expectedEndAt && now > expectedEndAt) {
     shiftStatus = "auto_submitted";
-    submittedAt = submittedAt || new Date(openedAt + EXPECTED_SHIFT_MS).toISOString();
+    submittedAt = submittedAt || new Date(expectedEndAt).toISOString();
     submittedBy = submittedBy || "system";
     submissionMode = "automatic";
     if (shiftId && !stored) {

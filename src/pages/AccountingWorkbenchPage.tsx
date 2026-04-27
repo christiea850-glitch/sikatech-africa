@@ -7,7 +7,7 @@ import { useBusinessSetup } from "../setup/BusinessSetupContext";
 import { getAllBookings } from "../frontdesk/bookingsStorage";
 import { formatDepartmentLabel, normalizeDepartmentKey } from "../lib/departments";
 import { useShift } from "../shifts/ShiftContext";
-import { formatShiftStatus, resolveShiftTrace, type ShiftTraceStatus } from "../lib/shiftTrace";
+import { formatShiftStatus, recordShiftSubmission, resolveShiftTrace, type ShiftTraceStatus } from "../lib/shiftTrace";
 import {
   loadAccountingWorkbenchReviews,
   upsertAccountingWorkbenchReview,
@@ -24,6 +24,16 @@ type SourceType =
 type GroupBy = "department" | "paymentMethod" | "staff" | "date" | "source";
 type DetailTab = "overview" | "transaction" | "shift" | "review";
 type PaymentState = "unpaid" | "partial" | "paid";
+type UnclosedShiftAlert = {
+  key: string;
+  shiftId?: string;
+  staffName: string;
+  department: string;
+  shiftDate: string;
+  transactionCount: number;
+  totalCollected: number;
+  status: ShiftTraceStatus;
+};
 
 type AccountingRow = {
   id: string;
@@ -125,6 +135,25 @@ function csvCell(value: unknown) {
   return `"${String(value ?? "").replace(/"/g, '""')}"`;
 }
 
+const RESOLVED_UNCLOSED_ALERTS_KEY = "sikatech_resolved_unclosed_shift_alerts_v1";
+
+function loadResolvedUnclosedAlerts() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(RESOLVED_UNCLOSED_ALERTS_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveResolvedUnclosedAlerts(keys: string[]) {
+  try {
+    localStorage.setItem(RESOLVED_UNCLOSED_ALERTS_KEY, JSON.stringify(keys));
+  } catch {
+    // Alert resolution should never block accounting review.
+  }
+}
+
 function cleanBusinessName(value: unknown) {
   if (typeof value !== "string") return "";
   return value.trim();
@@ -166,6 +195,8 @@ export default function AccountingWorkbenchPage() {
   const { shifts } = useShift();
 
   const [reviewVersion, setReviewVersion] = useState(0);
+  const [traceVersion, setTraceVersion] = useState(0);
+  const [resolvedUnclosedAlerts, setResolvedUnclosedAlerts] = useState<string[]>(() => loadResolvedUnclosedAlerts());
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [department, setDepartment] = useState("all");
@@ -194,6 +225,7 @@ export default function AccountingWorkbenchPage() {
   }, [reviews]);
 
   const rows = useMemo<AccountingRow[]>(() => {
+    void traceVersion;
     const directSales: AccountingRow[] = (salesRecords || [])
       .filter(
         (sale) =>
@@ -337,7 +369,7 @@ export default function AccountingWorkbenchPage() {
     return [...roomBookingRows, ...directSales, ...folioRows, ...expenses].sort(
       (a, b) => new Date(b.transactionTime).getTime() - new Date(a.transactionTime).getTime()
     );
-  }, [salesRecords, expenseRecords, shifts]);
+  }, [salesRecords, expenseRecords, shifts, traceVersion]);
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {
@@ -439,6 +471,39 @@ export default function AccountingWorkbenchPage() {
     return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue);
   }, [filtered, groupBy]);
 
+  const unclosedShiftAlerts = useMemo<UnclosedShiftAlert[]>(() => {
+    const resolved = new Set(resolvedUnclosedAlerts);
+    const map = new Map<string, UnclosedShiftAlert>();
+
+    rows.forEach((row) => {
+      if (row.shiftStatus !== "unclosed" && row.shiftStatus !== "auto_submitted") return;
+
+      const shiftDate = dateOnly(row.transactionTime) || dateOnly(row.date) || "unknown";
+      const key = row.shiftId
+        ? `shift:${row.shiftId}`
+        : `unassigned:${row.department}:${shiftDate}:${row.staff}`;
+      if (resolved.has(key)) return;
+
+      const current = map.get(key) || {
+        key,
+        shiftId: row.shiftId,
+        staffName: row.staff || "unknown",
+        department: row.department,
+        shiftDate,
+        transactionCount: 0,
+        totalCollected: 0,
+        status: row.shiftStatus,
+      };
+
+      current.transactionCount += 1;
+      current.totalCollected += row.collection;
+      if (row.shiftStatus === "auto_submitted") current.status = "auto_submitted";
+      map.set(key, current);
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.shiftDate.localeCompare(a.shiftDate));
+  }, [rows, resolvedUnclosedAlerts]);
+
   const departments = Array.from(new Set(rows.map((row) => row.department))).sort();
   const paymentMethods = Array.from(new Set(rows.map((row) => row.paymentMethod))).sort();
   const staffOptions = Array.from(new Set(rows.map((row) => row.staff))).sort();
@@ -538,6 +603,23 @@ export default function AccountingWorkbenchPage() {
     setDetailTab("overview");
   }
 
+  function resolveUnclosedShift(alert: UnclosedShiftAlert) {
+    if (alert.shiftId) {
+      recordShiftSubmission({
+        shiftId: alert.shiftId,
+        status: "reviewed",
+        submittedAt: new Date().toISOString(),
+        submittedBy: (user as any)?.employeeId || (user as any)?.username || user?.role || "accounting",
+        submissionMode: "manual",
+      });
+    }
+
+    const next = Array.from(new Set([...resolvedUnclosedAlerts, alert.key]));
+    setResolvedUnclosedAlerts(next);
+    saveResolvedUnclosedAlerts(next);
+    setTraceVersion((v) => v + 1);
+  }
+
   const reviewedCount = filtered.filter((r) => reviewMap.get(r.id)?.status === "reviewed").length;
   const flaggedCount = filtered.filter((r) => reviewMap.get(r.id)?.status === "issue").length;
   const dateRangeLabel = formatDateRange(startDate, endDate);
@@ -581,6 +663,33 @@ export default function AccountingWorkbenchPage() {
         <Metric label="Room Folio Receivables" value={money(summary.roomFolioReceivables)} />
         <Metric label="Cash Collected" value={money(summary.collections)} />
       </div>
+
+      {unclosedShiftAlerts.length > 0 && (
+        <div style={styles.unclosedPanel}>
+          <div style={styles.unclosedHeader}>
+            <div>
+              <h2 style={styles.sectionTitle}>Unclosed shift detected</h2>
+              <p style={styles.unclosedText}>Transactions remain visible. Accounting can review and resolve shifts that were not manually closed.</p>
+            </div>
+            <span style={styles.badgeWarn}>{unclosedShiftAlerts.length}</span>
+          </div>
+          <div style={styles.unclosedList}>
+            {unclosedShiftAlerts.map((alert) => (
+              <div key={alert.key} style={styles.unclosedItem}>
+                <div style={styles.unclosedMeta}>
+                  <span><strong>Staff:</strong> {alert.staffName}</span>
+                  <span><strong>Department:</strong> {formatDepartmentLabel(alert.department)}</span>
+                  <span><strong>Shift date:</strong> {alert.shiftDate}</span>
+                  <span><strong>Transactions:</strong> {alert.transactionCount}</span>
+                  <span><strong>Total collected:</strong> {money(alert.totalCollected)}</span>
+                  <span><strong>Status:</strong> {formatShiftStatus(alert.status)}</span>
+                </div>
+                <button style={styles.smallBtn} onClick={() => resolveUnclosedShift(alert)}>Review / Resolve</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div style={styles.panel}>
         <div style={styles.filterGrid}>
@@ -950,6 +1059,12 @@ const styles: Record<string, CSSProperties> = {
   metricLabel: { color: "#64748b", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.4 },
   metricValue: { marginTop: 8, color: "#111827", fontSize: 22, fontWeight: 900 },
   panel: { padding: 16, border: "1px solid rgba(15,23,42,0.08)", borderRadius: 10, background: "#fff" },
+  unclosedPanel: { padding: 16, border: "1px solid rgba(217,119,6,0.24)", borderRadius: 10, background: "rgba(255,251,235,0.9)" },
+  unclosedHeader: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 12 },
+  unclosedText: { margin: "4px 0 0", color: "#92400e", fontSize: 13, fontWeight: 700 },
+  unclosedList: { display: "grid", gap: 8 },
+  unclosedItem: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", padding: 10, border: "1px solid rgba(217,119,6,0.18)", borderRadius: 8, background: "#fff" },
+  unclosedMeta: { display: "flex", gap: 12, flexWrap: "wrap", color: "#111827", fontSize: 13 },
   filterGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 },
   field: { display: "grid", gap: 6 },
   label: { color: "#334155", fontSize: 13, fontWeight: 800 },
