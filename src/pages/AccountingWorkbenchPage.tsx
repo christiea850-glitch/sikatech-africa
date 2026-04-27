@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { useSales } from "../sales/SalesContext";
@@ -23,6 +23,7 @@ type SourceType =
   | "expense";
 type GroupBy = "department" | "paymentMethod" | "staff" | "date" | "source";
 type DetailTab = "overview" | "transaction" | "shift" | "review";
+type PaymentState = "unpaid" | "partial" | "paid";
 
 type AccountingRow = {
   id: string;
@@ -39,6 +40,7 @@ type AccountingRow = {
   guestPayment: number;
   bookingCode?: string;
   roomNo?: string;
+  paymentState?: PaymentState;
   transactionTime: string;
   shiftId?: string;
   shiftStatus: ShiftTraceStatus;
@@ -66,10 +68,9 @@ function inRange(value: string, start: string, end: string) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return false;
   const s = start ? new Date(`${start}T00:00:00`) : null;
-  const e = end ? new Date(`${end}T00:00:00`) : null;
-  if (e) e.setDate(e.getDate() + 1);
+  const e = end ? new Date(`${end}T23:59:59.999`) : null;
   if (s && d < s) return false;
-  if (e && d >= e) return false;
+  if (e && d > e) return false;
   return true;
 }
 
@@ -94,6 +95,20 @@ function roomBookingBaseRevenue(booking: any) {
     .reduce((sum: number, activity: any) => sum + (Number(activity.amount) || 0), 0);
 
   return Math.max(0, (Number(booking.totalAmount) || 0) - folioCharges);
+}
+
+function normalizePaymentState(value: unknown): PaymentState | undefined {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (raw === "paid") return "paid";
+  if (raw === "partial" || raw === "partially_paid" || raw === "partially-paid") return "partial";
+  if (raw === "unpaid") return "unpaid";
+  return undefined;
+}
+
+function paymentStateLabel(value?: PaymentState) {
+  if (value === "partial") return "Partially Paid";
+  if (value === "paid") return "Paid";
+  return "Unpaid";
 }
 
 function downloadText(filename: string, content: string, type: string) {
@@ -200,6 +215,7 @@ export default function AccountingWorkbenchPage() {
           collection: Number(sale.total) || 0,
           roomFolioReceivable: 0,
           guestPayment: 0,
+          paymentState: "paid",
           transactionTime: sale.createdAt,
           shiftId: trace.shiftId,
           shiftStatus: trace.shiftStatus,
@@ -240,6 +256,7 @@ export default function AccountingWorkbenchPage() {
           guestPayment: 0,
           bookingCode: booking.bookingCode,
           roomNo: booking.roomNo,
+          paymentState: normalizePaymentState(booking.paymentStatus) || "unpaid",
           transactionTime: bookingDate,
           shiftId: trace.shiftId,
           shiftStatus: trace.shiftStatus,
@@ -282,6 +299,7 @@ export default function AccountingWorkbenchPage() {
             guestPayment: isPayment ? amount : 0,
             bookingCode: booking.bookingCode,
             roomNo: booking.roomNo,
+            paymentState: isPayment ? "paid" : normalizePaymentState(booking.paymentStatus) || "unpaid",
             transactionTime: activityDate,
             shiftId: trace.shiftId,
             shiftStatus: trace.shiftStatus,
@@ -317,7 +335,7 @@ export default function AccountingWorkbenchPage() {
     });
 
     return [...roomBookingRows, ...directSales, ...folioRows, ...expenses].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      (a, b) => new Date(b.transactionTime).getTime() - new Date(a.transactionTime).getTime()
     );
   }, [salesRecords, expenseRecords, shifts]);
 
@@ -325,7 +343,7 @@ export default function AccountingWorkbenchPage() {
     return rows.filter((row) => {
       const review = reviewMap.get(row.id);
       const status = review?.status || "unreviewed";
-      if (!inRange(row.date, startDate, endDate)) return false;
+      if (!inRange(row.transactionTime, startDate, endDate)) return false;
       if (department !== "all" && row.department !== normalizeDepartmentKey(department)) return false;
       if (paymentMethod !== "all" && row.paymentMethod !== paymentMethod) return false;
       if (source !== "all" && row.source !== source) return false;
@@ -335,6 +353,13 @@ export default function AccountingWorkbenchPage() {
       return true;
     });
   }, [rows, reviewMap, startDate, endDate, department, paymentMethod, source, staff, reviewStatus, shiftStatusFilter]);
+
+  useEffect(() => {
+    if (!selectedRecord) return;
+    if (!filtered.some((row) => row.id === selectedRecord.id)) {
+      setSelectedRecord(null);
+    }
+  }, [filtered, selectedRecord]);
 
   const summary = useMemo(() => {
     const totals = filtered.reduce(
@@ -376,6 +401,7 @@ export default function AccountingWorkbenchPage() {
     return {
       ...totals,
       netProfit: totals.revenue - totals.expenses,
+      outstandingBalance: totals.revenue - totals.collections,
     };
   }, [filtered]);
 
@@ -391,7 +417,7 @@ export default function AccountingWorkbenchPage() {
           : groupBy === "staff"
           ? row.staff
           : groupBy === "date"
-          ? dateOnly(row.date)
+          ? dateOnly(row.transactionTime)
           : row.source;
 
       const current = map.get(key) || {
@@ -446,7 +472,8 @@ export default function AccountingWorkbenchPage() {
       "Description",
       "Revenue",
       "Expense",
-      "Collection",
+      "Collections",
+      "Payment Status",
       "Shift ID",
       "Shift Status",
       "Submitted At",
@@ -468,6 +495,7 @@ export default function AccountingWorkbenchPage() {
         money(row.revenue),
         money(row.expense),
         money(row.collection),
+        row.paymentState ? paymentStateLabel(row.paymentState) : "",
         row.shiftId || "",
         row.shiftStatus,
         row.submittedAt || "",
@@ -538,9 +566,10 @@ export default function AccountingWorkbenchPage() {
       </div>
 
       <div style={styles.summaryGrid}>
-        <Metric label="Total Revenue" value={money(summary.revenue)} />
+        <Metric label="Revenue (Earned)" value={money(summary.revenue)} />
         <Metric label="Total Expenses" value={money(summary.expenses)} />
         <Metric label="Net Profit" value={money(summary.netProfit)} />
+        <Metric label="Outstanding Balance" value={money(summary.outstandingBalance)} />
         <Metric label="Total Cash" value={money(summary.cash)} />
         <Metric label="Total MoMo" value={money(summary.momo)} />
         <Metric label="Total Card" value={money(summary.card)} />
@@ -550,7 +579,7 @@ export default function AccountingWorkbenchPage() {
         <Metric label="Food & Service Sales" value={money(summary.foodServiceSales)} />
         <Metric label="Department POS Sales" value={money(summary.departmentPosSales)} />
         <Metric label="Room Folio Receivables" value={money(summary.roomFolioReceivables)} />
-        <Metric label="Guest Payments Collected" value={money(summary.guestPayments)} />
+        <Metric label="Cash Collected" value={money(summary.collections)} />
       </div>
 
       <div style={styles.panel}>
@@ -600,7 +629,7 @@ export default function AccountingWorkbenchPage() {
           <table style={styles.table}>
             <thead>
               <tr>
-                <Th>Transaction Time</Th><Th>Source</Th><Th>Dept</Th><Th>Method</Th><Th>Staff</Th><Th>Description</Th><Th>Revenue</Th><Th>Expense</Th><Th>Collected</Th><Th>Shift</Th><Th>Review</Th><Th>Note</Th><Th>Actions</Th>
+                <Th>Transaction Time</Th><Th>Source</Th><Th>Dept</Th><Th>Method</Th><Th>Staff</Th><Th>Description</Th><Th>Revenue</Th><Th>Expense</Th><Th>Collections</Th><Th>Payment</Th><Th>Shift</Th><Th>Review</Th><Th>Note</Th><Th>Actions</Th>
               </tr>
             </thead>
             <tbody>
@@ -635,6 +664,7 @@ export default function AccountingWorkbenchPage() {
                     <Td>{money(row.revenue)}</Td>
                     <Td>{money(row.expense)}</Td>
                     <Td>{money(row.collection)}</Td>
+                    <Td>{row.paymentState ? <PaymentBadge state={row.paymentState} /> : "-"}</Td>
                     <Td>{formatShiftStatus(row.shiftStatus)}</Td>
                     <Td><span style={status === "issue" ? styles.badgeDanger : status === "reviewed" ? styles.badgeGood : styles.badgeMuted}>{status}</span></Td>
                     <Td>
@@ -695,7 +725,11 @@ export default function AccountingWorkbenchPage() {
                   <DetailItem label="Description" value={selectedRecord.description} wide />
                   <DetailItem label="Revenue" value={money(selectedRecord.revenue)} />
                   <DetailItem label="Expense" value={money(selectedRecord.expense)} />
-                  <DetailItem label="Collected" value={money(selectedRecord.collection)} />
+                  <DetailItem label="Collections" value={money(selectedRecord.collection)} />
+                  <div style={styles.detailItem}>
+                    <div style={styles.detailLabel}>Payment Status</div>
+                    <div style={styles.detailValue}>{selectedRecord.paymentState ? <PaymentBadge state={selectedRecord.paymentState} /> : "-"}</div>
+                  </div>
                   <DetailItem label="Booking Code" value={selectedRecord.bookingCode || "-"} />
                   <DetailItem label="Room Number" value={selectedRecord.roomNo || "-"} />
                 </div>
@@ -758,10 +792,11 @@ export default function AccountingWorkbenchPage() {
         </div>
 
         <div style={styles.printSummaryGrid}>
-          <PrintMetric label="Total Revenue" value={money(summary.revenue)} />
+          <PrintMetric label="Revenue (Earned)" value={money(summary.revenue)} />
           <PrintMetric label="Total Expenses" value={money(summary.expenses)} />
           <PrintMetric label="Net Profit" value={money(summary.netProfit)} />
-          <PrintMetric label="Cash Collected" value={money(summary.cash)} />
+          <PrintMetric label="Outstanding Balance" value={money(summary.outstandingBalance)} />
+          <PrintMetric label="Total Cash" value={money(summary.cash)} />
           <PrintMetric label="MoMo Collected" value={money(summary.momo)} />
           <PrintMetric label="Card Collected" value={money(summary.card)} />
           <PrintMetric label="Transfer Collected" value={money(summary.transfer)} />
@@ -770,7 +805,7 @@ export default function AccountingWorkbenchPage() {
           <PrintMetric label="Food & Service Sales" value={money(summary.foodServiceSales)} />
           <PrintMetric label="Department POS Sales" value={money(summary.departmentPosSales)} />
           <PrintMetric label="Room Folio Receivables" value={money(summary.roomFolioReceivables)} />
-          <PrintMetric label="Guest Payments Collected" value={money(summary.guestPayments)} />
+          <PrintMetric label="Cash Collected" value={money(summary.collections)} />
         </div>
 
         <StatementSection title={`Grouped Summary by ${groupByLabel}`}>
@@ -795,7 +830,7 @@ export default function AccountingWorkbenchPage() {
           <table style={styles.printTable}>
             <thead>
               <tr>
-                <PrintTh>Transaction Time</PrintTh><PrintTh>Source / Type</PrintTh><PrintTh>Department</PrintTh><PrintTh>Payment Method</PrintTh><PrintTh>Staff</PrintTh><PrintTh>Description</PrintTh><PrintTh>Revenue</PrintTh><PrintTh>Expense</PrintTh><PrintTh>Collected</PrintTh><PrintTh>Shift Status</PrintTh><PrintTh>Review Status</PrintTh><PrintTh>Note</PrintTh>
+                <PrintTh>Transaction Time</PrintTh><PrintTh>Source / Type</PrintTh><PrintTh>Department</PrintTh><PrintTh>Payment Method</PrintTh><PrintTh>Staff</PrintTh><PrintTh>Description</PrintTh><PrintTh>Revenue</PrintTh><PrintTh>Expense</PrintTh><PrintTh>Collections</PrintTh><PrintTh>Payment</PrintTh><PrintTh>Shift Status</PrintTh><PrintTh>Review Status</PrintTh><PrintTh>Note</PrintTh>
               </tr>
             </thead>
             <tbody>
@@ -812,6 +847,7 @@ export default function AccountingWorkbenchPage() {
                     <PrintTd>{money(row.revenue)}</PrintTd>
                     <PrintTd>{money(row.expense)}</PrintTd>
                     <PrintTd>{money(row.collection)}</PrintTd>
+                    <PrintTd>{row.paymentState ? paymentStateLabel(row.paymentState) : ""}</PrintTd>
                     <PrintTd>{formatShiftStatus(row.shiftStatus)}</PrintTd>
                     <PrintTd>{review?.status || "unreviewed"}</PrintTd>
                     <PrintTd>{review?.note || ""}</PrintTd>
@@ -861,6 +897,13 @@ function DetailItem({ label, value, wide }: { label: string; value: string; wide
       <div style={styles.detailValue}>{value || "-"}</div>
     </div>
   );
+}
+
+function PaymentBadge({ state }: { state: PaymentState }) {
+  const style =
+    state === "paid" ? styles.badgeGood : state === "partial" ? styles.badgeWarn : styles.badgeMuted;
+
+  return <span style={style}>{paymentStateLabel(state)}</span>;
 }
 
 function DetailTabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
@@ -926,6 +969,7 @@ const styles: Record<string, CSSProperties> = {
   smallBtn: { border: "1px solid rgba(15,23,42,0.14)", background: "#fff", color: "#111827", borderRadius: 7, padding: "7px 9px", fontWeight: 800, cursor: "pointer" },
   warnBtn: { border: "1px solid rgba(180,38,38,0.18)", background: "rgba(180,38,38,0.08)", color: "#991b1b", borderRadius: 7, padding: "7px 9px", fontWeight: 800, cursor: "pointer" },
   badgeGood: { color: "#047857", background: "rgba(4,120,87,0.10)", borderRadius: 999, padding: "4px 8px", fontWeight: 900 },
+  badgeWarn: { color: "#92400e", background: "rgba(217,119,6,0.12)", borderRadius: 999, padding: "4px 8px", fontWeight: 900 },
   badgeDanger: { color: "#b91c1c", background: "rgba(185,28,28,0.10)", borderRadius: 999, padding: "4px 8px", fontWeight: 900 },
   badgeMuted: { color: "#475569", background: "rgba(71,85,105,0.10)", borderRadius: 999, padding: "4px 8px", fontWeight: 900 },
   notice: { padding: 16, borderRadius: 10, background: "rgba(185,28,28,0.08)", color: "#991b1b", fontWeight: 900 },
