@@ -36,6 +36,11 @@ export type SaleRecord = {
   bookingCode?: string;
   roomNo?: string;
   paymentMode?: "pay_now" | "post_to_room";
+  shiftId?: string;
+  shiftStatus?: string;
+  submittedAt?: string;
+  submittedBy?: string;
+  submissionMode?: "manual" | "automatic";
 };
 
 export type AddSaleInput = {
@@ -57,6 +62,11 @@ export type AddSaleInput = {
   bookingCode?: string;
   roomNo?: string;
   paymentMode?: "pay_now" | "post_to_room";
+  shiftId?: string;
+  shiftStatus?: string;
+  submittedAt?: string;
+  submittedBy?: string;
+  submissionMode?: "manual" | "automatic";
 };
 
 type SalesContextType = {
@@ -129,6 +139,11 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         bookingCode: input.bookingCode?.trim() || undefined,
         roomNo: input.roomNo?.trim() || undefined,
         paymentMode: input.paymentMode,
+        shiftId: input.shiftId?.trim() || undefined,
+        shiftStatus: input.shiftStatus?.trim() || undefined,
+        submittedAt: input.submittedAt?.trim() || undefined,
+        submittedBy: input.submittedBy?.trim() || undefined,
+        submissionMode: input.submissionMode,
       };
 
       setRecords((prev) => [next, ...prev]);

@@ -72,6 +72,11 @@ export type BookingFolioActivity = {
   source?: string;
   paymentMethod?: FolioPaymentMethod;
   note?: string;
+  shiftId?: string;
+  shiftStatus?: string;
+  submittedAt?: string;
+  submittedBy?: string;
+  submissionMode?: "manual" | "automatic";
   items?: Array<{
     name: string;
     qty: number;
@@ -368,6 +373,11 @@ export function postRoomChargeToBooking(
     amount: number;
     source?: string;
     note?: string;
+    shiftId?: string;
+    shiftStatus?: string;
+    submittedAt?: string;
+    submittedBy?: string;
+    submissionMode?: "manual" | "automatic";
     items?: BookingFolioActivity["items"];
   }
 ) {
@@ -387,6 +397,11 @@ export function postRoomChargeToBooking(
       transactionId: input.transactionId,
       source: input.source,
       note: String(input.note || "").trim() || undefined,
+      shiftId: input.shiftId,
+      shiftStatus: input.shiftStatus,
+      submittedAt: input.submittedAt,
+      submittedBy: input.submittedBy,
+      submissionMode: input.submissionMode,
       items: input.items,
     };
 
@@ -418,6 +433,11 @@ export function recordPaymentToBooking(
     paymentMethod: FolioPaymentMethod;
     source?: string;
     note?: string;
+    shiftId?: string;
+    shiftStatus?: string;
+    submittedAt?: string;
+    submittedBy?: string;
+    submissionMode?: "manual" | "automatic";
   }
 ) {
   const amount = Math.max(0, safeNumber(input.amount, 0));
@@ -454,6 +474,11 @@ export function recordPaymentToBooking(
       source: input.source,
       paymentMethod,
       note: String(input.note || "").trim() || undefined,
+      shiftId: input.shiftId,
+      shiftStatus: input.shiftStatus,
+      submittedAt: input.submittedAt,
+      submittedBy: input.submittedBy,
+      submissionMode: input.submissionMode,
     };
 
     updated = {

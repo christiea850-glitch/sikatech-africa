@@ -6,6 +6,8 @@ import { useExpenses } from "../expenses/ExpenseContext";
 import { useBusinessSetup } from "../setup/BusinessSetupContext";
 import { getAllBookings } from "../frontdesk/bookingsStorage";
 import { formatDepartmentLabel, normalizeDepartmentKey } from "../lib/departments";
+import { useShift } from "../shifts/ShiftContext";
+import { formatShiftStatus, resolveShiftTrace, type ShiftTraceStatus } from "../lib/shiftTrace";
 import {
   loadAccountingWorkbenchReviews,
   upsertAccountingWorkbenchReview,
@@ -30,6 +32,12 @@ type AccountingRow = {
   guestPayment: number;
   bookingCode?: string;
   roomNo?: string;
+  transactionTime: string;
+  shiftId?: string;
+  shiftStatus: ShiftTraceStatus;
+  submittedAt?: string;
+  submittedBy?: string;
+  submissionMode?: string;
 };
 
 function money(n: number) {
@@ -117,6 +125,7 @@ export default function AccountingWorkbenchPage() {
   const { businessName: setupBusinessName } = useBusinessSetup();
   const { records: salesRecords } = useSales();
   const { records: expenseRecords } = useExpenses();
+  const { shifts } = useShift();
 
   const [reviewVersion, setReviewVersion] = useState(0);
   const [startDate, setStartDate] = useState("");
@@ -126,6 +135,7 @@ export default function AccountingWorkbenchPage() {
   const [source, setSource] = useState("all");
   const [staff, setStaff] = useState("all");
   const [reviewStatus, setReviewStatus] = useState("all");
+  const [shiftStatusFilter, setShiftStatusFilter] = useState("all");
   const [groupBy, setGroupBy] = useState<GroupBy>("department");
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [statementGeneratedAt, setStatementGeneratedAt] = useState(() => new Date());
@@ -150,20 +160,29 @@ export default function AccountingWorkbenchPage() {
           lower(sale.paymentMode) !== "post_to_room" &&
           lower(sale.paymentMethod) !== "room_folio"
       )
-      .map((sale) => ({
-        id: `sale:${sale.id}`,
-        date: sale.createdAt,
-        source: "direct_sale",
-        department: normalizeDepartmentKey(sale.deptKey),
-        paymentMethod: sale.paymentMethod || "other",
-        staff: sale.staffName || sale.staffId || "unknown",
-        description: sale.productName || "Sale",
-        revenue: Number(sale.total) || 0,
-        expense: 0,
-        collection: Number(sale.total) || 0,
-        roomFolioReceivable: 0,
-        guestPayment: 0,
-      }));
+      .map((sale) => {
+        const trace = resolveShiftTrace(sale as any, shifts);
+        return {
+          id: `sale:${sale.id}`,
+          date: sale.createdAt,
+          source: "direct_sale",
+          department: normalizeDepartmentKey(sale.deptKey),
+          paymentMethod: sale.paymentMethod || "other",
+          staff: sale.staffName || sale.staffId || "unknown",
+          description: sale.productName || "Sale",
+          revenue: Number(sale.total) || 0,
+          expense: 0,
+          collection: Number(sale.total) || 0,
+          roomFolioReceivable: 0,
+          guestPayment: 0,
+          transactionTime: sale.createdAt,
+          shiftId: trace.shiftId,
+          shiftStatus: trace.shiftStatus,
+          submittedAt: trace.submittedAt,
+          submittedBy: trace.submittedBy,
+          submissionMode: trace.submissionMode,
+        };
+      });
 
     const folioRows: AccountingRow[] = getAllBookings().flatMap((booking) =>
       (booking.folioActivity || [])
@@ -171,9 +190,19 @@ export default function AccountingWorkbenchPage() {
         .map((activity) => {
           const amount = Number(activity.amount) || 0;
           const isPayment = activity.type === "payment";
+          const activityDate = new Date(activity.createdAt).toISOString();
+          const trace = resolveShiftTrace(
+            {
+              ...activity,
+              createdAt: activityDate,
+              deptKey: "front-desk",
+              department: "front-desk",
+            },
+            shifts
+          );
           return {
             id: `folio:${booking.id}:${activity.id}`,
-            date: new Date(activity.createdAt).toISOString(),
+            date: activityDate,
             source: isPayment ? "guest_payment" : "room_folio_charge",
             department: normalizeDepartmentKey("front-desk"),
             paymentMethod: isPayment ? activity.paymentMethod || "other" : "room_folio",
@@ -186,29 +215,44 @@ export default function AccountingWorkbenchPage() {
             guestPayment: isPayment ? amount : 0,
             bookingCode: booking.bookingCode,
             roomNo: booking.roomNo,
+            transactionTime: activityDate,
+            shiftId: trace.shiftId,
+            shiftStatus: trace.shiftStatus,
+            submittedAt: trace.submittedAt,
+            submittedBy: trace.submittedBy,
+            submissionMode: trace.submissionMode,
           };
         })
     );
 
-    const expenses: AccountingRow[] = (expenseRecords || []).map((expense) => ({
-      id: `expense:${expense.id}`,
-      date: expense.createdAt,
-      source: "expense",
-      department: normalizeDepartmentKey(expense.deptKey),
-      paymentMethod: "expense",
-      staff: expense.enteredByName || expense.enteredBy || "unknown",
-      description: expense.description || expense.category || "Expense",
-      revenue: 0,
-      expense: Number(expense.amount) || 0,
-      collection: 0,
-      roomFolioReceivable: 0,
-      guestPayment: 0,
-    }));
+    const expenses: AccountingRow[] = (expenseRecords || []).map((expense) => {
+      const trace = resolveShiftTrace(expense as any, shifts);
+      return {
+        id: `expense:${expense.id}`,
+        date: expense.createdAt,
+        source: "expense",
+        department: normalizeDepartmentKey(expense.deptKey),
+        paymentMethod: "expense",
+        staff: expense.enteredByName || expense.enteredBy || "unknown",
+        description: expense.description || expense.category || "Expense",
+        revenue: 0,
+        expense: Number(expense.amount) || 0,
+        collection: 0,
+        roomFolioReceivable: 0,
+        guestPayment: 0,
+        transactionTime: expense.createdAt,
+        shiftId: trace.shiftId,
+        shiftStatus: trace.shiftStatus,
+        submittedAt: trace.submittedAt,
+        submittedBy: trace.submittedBy,
+        submissionMode: trace.submissionMode,
+      };
+    });
 
     return [...directSales, ...folioRows, ...expenses].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
-  }, [salesRecords, expenseRecords]);
+  }, [salesRecords, expenseRecords, shifts]);
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {
@@ -220,9 +264,10 @@ export default function AccountingWorkbenchPage() {
       if (source !== "all" && row.source !== source) return false;
       if (staff !== "all" && row.staff !== staff) return false;
       if (reviewStatus !== "all" && status !== reviewStatus) return false;
+      if (shiftStatusFilter !== "all" && row.shiftStatus !== shiftStatusFilter) return false;
       return true;
     });
-  }, [rows, reviewMap, startDate, endDate, department, paymentMethod, source, staff, reviewStatus]);
+  }, [rows, reviewMap, startDate, endDate, department, paymentMethod, source, staff, reviewStatus, shiftStatusFilter]);
 
   const summary = useMemo(() => {
     const totals = filtered.reduce(
@@ -318,6 +363,7 @@ export default function AccountingWorkbenchPage() {
   function exportCsv() {
     const header = [
       "Date",
+      "Transaction Time",
       "Source",
       "Department",
       "Payment Method",
@@ -326,6 +372,11 @@ export default function AccountingWorkbenchPage() {
       "Revenue",
       "Expense",
       "Collection",
+      "Shift ID",
+      "Shift Status",
+      "Submitted At",
+      "Submitted By",
+      "Submission Mode",
       "Review Status",
       "Note",
     ];
@@ -333,6 +384,7 @@ export default function AccountingWorkbenchPage() {
       const review = reviewMap.get(row.id);
       return [
         row.date,
+        row.transactionTime,
         sourceLabel(row.source),
         row.department,
         row.paymentMethod,
@@ -341,6 +393,11 @@ export default function AccountingWorkbenchPage() {
         money(row.revenue),
         money(row.expense),
         money(row.collection),
+        row.shiftId || "",
+        row.shiftStatus,
+        row.submittedAt || "",
+        row.submittedBy || "",
+        row.submissionMode || "",
         review?.status || "unreviewed",
         review?.note || "",
       ].map(csvCell).join(",");
@@ -351,7 +408,7 @@ export default function AccountingWorkbenchPage() {
   function exportStatement() {
     const payload = {
       generatedAt: new Date().toISOString(),
-      filters: { startDate, endDate, department, paymentMethod, source, staff, reviewStatus },
+      filters: { startDate, endDate, department, paymentMethod, source, staff, reviewStatus, shiftStatusFilter },
       summary: {
         ...summary,
         netProfit: summary.netProfit,
@@ -421,6 +478,7 @@ export default function AccountingWorkbenchPage() {
           <Field label="Source / Type"><Select value={source} onChange={setSource} options={["all", "direct_sale", "room_folio_charge", "guest_payment", "expense"]} labeler={(v) => v === "all" ? "All" : sourceLabel(v as SourceType)} /></Field>
           <Field label="Staff"><Select value={staff} onChange={setStaff} options={["all", ...staffOptions]} /></Field>
           <Field label="Review Status"><Select value={reviewStatus} onChange={setReviewStatus} options={["all", "unreviewed", "reviewed", "issue"]} /></Field>
+          <Field label="Shift Status"><Select value={shiftStatusFilter} onChange={setShiftStatusFilter} options={["all", "open", "unclosed", "submitted", "reviewed", "auto_submitted"]} labeler={(v) => v === "all" ? "All" : formatShiftStatus(v)} /></Field>
           <Field label="Group By"><Select value={groupBy} onChange={(v) => setGroupBy(v as GroupBy)} options={["department", "paymentMethod", "staff", "date", "source"]} /></Field>
         </div>
       </div>
@@ -458,7 +516,7 @@ export default function AccountingWorkbenchPage() {
           <table style={styles.table}>
             <thead>
               <tr>
-                <Th>Date</Th><Th>Source</Th><Th>Dept</Th><Th>Method</Th><Th>Staff</Th><Th>Description</Th><Th>Revenue</Th><Th>Expense</Th><Th>Collected</Th><Th>Review</Th><Th>Note</Th><Th>Actions</Th>
+                <Th>Transaction Time</Th><Th>Source</Th><Th>Dept</Th><Th>Method</Th><Th>Staff</Th><Th>Description</Th><Th>Revenue</Th><Th>Expense</Th><Th>Collected</Th><Th>Shift</Th><Th>Review</Th><Th>Note</Th><Th>Actions</Th>
               </tr>
             </thead>
             <tbody>
@@ -479,7 +537,7 @@ export default function AccountingWorkbenchPage() {
                       }
                     }}
                   >
-                    <Td>{new Date(row.date).toLocaleDateString()}</Td>
+                    <Td>{formatDateTime(new Date(row.transactionTime))}</Td>
                     <Td>{sourceLabel(row.source)}</Td>
                     <Td>{formatDepartmentLabel(row.department)}</Td>
                     <Td>{row.paymentMethod}</Td>
@@ -488,6 +546,7 @@ export default function AccountingWorkbenchPage() {
                     <Td>{money(row.revenue)}</Td>
                     <Td>{money(row.expense)}</Td>
                     <Td>{money(row.collection)}</Td>
+                    <Td>{formatShiftStatus(row.shiftStatus)}</Td>
                     <Td><span style={status === "issue" ? styles.badgeDanger : status === "reviewed" ? styles.badgeGood : styles.badgeMuted}>{status}</span></Td>
                     <Td>
                       <input
@@ -530,6 +589,7 @@ export default function AccountingWorkbenchPage() {
 
           <div style={styles.detailGrid}>
             <DetailItem label="Date" value={formatDateTime(new Date(selectedRecord.date))} />
+            <DetailItem label="Transaction Time" value={formatDateTime(new Date(selectedRecord.transactionTime))} />
             <DetailItem label="Source / Type" value={sourceLabel(selectedRecord.source)} />
             <DetailItem label="Department" value={formatDepartmentLabel(selectedRecord.department)} />
             <DetailItem label="Payment Method" value={selectedRecord.paymentMethod} />
@@ -540,6 +600,11 @@ export default function AccountingWorkbenchPage() {
             <DetailItem label="Collected" value={money(selectedRecord.collection)} />
             <DetailItem label="Booking Code" value={selectedRecord.bookingCode || "-"} />
             <DetailItem label="Room Number" value={selectedRecord.roomNo || "-"} />
+            <DetailItem label="Shift ID" value={selectedRecord.shiftId || "-"} />
+            <DetailItem label="Shift Status" value={formatShiftStatus(selectedRecord.shiftStatus)} />
+            <DetailItem label="Submitted At" value={selectedRecord.submittedAt ? formatDateTime(new Date(selectedRecord.submittedAt)) : "-"} />
+            <DetailItem label="Submitted By" value={selectedRecord.submittedBy || "-"} />
+            <DetailItem label="Submission Mode" value={selectedRecord.submissionMode || "-"} />
             <DetailItem label="Review Status" value={reviewMap.get(selectedRecord.id)?.status || "unreviewed"} />
             <DetailItem label="Accounting Note" value={noteDrafts[selectedRecord.id] ?? reviewMap.get(selectedRecord.id)?.note ?? "-"} wide />
           </div>
@@ -594,7 +659,7 @@ export default function AccountingWorkbenchPage() {
           <table style={styles.printTable}>
             <thead>
               <tr>
-                <PrintTh>Date</PrintTh><PrintTh>Source / Type</PrintTh><PrintTh>Department</PrintTh><PrintTh>Payment Method</PrintTh><PrintTh>Staff</PrintTh><PrintTh>Description</PrintTh><PrintTh>Revenue</PrintTh><PrintTh>Expense</PrintTh><PrintTh>Collected</PrintTh><PrintTh>Review Status</PrintTh><PrintTh>Note</PrintTh>
+                <PrintTh>Transaction Time</PrintTh><PrintTh>Source / Type</PrintTh><PrintTh>Department</PrintTh><PrintTh>Payment Method</PrintTh><PrintTh>Staff</PrintTh><PrintTh>Description</PrintTh><PrintTh>Revenue</PrintTh><PrintTh>Expense</PrintTh><PrintTh>Collected</PrintTh><PrintTh>Shift Status</PrintTh><PrintTh>Review Status</PrintTh><PrintTh>Note</PrintTh>
               </tr>
             </thead>
             <tbody>
@@ -602,7 +667,7 @@ export default function AccountingWorkbenchPage() {
                 const review = reviewMap.get(row.id);
                 return (
                   <tr key={row.id}>
-                    <PrintTd>{new Date(row.date).toLocaleDateString()}</PrintTd>
+                    <PrintTd>{formatDateTime(new Date(row.transactionTime))}</PrintTd>
                     <PrintTd>{sourceLabel(row.source)}</PrintTd>
                     <PrintTd>{formatDepartmentLabel(row.department)}</PrintTd>
                     <PrintTd>{row.paymentMethod}</PrintTd>
@@ -611,6 +676,7 @@ export default function AccountingWorkbenchPage() {
                     <PrintTd>{money(row.revenue)}</PrintTd>
                     <PrintTd>{money(row.expense)}</PrintTd>
                     <PrintTd>{money(row.collection)}</PrintTd>
+                    <PrintTd>{formatShiftStatus(row.shiftStatus)}</PrintTd>
                     <PrintTd>{review?.status || "unreviewed"}</PrintTd>
                     <PrintTd>{review?.note || ""}</PrintTd>
                   </tr>

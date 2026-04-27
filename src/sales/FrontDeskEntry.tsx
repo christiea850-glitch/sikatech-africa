@@ -13,6 +13,7 @@ import {
 } from "../frontdesk/bookingsStorage";
 import { addTransaction } from "./salesStorage";
 import type { Transaction } from "./salesTypes";
+import { recordShiftSubmission } from "../lib/shiftTrace";
 
 export type { Transaction } from "./salesTypes";
 
@@ -371,6 +372,13 @@ export default function FrontDeskEntry() {
           : `Submitted from FrontDeskEntry for shift ${activeShift.id}`,
       });
 
+      recordShiftSubmission({
+        shiftId: activeShift.id,
+        status: "submitted",
+        submittedAt: new Date().toISOString(),
+        submittedBy: getStringField(user, "employeeId") || "staff",
+        submissionMode: "manual",
+      });
       setSubmittedLocal(true);
       setMsg(`Shift submitted for closing successfully. Closing ID: ${res.id}`);
 
@@ -471,6 +479,8 @@ export default function FrontDeskEntry() {
           bookingCode: roomBooking?.bookingCode,
           roomNo: postToRoom ? roomNo.trim() : undefined,
           paymentMode: postToRoom ? "post_to_room" : "pay_now",
+          shiftId: activeShift?.id ? String(activeShift.id) : undefined,
+          shiftStatus: activeShift?.id ? "open" : "unclosed",
         });
       });
 
@@ -481,6 +491,8 @@ export default function FrontDeskEntry() {
           amount: subtotal,
           source: "front-desk",
           note: note.trim() || undefined,
+          shiftId: activeShift?.id ? String(activeShift.id) : undefined,
+          shiftStatus: activeShift?.id ? "open" : "unclosed",
           items: transactionItems.map((item) => ({
             name: item.name.trim(),
             qty: Number(item.qty),
@@ -526,6 +538,8 @@ export default function FrontDeskEntry() {
         staffId,
         staffName,
         staffLabel: staffName ? `${staffId} / ${staffName}` : staffId,
+        shiftId: activeShift?.id ? String(activeShift.id) : undefined,
+        shiftStatus: activeShift?.id ? "open" : "unclosed",
       });
 
       const itemCount = validItems.length;

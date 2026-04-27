@@ -5,6 +5,7 @@ import { useExpenses } from "./ExpenseContext";
 import type { ExpenseCategory } from "./ExpenseContext";
 import { useDepartments } from "../departments/DepartmentsContext";
 import { useAuth } from "../auth/AuthContext";
+import { useShift } from "../shifts/ShiftContext";
 
 const categories: { value: ExpenseCategory; label: string }[] = [
   { value: "inventory", label: "Inventory" },
@@ -43,6 +44,7 @@ export default function ExpensePage() {
   const { addExpense, records } = useExpenses();
   const { departments = [] } = useDepartments();
   const { user } = useAuth();
+  const { activeShift } = useShift() as any;
 
   const [deptKey, setDeptKey] = useState("");
   const [category, setCategory] = useState<ExpenseCategory>("inventory");
@@ -85,6 +87,8 @@ export default function ExpensePage() {
       note: note.trim() || undefined,
       enteredBy: user?.employeeId || "unknown",
       enteredByName: ((user as any)?.name || (user as any)?.fullName || "").trim() || undefined,
+      shiftId: activeShift?.id ? String(activeShift.id) : undefined,
+      shiftStatus: activeShift?.id ? "open" : "unclosed",
     });
 
     setMsg("Expense recorded successfully.");

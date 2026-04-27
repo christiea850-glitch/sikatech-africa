@@ -26,6 +26,11 @@ export type ExpenseRecord = {
   enteredByName?: string;
 
   note?: string;
+  shiftId?: string;
+  shiftStatus?: string;
+  submittedAt?: string;
+  submittedBy?: string;
+  submissionMode?: "manual" | "automatic";
 };
 
 export type AddExpenseInput = {
@@ -39,6 +44,11 @@ export type AddExpenseInput = {
   enteredByName?: string;
 
   note?: string;
+  shiftId?: string;
+  shiftStatus?: string;
+  submittedAt?: string;
+  submittedBy?: string;
+  submissionMode?: "manual" | "automatic";
 };
 
 type ExpenseContextType = {
@@ -104,6 +114,11 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         enteredByName: input.enteredByName?.trim() || undefined,
 
         note: input.note?.trim() || undefined,
+        shiftId: input.shiftId?.trim() || undefined,
+        shiftStatus: input.shiftStatus?.trim() || undefined,
+        submittedAt: input.submittedAt?.trim() || undefined,
+        submittedBy: input.submittedBy?.trim() || undefined,
+        submissionMode: input.submissionMode,
       };
 
       setRecords((prev) => [next, ...prev]);

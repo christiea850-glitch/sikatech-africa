@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
+import { useAuth } from "../auth/AuthContext";
+import { useShift } from "../shifts/ShiftContext";
 import {
   bookingStatusColor,
   createBooking,
@@ -92,6 +94,8 @@ function FormSection({
 }
 
 export default function FrontDeskBookingsPanel() {
+  const { user } = useAuth();
+  const { activeShift } = useShift() as any;
   const [version, setVersion] = useState(0);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -292,6 +296,9 @@ export default function FrontDeskBookingsPanel() {
         paymentMethod: folioPaymentMethod,
         source: "front-desk",
         note: folioPaymentNote.trim() || undefined,
+        shiftId: activeShift?.id ? String(activeShift.id) : undefined,
+        shiftStatus: activeShift?.id ? "open" : "unclosed",
+        submittedBy: user?.employeeId,
       });
       const remainingBalance = Math.max(0, balance - amount);
 

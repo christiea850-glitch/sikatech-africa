@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useShift } from "../shifts/ShiftContext";
 import { submitShiftClosing } from "../api/shiftClosingApi";
 import { useSales, type PaymentMethod } from "./SalesContext";
+import { recordShiftSubmission } from "../lib/shiftTrace";
 
 type ItemRow = {
   id: string;
@@ -217,6 +218,13 @@ export default function SalesEntryPanel() {
           : `Submitted from SalesEntryPanel for shift ${activeShift.id}`,
       });
 
+      recordShiftSubmission({
+        shiftId: activeShift.id,
+        status: "submitted",
+        submittedAt: new Date().toISOString(),
+        submittedBy: String(user?.employeeId || "staff"),
+        submissionMode: "manual",
+      });
       setSubmittedLocal(true);
       setMsg(`Shift submitted for closing successfully. Closing ID: ${res.id}`);
 
@@ -281,6 +289,8 @@ export default function SalesEntryPanel() {
           customerPhone: customerPhone.trim() || undefined,
           staffId,
           staffName,
+          shiftId: activeShift?.id ? String(activeShift.id) : undefined,
+          shiftStatus: activeShift?.id ? "open" : "unclosed",
         });
       });
 

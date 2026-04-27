@@ -58,6 +58,11 @@ export type Transaction = {
   staffId?: string;
   staffName?: string;
   staffLabel?: string;
+  shiftId?: string;
+  shiftStatus?: string;
+  submittedAt?: string;
+  submittedBy?: string;
+  submissionMode?: "manual" | "automatic";
 };
 
 // --- Adjustments / Audit Trail ---

@@ -17,6 +17,7 @@ import {
   approveClose as apiApproveClose,
   type Shift,
 } from "./shiftsApi";
+import { recordShiftSubmission } from "../lib/shiftTrace";
 
 type ShiftCtx = {
   shifts: Shift[];
@@ -135,6 +136,13 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
     try {
       const res = await apiSubmitClosing(id);
       if (!res.ok) return setError(res.error || "Failed to submit closing");
+      recordShiftSubmission({
+        shiftId: id,
+        status: "submitted",
+        submittedAt: new Date().toISOString(),
+        submittedBy: (user as any)?.employeeId || "staff",
+        submissionMode: "manual",
+      });
       await refresh(deptKey, true);
     } catch (e: any) {
       setError(e?.message ?? "Failed to submit closing");
@@ -155,6 +163,13 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
     try {
       const res = await apiAccountingReview(id, String(note ?? ""));
       if (!res.ok) return setError(res.error || "Failed to submit accounting review");
+      recordShiftSubmission({
+        shiftId: id,
+        status: "reviewed",
+        submittedAt: new Date().toISOString(),
+        submittedBy: (user as any)?.employeeId || "accounting",
+        submissionMode: "manual",
+      });
       await refresh(deptKey, true);
     } catch (e: any) {
       setError(e?.message ?? "Failed to submit accounting review");
@@ -175,6 +190,13 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
     try {
       const res = await apiApproveClose(id);
       if (!res.ok) return setError(res.error || "Failed to approve closing");
+      recordShiftSubmission({
+        shiftId: id,
+        status: "reviewed",
+        submittedAt: new Date().toISOString(),
+        submittedBy: (user as any)?.employeeId || "manager",
+        submissionMode: "manual",
+      });
       await refresh(deptKey, true);
     } catch (e: any) {
       setError(e?.message ?? "Failed to approve closing");

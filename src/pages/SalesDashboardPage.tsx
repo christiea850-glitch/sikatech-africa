@@ -21,6 +21,7 @@ import { useExpenses } from "../expenses/ExpenseContext";
 import { getAllBookings } from "../frontdesk/bookingsStorage";
 import { useShift } from "../shifts/ShiftContext";
 import { normalizeDepartmentKey } from "../lib/departments";
+import { formatShiftStatus, resolveShiftTrace } from "../lib/shiftTrace";
 
 type Tx = any;
 type ExpenseRow = any;
@@ -449,53 +450,6 @@ function getExpenseDepartmentValue(e: ExpenseRow) {
   return normalizeDepartmentKey(e?.deptKey || e?.department || "unknown");
 }
 
-function normalizeShiftStatus(status: unknown) {
-  const value = lower(status);
-  if (!value || value === "open") return "open shift";
-  if (value === "accounting_reviewed" || value === "reviewed" || value === "manager_approved") return "reviewed";
-  if (value === "closing_submitted" || value === "submitted" || value === "pending_close" || value === "pending_closing") return "submitted";
-  if (value === "closed") return "reviewed";
-  return value;
-}
-
-function getShiftTime(value: unknown) {
-  if (typeof value === "number") return value;
-  if (typeof value === "string") {
-    const n = Number(value);
-    if (Number.isFinite(n) && value.trim() !== "") return n;
-    const d = new Date(value).getTime();
-    return Number.isFinite(d) ? d : 0;
-  }
-  return 0;
-}
-
-function getTransactionShiftStatus(t: Tx, shifts: any[]) {
-  const explicit = t?.shiftReconciliationStatus || t?.closingStatus;
-  if (explicit) return normalizeShiftStatus(explicit);
-
-  const shiftId = String(t?.shiftId || "").trim();
-  const txTime = parseDashboardDate(getTxTime(t)).getTime();
-  const txDept = getDepartmentValue(t);
-
-  const directShift = shiftId ? shifts.find((shift: any) => String(shift?.id || "") === shiftId) : null;
-  if (directShift) return normalizeShiftStatus(directShift.status);
-
-  if (Number.isFinite(txTime)) {
-    const matchingShift = shifts.find((shift: any) => {
-      if (normalizeDepartmentKey(shift?.departmentKey) !== txDept) return false;
-      const openedAt = getShiftTime(shift?.openedAt);
-      const closedAt = getShiftTime(shift?.closedAt);
-      if (openedAt && txTime < openedAt) return false;
-      if (closedAt && txTime > closedAt) return false;
-      return openedAt > 0;
-    });
-
-    if (matchingShift) return normalizeShiftStatus(matchingShift.status);
-  }
-
-  return "unclosed";
-}
-
 function ChartCard({
   title,
   helper,
@@ -536,17 +490,32 @@ export default function SalesDashboardPage() {
   const rawTransactions = useMemo(() => {
     const directSales = (records || [])
       .filter((r: any) => !isRoomFolioSaleRecord(r))
-      .map((r: any) => ({
-        ...r,
-        txId: r.id,
-        itemName: r.productName,
-        amount: r.total,
-        status: "PAID",
-        accountingSource: "direct_sale",
-        deptKey: normalizeDepartmentKey(r.deptKey),
-        department: normalizeDepartmentKey(r.department || r.deptKey),
-        shiftReconciliationStatus: getTransactionShiftStatus(r, shifts),
-      }));
+      .map((r: any) => {
+        const trace = resolveShiftTrace(
+          {
+            ...r,
+            deptKey: normalizeDepartmentKey(r.deptKey),
+            department: normalizeDepartmentKey(r.department || r.deptKey),
+          },
+          shifts
+        );
+
+        return {
+          ...r,
+          txId: r.id,
+          itemName: r.productName,
+          amount: r.total,
+          status: "PAID",
+          accountingSource: "direct_sale",
+          deptKey: normalizeDepartmentKey(r.deptKey),
+          department: normalizeDepartmentKey(r.department || r.deptKey),
+          shiftId: trace.shiftId,
+          shiftReconciliationStatus: trace.shiftStatus,
+          submittedAt: trace.submittedAt,
+          submittedBy: trace.submittedBy,
+          submissionMode: trace.submissionMode,
+        };
+      });
 
     const folioRows = getAllBookings().flatMap((booking) =>
       (booking.folioActivity || [])
@@ -554,6 +523,14 @@ export default function SalesDashboardPage() {
         .map((activity) => {
           const isPayment = activity.type === "payment";
           const amount = Number(activity.amount) || 0;
+
+          const activityRecord = {
+            ...activity,
+            createdAt: new Date(activity.createdAt).toISOString(),
+            deptKey: "front-desk",
+            department: "front-desk",
+          };
+          const trace = resolveShiftTrace(activityRecord, shifts);
 
           return {
             id: activity.id,
@@ -577,15 +554,11 @@ export default function SalesDashboardPage() {
             customerName: booking.guestName,
             customerPhone: booking.guestPhone,
             note: activity.note,
-            shiftReconciliationStatus: getTransactionShiftStatus(
-              {
-                ...activity,
-                createdAt: new Date(activity.createdAt).toISOString(),
-                deptKey: "front-desk",
-                department: "front-desk",
-              },
-              shifts
-            ),
+            shiftId: trace.shiftId,
+            shiftReconciliationStatus: trace.shiftStatus,
+            submittedAt: trace.submittedAt,
+            submittedBy: trace.submittedBy,
+            submissionMode: trace.submissionMode,
           };
         })
     );
@@ -2612,6 +2585,7 @@ export default function SalesDashboardPage() {
           <div style={styles.detailGrid}>
             <DetailItem label="Tx ID" value={selectedTx?.txId || selectedTx?.id || "—"} />
             <DetailItem label="Time" value={formatDateTime(getTxTime(selectedTx))} />
+            <DetailItem label="Transaction Time" value={formatDateTime(getTxTime(selectedTx))} />
             <DetailItem
               label="Department"
               value={getDepartmentLabel(
@@ -2634,8 +2608,12 @@ export default function SalesDashboardPage() {
             <DetailItem label="Status" value={statusLabel(selectedTx)} />
             <DetailItem
               label="Shift Status"
-              value={selectedTx?.shiftReconciliationStatus || "unclosed"}
+              value={formatShiftStatus(selectedTx?.shiftReconciliationStatus || "unclosed")}
             />
+            <DetailItem label="Shift ID" value={selectedTx?.shiftId || "-"} />
+            <DetailItem label="Submitted At" value={selectedTx?.submittedAt ? formatDateTime(selectedTx.submittedAt) : "-"} />
+            <DetailItem label="Submitted By" value={selectedTx?.submittedBy || "-"} />
+            <DetailItem label="Submission Mode" value={selectedTx?.submissionMode || "-"} />
             <DetailItem
               label="Customer Phone"
               value={selectedTx?.customerPhone || selectedTx?.phone || "—"}
