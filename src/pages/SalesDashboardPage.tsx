@@ -32,6 +32,8 @@ type MainTab =
 type AlertTone = "danger" | "warning" | "success" | "info";
 
 type RangeFilter = "today" | "yesterday" | "week" | "month" | "all";
+type QuickRangeFilter = RangeFilter | "custom";
+type DateRange = { startDate: string; endDate: string };
 
 function money(n: number) {
   return (Number.isFinite(n) ? n : 0).toFixed(2);
@@ -67,12 +69,74 @@ function formatCategoryLabel(value: string) {
     .join(" ");
 }
 
-function getRangeLabel(range: RangeFilter) {
-  if (range === "today") return "Today";
-  if (range === "yesterday") return "Yesterday";
-  if (range === "week") return "This Week";
-  if (range === "month") return "This Month";
-  return "All time";
+function toDateInputValue(d: Date) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getPresetDateRange(range: RangeFilter): DateRange {
+  const now = new Date();
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+
+  if (range === "all") {
+    return { startDate: "", endDate: "" };
+  }
+
+  if (range === "yesterday") {
+    const yesterday = new Date(todayStart);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const value = toDateInputValue(yesterday);
+    return { startDate: value, endDate: value };
+  }
+
+  if (range === "week") {
+    const weekStart = new Date(todayStart);
+    const currentDay = weekStart.getDay();
+    weekStart.setDate(weekStart.getDate() - currentDay);
+    return {
+      startDate: toDateInputValue(weekStart),
+      endDate: toDateInputValue(todayStart),
+    };
+  }
+
+  if (range === "month") {
+    const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+    return {
+      startDate: toDateInputValue(monthStart),
+      endDate: toDateInputValue(todayStart),
+    };
+  }
+
+  const today = toDateInputValue(todayStart);
+  return { startDate: today, endDate: today };
+}
+
+function formatDateInputLabel(value: string) {
+  if (!value) return "";
+
+  const d = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return value;
+
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function getDateRangeLabel(startDate: string, endDate: string) {
+  if (!startDate && !endDate) return "All time";
+  if (startDate && endDate && startDate === endDate) {
+    return formatDateInputLabel(startDate);
+  }
+  if (startDate && endDate) {
+    return `${formatDateInputLabel(startDate)} - ${formatDateInputLabel(endDate)}`;
+  }
+  if (startDate) return `From ${formatDateInputLabel(startDate)}`;
+  return `Until ${formatDateInputLabel(endDate)}`;
 }
 
 function getPaymentBucket(t: Tx) {
@@ -101,10 +165,18 @@ function getTxTime(t: Tx) {
   return t?.createdAt || t?.timestamp || t?.date || "";
 }
 
+function parseDashboardDate(value: string) {
+  const raw = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return new Date(`${raw}T00:00:00`);
+  }
+  return new Date(raw);
+}
+
 function formatDateTime(value: string) {
   if (!value) return "—";
 
-  const d = new Date(value);
+  const d = parseDashboardDate(value);
   if (Number.isNaN(d.getTime())) return value;
 
   return d.toLocaleString();
@@ -113,7 +185,7 @@ function formatDateTime(value: string) {
 function formatShortDate(value: string) {
   if (!value) return "—";
 
-  const d = new Date(value);
+  const d = parseDashboardDate(value);
   if (Number.isNaN(d.getTime())) return value;
 
   return d.toLocaleDateString(undefined, {
@@ -122,45 +194,23 @@ function formatShortDate(value: string) {
   });
 }
 
-function withinRange(dateValue: string, range: RangeFilter) {
-  if (range === "all") return true;
+function withinDateRange(dateValue: string, startDate: string, endDate: string) {
+  if (!startDate && !endDate) return true;
   if (!dateValue) return false;
 
-  const d = new Date(dateValue);
+  const d = parseDashboardDate(dateValue);
   if (Number.isNaN(d.getTime())) return false;
 
-  const now = new Date();
+  const start = startDate ? new Date(`${startDate}T00:00:00`) : null;
+  const end = endDate ? new Date(`${endDate}T00:00:00`) : null;
 
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
+  if (start && Number.isNaN(start.getTime())) return false;
+  if (end && Number.isNaN(end.getTime())) return false;
 
-  const tomorrowStart = new Date(todayStart);
-  tomorrowStart.setDate(todayStart.getDate() + 1);
+  if (end) end.setDate(end.getDate() + 1);
 
-  const yesterdayStart = new Date(todayStart);
-  yesterdayStart.setDate(todayStart.getDate() - 1);
-
-  const weekStart = new Date(todayStart);
-  const currentDay = weekStart.getDay(); // 0 = Sunday
-  weekStart.setDate(weekStart.getDate() - currentDay);
-
-  const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
-
-  if (range === "today") {
-    return d >= todayStart && d < tomorrowStart;
-  }
-
-  if (range === "yesterday") {
-    return d >= yesterdayStart && d < todayStart;
-  }
-
-  if (range === "week") {
-    return d >= weekStart && d < tomorrowStart;
-  }
-
-  if (range === "month") {
-    return d >= monthStart && d < tomorrowStart;
-  }
+  if (start && d < start) return false;
+  if (end && d >= end) return false;
 
   return true;
 }
@@ -295,7 +345,10 @@ export default function SalesDashboardPage() {
 
   const [search, setSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
-  const [rangeFilter, setRangeFilter] = useState<RangeFilter>("today");
+  const [quickRange, setQuickRange] = useState<QuickRangeFilter>("today");
+  const [dateRange, setDateRange] = useState<DateRange>(() =>
+    getPresetDateRange("today")
+  );
   const [selectedDeptRow, setSelectedDeptRow] = useState<string | null>(null);
   const [selectedTx, setSelectedTx] = useState<Tx | null>(null);
   const [selectedExpense, setSelectedExpense] = useState<ExpenseRow | null>(null);
@@ -349,7 +402,9 @@ export default function SalesDashboardPage() {
     const q = search.trim().toLowerCase();
 
     return rawTransactions
-      .filter((t: Tx) => withinRange(getTxTime(t), rangeFilter))
+      .filter((t: Tx) =>
+        withinDateRange(getTxTime(t), dateRange.startDate, dateRange.endDate)
+      )
       .filter((t: Tx) => {
         if (departmentFilter === "all") return true;
         return getDepartmentValue(t) === departmentFilter;
@@ -367,13 +422,15 @@ export default function SalesDashboardPage() {
         const db = new Date(getTxTime(b)).getTime() || 0;
         return db - da;
       });
-  }, [rawTransactions, rangeFilter, departmentFilter, selectedDeptRow, search]);
+  }, [rawTransactions, dateRange, departmentFilter, selectedDeptRow, search]);
 
   const visibleExpenses = useMemo(() => {
     const q = search.trim().toLowerCase();
 
     return (expenseRecords || [])
-      .filter((e: ExpenseRow) => withinRange(e?.createdAt, rangeFilter))
+      .filter((e: ExpenseRow) =>
+        withinDateRange(e?.createdAt, dateRange.startDate, dateRange.endDate)
+      )
       .filter((e: ExpenseRow) => {
         if (departmentFilter === "all") return true;
         return lower(e?.deptKey) === departmentFilter;
@@ -391,7 +448,7 @@ export default function SalesDashboardPage() {
         const db = new Date(b?.createdAt).getTime() || 0;
         return db - da;
       });
-  }, [expenseRecords, rangeFilter, departmentFilter, selectedDeptRow, search]);
+  }, [expenseRecords, dateRange, departmentFilter, selectedDeptRow, search]);
 
   const summary = useMemo(() => {
     let revenue = 0;
@@ -973,6 +1030,11 @@ export default function SalesDashboardPage() {
     ? "Viewing: All sales departments"
     : `Viewing: ${getDepartmentLabel(departmentFilter, departmentOptions)}`;
 
+  const selectedDateRangeLabel = getDateRangeLabel(
+    dateRange.startDate,
+    dateRange.endDate
+  );
+
   const tabs: Array<{ key: MainTab; label: string }> = [
     { key: "overview", label: "Overview" },
     { key: "payments", label: "Payments" },
@@ -990,7 +1052,7 @@ export default function SalesDashboardPage() {
 
     return {
       generatedAt: new Date().toLocaleString(),
-      range: getRangeLabel(rangeFilter),
+      range: selectedDateRangeLabel,
       departmentView: selectedDeptRow
         ? getDepartmentLabel(selectedDeptRow, departmentOptions)
         : departmentFilter === "all"
@@ -1061,7 +1123,7 @@ export default function SalesDashboardPage() {
       })),
     };
   }, [
-    rangeFilter,
+    selectedDateRangeLabel,
     selectedDeptRow,
     departmentFilter,
     departmentOptions,
@@ -1259,17 +1321,52 @@ export default function SalesDashboardPage() {
           ))}
         </select>
 
-        <select
-          value={rangeFilter}
-          onChange={(e) => setRangeFilter(e.target.value as RangeFilter)}
-          style={styles.select}
-        >
-          <option value="today">Today</option>
-          <option value="yesterday">Yesterday</option>
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="all">All time</option>
-        </select>
+        <div style={styles.dateRangeControls}>
+          <label style={styles.dateField}>
+            <span style={styles.dateLabel}>Start Date</span>
+            <input
+              type="date"
+              value={dateRange.startDate}
+              onChange={(e) => {
+                setQuickRange("custom");
+                setDateRange((prev) => ({ ...prev, startDate: e.target.value }));
+              }}
+              style={styles.dateInput}
+            />
+          </label>
+
+          <label style={styles.dateField}>
+            <span style={styles.dateLabel}>End Date</span>
+            <input
+              type="date"
+              value={dateRange.endDate}
+              onChange={(e) => {
+                setQuickRange("custom");
+                setDateRange((prev) => ({ ...prev, endDate: e.target.value }));
+              }}
+              style={styles.dateInput}
+            />
+          </label>
+
+          <select
+            value={quickRange}
+            onChange={(e) => {
+              const next = e.target.value as QuickRangeFilter;
+              setQuickRange(next);
+              if (next !== "custom") {
+                setDateRange(getPresetDateRange(next));
+              }
+            }}
+            style={styles.select}
+          >
+            <option value="custom">Custom range</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="all">All time</option>
+          </select>
+        </div>
       </div>
 
       <div style={styles.printSummaryCard}>
@@ -1304,7 +1401,7 @@ export default function SalesDashboardPage() {
 
       <div style={styles.chipsRow}>
         <div style={styles.chip}>{activeViewingLabel}</div>
-        <div style={styles.chip}>Range: {getRangeLabel(rangeFilter)}</div>
+        <div style={styles.chip}>Range: {selectedDateRangeLabel}</div>
 
         {selectedDeptRow && (
           <button
@@ -1338,7 +1435,7 @@ export default function SalesDashboardPage() {
         <MetricCard
           title="Transactions"
           value={String(summary.transactions)}
-          note={`Within ${getRangeLabel(rangeFilter).toLowerCase()}`}
+          note={`Within ${selectedDateRangeLabel.toLowerCase()}`}
           accent="#94A3B8"
         />
         <MetricCard
@@ -2436,7 +2533,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   filtersRow: {
     display: "grid",
-    gridTemplateColumns: "1.6fr 220px 170px",
+    gridTemplateColumns: "1.4fr 220px minmax(420px, 1fr)",
     gap: 12,
     marginBottom: 12,
   },
@@ -2457,6 +2554,31 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 14,
     outline: "none",
     background: "#FFFFFF",
+  },
+  dateRangeControls: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 150px",
+    gap: 10,
+    alignItems: "end",
+  },
+  dateField: {
+    display: "grid",
+    gap: 4,
+  },
+  dateLabel: {
+    fontSize: 11,
+    fontWeight: 800,
+    color: "#64748B",
+  },
+  dateInput: {
+    height: 44,
+    borderRadius: 12,
+    border: "1px solid #DBE3EF",
+    padding: "0 12px",
+    fontSize: 14,
+    outline: "none",
+    background: "#FFFFFF",
+    color: "#0F172A",
   },
   chipsRow: {
     display: "flex",
