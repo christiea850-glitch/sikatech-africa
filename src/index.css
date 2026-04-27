@@ -13,7 +13,7 @@
   --sk-text-soft: #5b6b79;
 
   --sk-white: #ffffff;
-  --sk-bg: #f6f8fa;
+  --sk-bg: #f3f6fb;
   --sk-card: #ffffff;
   --sk-border: rgba(15, 23, 32, 0.08);
 
@@ -23,7 +23,7 @@
   --sk-radius-sm: 10px;
 
   --sk-shadow-sm: 0 2px 6px rgba(15, 23, 32, 0.04);
-  --sk-shadow-md: 0 12px 30px rgba(15, 23, 32, 0.08);
+  --sk-shadow-md: 0 14px 36px rgba(15, 23, 32, 0.08);
 
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     Roboto, Arial, sans-serif;
@@ -56,7 +56,12 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--sk-bg);
+  background: radial-gradient(
+      1200px 480px at 10% -10%,
+      rgba(209, 162, 27, 0.08),
+      transparent 60%
+    ),
+    var(--sk-bg);
   color: var(--sk-text);
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     Roboto, Arial, sans-serif;
@@ -92,6 +97,22 @@ body {
   box-shadow: var(--sk-shadow-sm);
 }
 
+.sk-content-card {
+  container-type: inline-size;
+}
+
+.sk-content-card h1,
+.sk-content-card h2,
+.sk-content-card h3 {
+  color: var(--sk-navy);
+  margin-top: 0;
+  letter-spacing: -0.02em;
+}
+
+.sk-content-card p {
+  color: var(--sk-text-soft);
+}
+
 /* Links */
 a {
   color: inherit;
@@ -105,6 +126,15 @@ a:hover {
 /* Buttons */
 button {
   font-family: inherit;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+button:hover {
+  box-shadow: 0 6px 16px rgba(15, 23, 32, 0.12);
+}
+
+button:active {
+  transform: translateY(1px);
 }
 
 /* Inputs */
@@ -119,6 +149,10 @@ input,
 select,
 textarea {
   color: var(--sk-text);
+  border-radius: 12px;
+  border: 1px solid var(--sk-border);
+  background: #fff;
+  padding: 10px 12px;
 }
 
 input:focus,
@@ -131,6 +165,24 @@ textarea:focus {
 /* Tables */
 table {
   border-collapse: collapse;
+  width: 100%;
+  background: #fff;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--sk-border);
+}
+
+th,
+td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(15, 23, 32, 0.06);
+}
+
+th {
+  background: #f8fafc;
+  color: var(--sk-navy);
+  font-weight: 700;
+  text-align: left;
 }
 
 /* Utility text colors */

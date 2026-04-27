@@ -370,21 +370,23 @@ export default function Sidebar() {
 
 const styles: Record<string, CSSProperties> = {
   sidebar: {
-    background: "#0b2a3a",
+    background:
+      "linear-gradient(180deg, #0d3145 0%, #0a2635 55%, #071c27 100%)",
     color: "#e8f1f5",
     position: "sticky",
     top: 0,
     height: "100vh",
     overflowY: "auto",
-    borderRight: "1px solid rgba(255,255,255,0.08)",
-    boxShadow: "inset -1px 0 0 rgba(255,255,255,0.04)",
+    borderRight: "1px solid rgba(255,255,255,0.1)",
+    boxShadow:
+      "inset -1px 0 0 rgba(255,255,255,0.04), 8px 0 20px rgba(6, 17, 24, 0.25)",
   },
   brandRow: {
     display: "flex",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 10,
-    marginBottom: 14,
+    marginBottom: 18,
   },
   brand: {
     fontSize: 22,
@@ -397,11 +399,11 @@ const styles: Record<string, CSSProperties> = {
     marginTop: 4,
     fontSize: 12,
     fontWeight: 600,
-    color: "rgba(232,241,245,0.66)",
+    color: "rgba(232,241,245,0.7)",
   },
   collapseBtn: {
-    border: "1px solid rgba(255,255,255,0.08)",
-    background: "rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.12)",
     color: "#ffffff",
     fontSize: 14,
     fontWeight: 900,
@@ -414,8 +416,8 @@ const styles: Record<string, CSSProperties> = {
     width: "100%",
     padding: "11px 12px",
     borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.18)",
+    background: "rgba(255,255,255,0.12)",
     color: "#ffffff",
     outline: "none",
     fontWeight: 600,
@@ -495,21 +497,22 @@ const styles: Record<string, CSSProperties> = {
   },
   link: {
     textDecoration: "none",
-    color: "rgba(232,241,245,0.94)",
+    color: "rgba(232,241,245,0.95)",
     padding: "11px 12px",
     borderRadius: 12,
     fontWeight: 700,
     transition: "all 0.15s ease",
     display: "block",
+    border: "1px solid transparent",
   },
   linkCollapsed: {
     padding: "12px 10px",
     textAlign: "center",
   },
   linkActive: {
-    background: "rgba(255,255,255,0.10)",
+    background: "rgba(255,255,255,0.16)",
     color: "#ffffff",
-    boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.08)",
+    boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.18)",
   },
   dotBullet: {
     fontWeight: 900,
