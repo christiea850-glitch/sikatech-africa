@@ -14,8 +14,15 @@ import {
   type AccountingReviewStatus,
 } from "../accounting/accountingWorkbenchStorage";
 
-type SourceType = "direct_sale" | "room_folio_charge" | "guest_payment" | "expense";
+type SourceType =
+  | "room_booking_revenue"
+  | "room_folio_charge"
+  | "food_service_sale"
+  | "department_pos_sale"
+  | "guest_payment"
+  | "expense";
 type GroupBy = "department" | "paymentMethod" | "staff" | "date" | "source";
+type DetailTab = "overview" | "transaction" | "shift" | "review";
 
 type AccountingRow = {
   id: string;
@@ -67,10 +74,26 @@ function inRange(value: string, start: string, end: string) {
 }
 
 function sourceLabel(source: SourceType) {
-  if (source === "direct_sale") return "Direct Sale";
-  if (source === "room_folio_charge") return "Room Folio Charge";
-  if (source === "guest_payment") return "Guest Payment";
+  if (source === "room_booking_revenue") return "Room Booking Revenue";
+  if (source === "room_folio_charge") return "Room Folio Charges";
+  if (source === "food_service_sale") return "Food & Service Sales";
+  if (source === "department_pos_sale") return "Department POS Sales";
+  if (source === "guest_payment") return "Guest Payments / Collections";
   return "Expense";
+}
+
+function directSaleSource(departmentKey: string): SourceType {
+  return normalizeDepartmentKey(departmentKey) === "front-desk"
+    ? "food_service_sale"
+    : "department_pos_sale";
+}
+
+function roomBookingBaseRevenue(booking: any) {
+  const folioCharges = (booking.folioActivity || [])
+    .filter((activity: any) => activity.type === "charge")
+    .reduce((sum: number, activity: any) => sum + (Number(activity.amount) || 0), 0);
+
+  return Math.max(0, (Number(booking.totalAmount) || 0) - folioCharges);
 }
 
 function downloadText(filename: string, content: string, type: string) {
@@ -140,6 +163,8 @@ export default function AccountingWorkbenchPage() {
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [statementGeneratedAt, setStatementGeneratedAt] = useState(() => new Date());
   const [selectedRecord, setSelectedRecord] = useState<AccountingRow | null>(null);
+  const [detailTab, setDetailTab] = useState<DetailTab>("overview");
+  const [hoveredRecordId, setHoveredRecordId] = useState<string | null>(null);
 
   const allowed = user?.role === "accounting" || user?.role === "admin";
   const businessName = resolveBusinessName(user, setupBusinessName);
@@ -165,7 +190,7 @@ export default function AccountingWorkbenchPage() {
         return {
           id: `sale:${sale.id}`,
           date: sale.createdAt,
-          source: "direct_sale",
+          source: directSaleSource(sale.deptKey),
           department: normalizeDepartmentKey(sale.deptKey),
           paymentMethod: sale.paymentMethod || "other",
           staff: sale.staffName || sale.staffId || "unknown",
@@ -182,6 +207,48 @@ export default function AccountingWorkbenchPage() {
           submittedBy: trace.submittedBy,
           submissionMode: trace.submissionMode,
         };
+      });
+
+    const roomBookingRows: AccountingRow[] = getAllBookings()
+      .flatMap((booking) => {
+        const amount = roomBookingBaseRevenue(booking);
+        if (amount <= 0) return [];
+
+        const bookingDate = new Date(booking.createdAt || booking.updatedAt || Date.now()).toISOString();
+        const trace = resolveShiftTrace(
+          {
+            ...booking,
+            createdAt: bookingDate,
+            deptKey: "front-desk",
+            department: "front-desk",
+          },
+          shifts
+        );
+
+        const row: AccountingRow = {
+          id: `booking:${booking.id}`,
+          date: bookingDate,
+          source: "room_booking_revenue",
+          department: normalizeDepartmentKey("front-desk"),
+          paymentMethod: "room_booking",
+          staff: booking.createdBy?.employeeId || "Front Desk",
+          description: `Room booking ${booking.bookingCode || booking.roomNo || ""}`.trim(),
+          revenue: amount,
+          expense: 0,
+          collection: 0,
+          roomFolioReceivable: 0,
+          guestPayment: 0,
+          bookingCode: booking.bookingCode,
+          roomNo: booking.roomNo,
+          transactionTime: bookingDate,
+          shiftId: trace.shiftId,
+          shiftStatus: trace.shiftStatus,
+          submittedAt: trace.submittedAt,
+          submittedBy: trace.submittedBy,
+          submissionMode: trace.submissionMode,
+        };
+
+        return [row];
       });
 
     const folioRows: AccountingRow[] = getAllBookings().flatMap((booking) =>
@@ -249,7 +316,7 @@ export default function AccountingWorkbenchPage() {
       };
     });
 
-    return [...directSales, ...folioRows, ...expenses].sort(
+    return [...roomBookingRows, ...directSales, ...folioRows, ...expenses].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
   }, [salesRecords, expenseRecords, shifts]);
@@ -277,6 +344,10 @@ export default function AccountingWorkbenchPage() {
         acc.collections += row.collection;
         acc.roomFolioReceivables += row.roomFolioReceivable;
         acc.guestPayments += row.guestPayment;
+        if (row.source === "room_booking_revenue") acc.roomBookingRevenue += row.revenue;
+        if (row.source === "room_folio_charge") acc.roomFolioCharges += row.revenue;
+        if (row.source === "food_service_sale") acc.foodServiceSales += row.revenue;
+        if (row.source === "department_pos_sale") acc.departmentPosSales += row.revenue;
         if (row.paymentMethod === "cash") acc.cash += row.collection;
         if (row.paymentMethod === "momo") acc.momo += row.collection;
         if (row.paymentMethod === "card") acc.card += row.collection;
@@ -295,6 +366,10 @@ export default function AccountingWorkbenchPage() {
         transfer: 0,
         roomFolioReceivables: 0,
         guestPayments: 0,
+        roomBookingRevenue: 0,
+        roomFolioCharges: 0,
+        foodServiceSales: 0,
+        departmentPosSales: 0,
       }
     );
 
@@ -430,6 +505,11 @@ export default function AccountingWorkbenchPage() {
     window.setTimeout(() => window.print(), 0);
   }
 
+  function openRecordDetails(row: AccountingRow) {
+    setSelectedRecord(row);
+    setDetailTab("overview");
+  }
+
   const reviewedCount = filtered.filter((r) => reviewMap.get(r.id)?.status === "reviewed").length;
   const flaggedCount = filtered.filter((r) => reviewMap.get(r.id)?.status === "issue").length;
   const dateRangeLabel = formatDateRange(startDate, endDate);
@@ -465,6 +545,10 @@ export default function AccountingWorkbenchPage() {
         <Metric label="Total MoMo" value={money(summary.momo)} />
         <Metric label="Total Card" value={money(summary.card)} />
         <Metric label="Total Transfer" value={money(summary.transfer)} />
+        <Metric label="Room Booking Revenue" value={money(summary.roomBookingRevenue)} />
+        <Metric label="Room Folio Charges" value={money(summary.roomFolioCharges)} />
+        <Metric label="Food & Service Sales" value={money(summary.foodServiceSales)} />
+        <Metric label="Department POS Sales" value={money(summary.departmentPosSales)} />
         <Metric label="Room Folio Receivables" value={money(summary.roomFolioReceivables)} />
         <Metric label="Guest Payments Collected" value={money(summary.guestPayments)} />
       </div>
@@ -475,7 +559,7 @@ export default function AccountingWorkbenchPage() {
           <Field label="End Date"><input type="date" style={styles.input} value={endDate} onChange={(e) => setEndDate(e.target.value)} /></Field>
           <Field label="Department"><Select value={department} onChange={setDepartment} options={["all", ...departments]} labeler={(v) => v === "all" ? "All" : formatDepartmentLabel(v)} /></Field>
           <Field label="Payment Method"><Select value={paymentMethod} onChange={setPaymentMethod} options={["all", ...paymentMethods]} /></Field>
-          <Field label="Source / Type"><Select value={source} onChange={setSource} options={["all", "direct_sale", "room_folio_charge", "guest_payment", "expense"]} labeler={(v) => v === "all" ? "All" : sourceLabel(v as SourceType)} /></Field>
+          <Field label="Source / Type"><Select value={source} onChange={setSource} options={["all", "room_booking_revenue", "room_folio_charge", "food_service_sale", "department_pos_sale", "guest_payment", "expense"]} labeler={(v) => v === "all" ? "All" : sourceLabel(v as SourceType)} /></Field>
           <Field label="Staff"><Select value={staff} onChange={setStaff} options={["all", ...staffOptions]} /></Field>
           <Field label="Review Status"><Select value={reviewStatus} onChange={setReviewStatus} options={["all", "unreviewed", "reviewed", "issue"]} /></Field>
           <Field label="Shift Status"><Select value={shiftStatusFilter} onChange={setShiftStatusFilter} options={["all", "open", "unclosed", "submitted", "reviewed", "auto_submitted"]} labeler={(v) => v === "all" ? "All" : formatShiftStatus(v)} /></Field>
@@ -526,14 +610,19 @@ export default function AccountingWorkbenchPage() {
                 return (
                   <tr
                     key={row.id}
-                    style={styles.clickableRow}
+                    style={{
+                      ...styles.clickableRow,
+                      ...(hoveredRecordId === row.id ? styles.clickableRowHover : {}),
+                    }}
                     tabIndex={0}
                     role="button"
-                    onClick={() => setSelectedRecord(row)}
+                    onClick={() => openRecordDetails(row)}
+                    onMouseEnter={() => setHoveredRecordId(row.id)}
+                    onMouseLeave={() => setHoveredRecordId(null)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        setSelectedRecord(row);
+                        openRecordDetails(row);
                       }
                     }}
                   >
@@ -564,6 +653,7 @@ export default function AccountingWorkbenchPage() {
                         onClick={(e) => e.stopPropagation()}
                         onKeyDown={(e) => e.stopPropagation()}
                       >
+                        <button style={styles.smallBtn} onClick={() => openRecordDetails(row)}>View details</button>
                         <button style={styles.smallBtn} onClick={() => updateReview(row, "reviewed")}>Reviewed</button>
                         <button style={styles.warnBtn} onClick={() => updateReview(row, "issue")}>Flag</button>
                         <button style={styles.smallBtn} onClick={() => saveNote(row)}>Save Note</button>
@@ -576,41 +666,83 @@ export default function AccountingWorkbenchPage() {
           </table>
         </div>
       </div>
+      </div>
 
       {selectedRecord && (
-        <div style={styles.detailPanel}>
-          <div style={styles.detailHeader}>
-            <div>
-              <h2 style={styles.detailTitle}>Financial Record Details</h2>
-              <div style={styles.detailSubtitle}>{sourceLabel(selectedRecord.source)} | {selectedRecord.id}</div>
+        <div style={styles.drawerOverlay} onClick={() => setSelectedRecord(null)}>
+          <aside style={styles.drawer} onClick={(e) => e.stopPropagation()} aria-label="Financial record details">
+            <div style={styles.drawerHeader}>
+              <div>
+                <h2 style={styles.detailTitle}>Financial Record Details</h2>
+                <div style={styles.detailSubtitle}>{sourceLabel(selectedRecord.source)} | {selectedRecord.id}</div>
+              </div>
+              <button style={styles.secondaryBtn} onClick={() => setSelectedRecord(null)}>Close</button>
             </div>
-            <button style={styles.secondaryBtn} onClick={() => setSelectedRecord(null)}>Close</button>
-          </div>
 
-          <div style={styles.detailGrid}>
-            <DetailItem label="Date" value={formatDateTime(new Date(selectedRecord.date))} />
-            <DetailItem label="Transaction Time" value={formatDateTime(new Date(selectedRecord.transactionTime))} />
-            <DetailItem label="Source / Type" value={sourceLabel(selectedRecord.source)} />
-            <DetailItem label="Department" value={formatDepartmentLabel(selectedRecord.department)} />
-            <DetailItem label="Payment Method" value={selectedRecord.paymentMethod} />
-            <DetailItem label="Staff" value={selectedRecord.staff} />
-            <DetailItem label="Description" value={selectedRecord.description} />
-            <DetailItem label="Revenue" value={money(selectedRecord.revenue)} />
-            <DetailItem label="Expense" value={money(selectedRecord.expense)} />
-            <DetailItem label="Collected" value={money(selectedRecord.collection)} />
-            <DetailItem label="Booking Code" value={selectedRecord.bookingCode || "-"} />
-            <DetailItem label="Room Number" value={selectedRecord.roomNo || "-"} />
-            <DetailItem label="Shift ID" value={selectedRecord.shiftId || "-"} />
-            <DetailItem label="Shift Status" value={formatShiftStatus(selectedRecord.shiftStatus)} />
-            <DetailItem label="Submitted At" value={selectedRecord.submittedAt ? formatDateTime(new Date(selectedRecord.submittedAt)) : "-"} />
-            <DetailItem label="Submitted By" value={selectedRecord.submittedBy || "-"} />
-            <DetailItem label="Submission Mode" value={selectedRecord.submissionMode || "-"} />
-            <DetailItem label="Review Status" value={reviewMap.get(selectedRecord.id)?.status || "unreviewed"} />
-            <DetailItem label="Accounting Note" value={noteDrafts[selectedRecord.id] ?? reviewMap.get(selectedRecord.id)?.note ?? "-"} wide />
-          </div>
+            <div style={styles.drawerTabs}>
+              <DetailTabButton active={detailTab === "overview"} onClick={() => setDetailTab("overview")}>Overview</DetailTabButton>
+              <DetailTabButton active={detailTab === "transaction"} onClick={() => setDetailTab("transaction")}>Transaction</DetailTabButton>
+              <DetailTabButton active={detailTab === "shift"} onClick={() => setDetailTab("shift")}>Shift</DetailTabButton>
+              <DetailTabButton active={detailTab === "review"} onClick={() => setDetailTab("review")}>Review / Notes</DetailTabButton>
+            </div>
+
+            <div style={styles.drawerBody}>
+              {detailTab === "overview" && (
+                <div style={styles.detailGrid}>
+                  <DetailItem label="Source / Type" value={sourceLabel(selectedRecord.source)} />
+                  <DetailItem label="Department" value={formatDepartmentLabel(selectedRecord.department)} />
+                  <DetailItem label="Staff" value={selectedRecord.staff} />
+                  <DetailItem label="Description" value={selectedRecord.description} wide />
+                  <DetailItem label="Revenue" value={money(selectedRecord.revenue)} />
+                  <DetailItem label="Expense" value={money(selectedRecord.expense)} />
+                  <DetailItem label="Collected" value={money(selectedRecord.collection)} />
+                  <DetailItem label="Booking Code" value={selectedRecord.bookingCode || "-"} />
+                  <DetailItem label="Room Number" value={selectedRecord.roomNo || "-"} />
+                </div>
+              )}
+
+              {detailTab === "transaction" && (
+                <div style={styles.detailGrid}>
+                  <DetailItem label="Date" value={formatDateTime(new Date(selectedRecord.date))} />
+                  <DetailItem label="Transaction Time" value={formatDateTime(new Date(selectedRecord.transactionTime))} />
+                  <DetailItem label="Payment Method" value={selectedRecord.paymentMethod} />
+                  <DetailItem label="Record ID" value={selectedRecord.id} wide />
+                </div>
+              )}
+
+              {detailTab === "shift" && (
+                <div style={styles.detailGrid}>
+                  <DetailItem label="Shift ID" value={selectedRecord.shiftId || "-"} />
+                  <DetailItem label="Shift Status" value={formatShiftStatus(selectedRecord.shiftStatus)} />
+                  <DetailItem label="Submitted At" value={selectedRecord.submittedAt ? formatDateTime(new Date(selectedRecord.submittedAt)) : "-"} />
+                  <DetailItem label="Submitted By" value={selectedRecord.submittedBy || "-"} />
+                  <DetailItem label="Submission Mode" value={selectedRecord.submissionMode || "-"} />
+                </div>
+              )}
+
+              {detailTab === "review" && (
+                <div style={styles.detailGrid}>
+                  <DetailItem label="Review Status" value={reviewMap.get(selectedRecord.id)?.status || "unreviewed"} />
+                  <label style={{ ...styles.field, ...styles.detailItemWide }}>
+                    <span style={styles.detailLabel}>Accounting Note</span>
+                    <input
+                      style={styles.noteInputFull}
+                      value={noteDrafts[selectedRecord.id] ?? reviewMap.get(selectedRecord.id)?.note ?? ""}
+                      onChange={(e) => setNoteDrafts((prev) => ({ ...prev, [selectedRecord.id]: e.target.value }))}
+                      placeholder="Accounting note"
+                    />
+                  </label>
+                  <div style={{ ...styles.rowActions, ...styles.detailItemWide }}>
+                    <button style={styles.smallBtn} onClick={() => updateReview(selectedRecord, "reviewed")}>Reviewed</button>
+                    <button style={styles.warnBtn} onClick={() => updateReview(selectedRecord, "issue")}>Flag</button>
+                    <button style={styles.smallBtn} onClick={() => saveNote(selectedRecord)}>Save Note</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </aside>
         </div>
       )}
-      </div>
 
       <section className="accounting-print-statement" style={styles.printStatement} aria-label="Printable financial statement">
         <div style={styles.printHeader}>
@@ -633,6 +765,10 @@ export default function AccountingWorkbenchPage() {
           <PrintMetric label="MoMo Collected" value={money(summary.momo)} />
           <PrintMetric label="Card Collected" value={money(summary.card)} />
           <PrintMetric label="Transfer Collected" value={money(summary.transfer)} />
+          <PrintMetric label="Room Booking Revenue" value={money(summary.roomBookingRevenue)} />
+          <PrintMetric label="Room Folio Charges" value={money(summary.roomFolioCharges)} />
+          <PrintMetric label="Food & Service Sales" value={money(summary.foodServiceSales)} />
+          <PrintMetric label="Department POS Sales" value={money(summary.departmentPosSales)} />
           <PrintMetric label="Room Folio Receivables" value={money(summary.roomFolioReceivables)} />
           <PrintMetric label="Guest Payments Collected" value={money(summary.guestPayments)} />
         </div>
@@ -727,6 +863,14 @@ function DetailItem({ label, value, wide }: { label: string; value: string; wide
   );
 }
 
+function DetailTabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button style={active ? styles.drawerTabActive : styles.drawerTab} onClick={onClick}>
+      {children}
+    </button>
+  );
+}
+
 function StatementSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section style={styles.printSection}>
@@ -773,9 +917,11 @@ const styles: Record<string, CSSProperties> = {
   table: { width: "100%", borderCollapse: "separate", borderSpacing: 0 },
   th: { textAlign: "left", padding: "10px 8px", borderBottom: "1px solid rgba(15,23,42,0.12)", color: "#64748b", fontSize: 12, textTransform: "uppercase", whiteSpace: "nowrap" },
   td: { padding: "10px 8px", borderBottom: "1px solid rgba(15,23,42,0.08)", color: "#111827", fontSize: 13, fontWeight: 650, verticalAlign: "top", whiteSpace: "nowrap" },
-  clickableRow: { cursor: "pointer" },
+  clickableRow: { cursor: "pointer", transition: "background 0.15s ease, box-shadow 0.15s ease" },
+  clickableRowHover: { background: "#f8fafc", boxShadow: "inset 3px 0 0 #111827" },
   reviewStats: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 },
   noteInput: { minWidth: 180, padding: "8px 9px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.14)" },
+  noteInputFull: { width: "100%", padding: "10px 11px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.14)" },
   rowActions: { display: "flex", gap: 6, flexWrap: "wrap" },
   smallBtn: { border: "1px solid rgba(15,23,42,0.14)", background: "#fff", color: "#111827", borderRadius: 7, padding: "7px 9px", fontWeight: 800, cursor: "pointer" },
   warnBtn: { border: "1px solid rgba(180,38,38,0.18)", background: "rgba(180,38,38,0.08)", color: "#991b1b", borderRadius: 7, padding: "7px 9px", fontWeight: 800, cursor: "pointer" },
@@ -783,7 +929,13 @@ const styles: Record<string, CSSProperties> = {
   badgeDanger: { color: "#b91c1c", background: "rgba(185,28,28,0.10)", borderRadius: 999, padding: "4px 8px", fontWeight: 900 },
   badgeMuted: { color: "#475569", background: "rgba(71,85,105,0.10)", borderRadius: 999, padding: "4px 8px", fontWeight: 900 },
   notice: { padding: 16, borderRadius: 10, background: "rgba(185,28,28,0.08)", color: "#991b1b", fontWeight: 900 },
-  detailPanel: { padding: 16, border: "1px solid rgba(15,23,42,0.10)", borderRadius: 10, background: "#fff", boxShadow: "0 8px 20px rgba(15,23,42,0.04)" },
+  drawerOverlay: { position: "fixed", inset: 0, zIndex: 1000, background: "rgba(15,23,42,0.28)", display: "flex", justifyContent: "flex-end" },
+  drawer: { width: "min(560px, 100vw)", height: "100vh", background: "#fff", boxShadow: "-18px 0 36px rgba(15,23,42,0.18)", padding: 18, display: "flex", flexDirection: "column", gap: 14, overflow: "hidden" },
+  drawerHeader: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", paddingBottom: 12, borderBottom: "1px solid rgba(15,23,42,0.08)" },
+  drawerTabs: { display: "flex", gap: 8, flexWrap: "wrap" },
+  drawerTab: { border: "1px solid rgba(15,23,42,0.14)", background: "#fff", color: "#334155", borderRadius: 999, padding: "8px 12px", fontWeight: 900, cursor: "pointer", fontSize: 12 },
+  drawerTabActive: { border: "1px solid #111827", background: "#111827", color: "#fff", borderRadius: 999, padding: "8px 12px", fontWeight: 900, cursor: "pointer", fontSize: 12 },
+  drawerBody: { overflowY: "auto", paddingRight: 4 },
   detailHeader: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 14 },
   detailTitle: { margin: 0, color: "#111827", fontSize: 18, fontWeight: 900 },
   detailSubtitle: { marginTop: 4, color: "#64748b", fontSize: 12, fontWeight: 800 },
