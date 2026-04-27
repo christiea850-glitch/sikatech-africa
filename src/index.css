@@ -208,3 +208,51 @@ th {
 *::-webkit-scrollbar-track {
   background: transparent;
 }
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: auto;
+    background: #ffffff !important;
+  }
+
+  body {
+    color: #111827;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body.accounting-statement-printing aside,
+  body.accounting-statement-printing header,
+  body.accounting-statement-printing button,
+  body.accounting-statement-printing .accounting-screen {
+    display: none !important;
+  }
+
+  body.accounting-statement-printing .accounting-print-statement {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  body.accounting-statement-printing .sk-content-card {
+    min-height: auto !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  table {
+    page-break-inside: auto;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+}

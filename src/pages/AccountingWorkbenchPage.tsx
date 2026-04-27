@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { useSales } from "../sales/SalesContext";
 import { useExpenses } from "../expenses/ExpenseContext";
+import { useBusinessSetup } from "../setup/BusinessSetupContext";
 import { getAllBookings } from "../frontdesk/bookingsStorage";
 import {
   loadAccountingWorkbenchReviews,
@@ -77,8 +78,42 @@ function csvCell(value: unknown) {
   return `"${String(value ?? "").replace(/"/g, '""')}"`;
 }
 
+function cleanBusinessName(value: unknown) {
+  if (typeof value !== "string") return "";
+  return value.trim();
+}
+
+function resolveBusinessName(user: unknown, setupBusinessName: string) {
+  const userRecord = user && typeof user === "object" ? (user as Record<string, any>) : {};
+  const candidates = [
+    userRecord.businessName,
+    userRecord.business?.name,
+    userRecord.business?.businessName,
+    setupBusinessName,
+  ];
+  return candidates.map(cleanBusinessName).find(Boolean) || "Your Business Name";
+}
+
+function formatDateTime(value: Date) {
+  return value.toLocaleString([], {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatDateRange(startDate: string, endDate: string) {
+  if (startDate && endDate) return `${startDate} to ${endDate}`;
+  if (startDate) return `From ${startDate}`;
+  if (endDate) return `Through ${endDate}`;
+  return "All dates";
+}
+
 export default function AccountingWorkbenchPage() {
   const { user } = useAuth();
+  const { businessName: setupBusinessName } = useBusinessSetup();
   const { records: salesRecords } = useSales();
   const { records: expenseRecords } = useExpenses();
 
@@ -92,8 +127,10 @@ export default function AccountingWorkbenchPage() {
   const [reviewStatus, setReviewStatus] = useState("all");
   const [groupBy, setGroupBy] = useState<GroupBy>("department");
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [statementGeneratedAt, setStatementGeneratedAt] = useState(() => new Date());
 
   const allowed = user?.role === "accounting" || user?.role === "admin";
+  const businessName = resolveBusinessName(user, setupBusinessName);
 
   const reviews = useMemo(() => {
     void reviewVersion;
@@ -323,12 +360,31 @@ export default function AccountingWorkbenchPage() {
     downloadText("accounting-summary.json", JSON.stringify(payload, null, 2), "application/json");
   }
 
+  function printStatement() {
+    setStatementGeneratedAt(new Date());
+    document.body.classList.add("accounting-statement-printing");
+    const clearPrintMode = () => {
+      document.body.classList.remove("accounting-statement-printing");
+      window.removeEventListener("afterprint", clearPrintMode);
+    };
+    window.addEventListener("afterprint", clearPrintMode);
+    window.setTimeout(() => window.print(), 0);
+  }
+
+  const reviewedCount = filtered.filter((r) => reviewMap.get(r.id)?.status === "reviewed").length;
+  const flaggedCount = filtered.filter((r) => reviewMap.get(r.id)?.status === "issue").length;
+  const dateRangeLabel = formatDateRange(startDate, endDate);
+  const departmentFilterLabel = department === "all" ? "All departments" : department;
+  const generatedAtLabel = formatDateTime(statementGeneratedAt);
+  const groupByLabel = groupBy === "paymentMethod" ? "Payment Method" : groupBy.charAt(0).toUpperCase() + groupBy.slice(1);
+
   if (!allowed) {
     return <div style={styles.notice}>Accounting Workbench is available to accounting and admin users only.</div>;
   }
 
   return (
-    <div style={styles.page}>
+    <div style={styles.page} className="accounting-workbench-page">
+      <div className="accounting-screen" style={styles.screenContent}>
       <div style={styles.header}>
         <div>
           <div style={styles.eyebrow}>Accounting</div>
@@ -338,6 +394,7 @@ export default function AccountingWorkbenchPage() {
         <div style={styles.actions}>
           <button style={styles.secondaryBtn} onClick={exportCsv}>Export CSV</button>
           <button style={styles.primaryBtn} onClick={exportStatement}>Export Statement</button>
+          <button style={styles.primaryBtn} onClick={printStatement}>Print Statement</button>
         </div>
       </div>
 
@@ -387,8 +444,8 @@ export default function AccountingWorkbenchPage() {
           <h2 style={styles.sectionTitle}>Review Status</h2>
           <div style={styles.reviewStats}>
             <Metric label="Filtered Records" value={String(filtered.length)} />
-            <Metric label="Reviewed" value={String(filtered.filter((r) => reviewMap.get(r.id)?.status === "reviewed").length)} />
-            <Metric label="Flagged" value={String(filtered.filter((r) => reviewMap.get(r.id)?.status === "issue").length)} />
+            <Metric label="Reviewed" value={String(reviewedCount)} />
+            <Metric label="Flagged" value={String(flaggedCount)} />
           </div>
         </div>
       </div>
@@ -440,6 +497,89 @@ export default function AccountingWorkbenchPage() {
           </table>
         </div>
       </div>
+      </div>
+
+      <section className="accounting-print-statement" style={styles.printStatement} aria-label="Printable financial statement">
+        <div style={styles.printHeader}>
+          <div>
+            <h1 style={styles.printBusinessName}>{businessName}</h1>
+            <div style={styles.printTitle}>Financial Reconciliation Statement</div>
+          </div>
+          <div style={styles.printMeta}>
+            <div><strong>Date Range:</strong> {dateRangeLabel}</div>
+            <div><strong>Department:</strong> {departmentFilterLabel}</div>
+            <div><strong>Generated:</strong> {generatedAtLabel}</div>
+          </div>
+        </div>
+
+        <div style={styles.printSummaryGrid}>
+          <PrintMetric label="Total Revenue" value={money(summary.revenue)} />
+          <PrintMetric label="Total Expenses" value={money(summary.expenses)} />
+          <PrintMetric label="Net Profit" value={money(summary.netProfit)} />
+          <PrintMetric label="Cash Collected" value={money(summary.cash)} />
+          <PrintMetric label="MoMo Collected" value={money(summary.momo)} />
+          <PrintMetric label="Card Collected" value={money(summary.card)} />
+          <PrintMetric label="Transfer Collected" value={money(summary.transfer)} />
+          <PrintMetric label="Room Folio Receivables" value={money(summary.roomFolioReceivables)} />
+          <PrintMetric label="Guest Payments Collected" value={money(summary.guestPayments)} />
+        </div>
+
+        <StatementSection title={`Grouped Summary by ${groupByLabel}`}>
+          <table style={styles.printTable}>
+            <thead><tr><PrintTh>Group</PrintTh><PrintTh>Count</PrintTh><PrintTh>Revenue</PrintTh><PrintTh>Expenses</PrintTh><PrintTh>Collections</PrintTh><PrintTh>Net</PrintTh></tr></thead>
+            <tbody>
+              {groupRows.map((row) => (
+                <tr key={row.label}>
+                  <PrintTd>{row.label}</PrintTd>
+                  <PrintTd>{row.count}</PrintTd>
+                  <PrintTd>{money(row.revenue)}</PrintTd>
+                  <PrintTd>{money(row.expenses)}</PrintTd>
+                  <PrintTd>{money(row.collections)}</PrintTd>
+                  <PrintTd>{money(row.net)}</PrintTd>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </StatementSection>
+
+        <StatementSection title="Detailed Financial Records">
+          <table style={styles.printTable}>
+            <thead>
+              <tr>
+                <PrintTh>Date</PrintTh><PrintTh>Source / Type</PrintTh><PrintTh>Department</PrintTh><PrintTh>Payment Method</PrintTh><PrintTh>Staff</PrintTh><PrintTh>Description</PrintTh><PrintTh>Revenue</PrintTh><PrintTh>Expense</PrintTh><PrintTh>Collected</PrintTh><PrintTh>Review Status</PrintTh><PrintTh>Note</PrintTh>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((row) => {
+                const review = reviewMap.get(row.id);
+                return (
+                  <tr key={row.id}>
+                    <PrintTd>{new Date(row.date).toLocaleDateString()}</PrintTd>
+                    <PrintTd>{sourceLabel(row.source)}</PrintTd>
+                    <PrintTd>{row.department}</PrintTd>
+                    <PrintTd>{row.paymentMethod}</PrintTd>
+                    <PrintTd>{row.staff}</PrintTd>
+                    <PrintTd>{row.description}{row.bookingCode ? ` (${row.bookingCode}${row.roomNo ? ` / ${row.roomNo}` : ""})` : ""}</PrintTd>
+                    <PrintTd>{money(row.revenue)}</PrintTd>
+                    <PrintTd>{money(row.expense)}</PrintTd>
+                    <PrintTd>{money(row.collection)}</PrintTd>
+                    <PrintTd>{review?.status || "unreviewed"}</PrintTd>
+                    <PrintTd>{review?.note || ""}</PrintTd>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </StatementSection>
+
+        <StatementSection title="Review Summary">
+          <div style={styles.printReviewGrid}>
+            <PrintMetric label="Total Filtered Records" value={String(filtered.length)} />
+            <PrintMetric label="Reviewed" value={String(reviewedCount)} />
+            <PrintMetric label="Flagged" value={String(flaggedCount)} />
+          </div>
+        </StatementSection>
+      </section>
     </div>
   );
 }
@@ -464,8 +604,30 @@ function Td({ children }: { children: React.ReactNode }) {
   return <td style={styles.td}>{children}</td>;
 }
 
+function StatementSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section style={styles.printSection}>
+      <h2 style={styles.printSectionTitle}>{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function PrintMetric({ label, value }: { label: string; value: string }) {
+  return <div style={styles.printMetric}><div style={styles.printMetricLabel}>{label}</div><div style={styles.printMetricValue}>{value}</div></div>;
+}
+
+function PrintTh({ children }: { children: React.ReactNode }) {
+  return <th style={styles.printTh}>{children}</th>;
+}
+
+function PrintTd({ children }: { children: React.ReactNode }) {
+  return <td style={styles.printTd}>{children}</td>;
+}
+
 const styles: Record<string, CSSProperties> = {
   page: { display: "grid", gap: 18 },
+  screenContent: { display: "grid", gap: 18 },
   header: { display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "flex-start" },
   eyebrow: { color: "#64748b", fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.6 },
   title: { margin: "4px 0 0", color: "#111827", fontSize: 28 },
@@ -497,4 +659,19 @@ const styles: Record<string, CSSProperties> = {
   badgeDanger: { color: "#b91c1c", background: "rgba(185,28,28,0.10)", borderRadius: 999, padding: "4px 8px", fontWeight: 900 },
   badgeMuted: { color: "#475569", background: "rgba(71,85,105,0.10)", borderRadius: 999, padding: "4px 8px", fontWeight: 900 },
   notice: { padding: 16, borderRadius: 10, background: "rgba(185,28,28,0.08)", color: "#991b1b", fontWeight: 900 },
+  printStatement: { display: "none", color: "#111827", background: "#fff" },
+  printHeader: { display: "flex", justifyContent: "space-between", gap: 24, alignItems: "flex-start", borderBottom: "2px solid #111827", paddingBottom: 18, marginBottom: 18 },
+  printBusinessName: { margin: 0, fontSize: 28, color: "#111827", lineHeight: 1.15 },
+  printTitle: { marginTop: 6, fontSize: 16, fontWeight: 900, color: "#334155" },
+  printMeta: { display: "grid", gap: 4, fontSize: 11, color: "#334155", textAlign: "right" },
+  printSummaryGrid: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 18 },
+  printMetric: { border: "1px solid #cbd5e1", padding: "8px 10px", borderRadius: 4, breakInside: "avoid" },
+  printMetricLabel: { color: "#475569", fontSize: 9, fontWeight: 900, textTransform: "uppercase", letterSpacing: 0.3 },
+  printMetricValue: { marginTop: 3, color: "#111827", fontSize: 15, fontWeight: 900 },
+  printSection: { marginTop: 18, breakInside: "avoid" },
+  printSectionTitle: { margin: "0 0 8px", color: "#111827", fontSize: 14, fontWeight: 900 },
+  printTable: { width: "100%", borderCollapse: "collapse", border: "1px solid #cbd5e1", fontSize: 9 },
+  printTh: { textAlign: "left", padding: "6px 5px", border: "1px solid #cbd5e1", background: "#f1f5f9", color: "#111827", fontSize: 8, textTransform: "uppercase" },
+  printTd: { padding: "5px", border: "1px solid #e2e8f0", color: "#111827", verticalAlign: "top", fontSize: 8, lineHeight: 1.25 },
+  printReviewGrid: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 },
 };
