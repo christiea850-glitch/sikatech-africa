@@ -5,6 +5,7 @@ export type PaymentMethod =
   | "momo"
   | "card"
   | "bank_transfer"
+  | "room_folio"
   | "credit"
   | "other";
 
@@ -29,6 +30,12 @@ export type SaleRecord = {
 
   subtotal: number;
   total: number;
+
+  transactionId?: string;
+  bookingId?: string;
+  bookingCode?: string;
+  roomNo?: string;
+  paymentMode?: "pay_now" | "post_to_room";
 };
 
 export type AddSaleInput = {
@@ -44,6 +51,12 @@ export type AddSaleInput = {
 
   staffId: string;
   staffName?: string;
+
+  transactionId?: string;
+  bookingId?: string;
+  bookingCode?: string;
+  roomNo?: string;
+  paymentMode?: "pay_now" | "post_to_room";
 };
 
 type SalesContextType = {
@@ -111,6 +124,11 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         staffName: input.staffName?.trim() || undefined,
         subtotal,
         total,
+        transactionId: input.transactionId?.trim() || undefined,
+        bookingId: input.bookingId?.trim() || undefined,
+        bookingCode: input.bookingCode?.trim() || undefined,
+        roomNo: input.roomNo?.trim() || undefined,
+        paymentMode: input.paymentMode,
       };
 
       setRecords((prev) => [next, ...prev]);

@@ -6,7 +6,11 @@ import { submitShiftClosing } from "../api/shiftClosingApi";
 import { useSales, type PaymentMethod } from "./SalesContext";
 import FrontDeskBookingsPanel from "../frontdesk/FrontDeskBookingsPanel";
 import RoomBoardPanel from "../frontdesk/RoomBoardPanel";
-import { getAllBookings, type BookingRecord } from "../frontdesk/bookingsStorage";
+import {
+  getAllBookings,
+  postRoomChargeToBooking,
+  type BookingRecord,
+} from "../frontdesk/bookingsStorage";
 
 type ItemRow = {
   id: string;
@@ -26,6 +30,10 @@ type TabKey =
 
 function uid() {
   return Math.random().toString(36).slice(2, 10);
+}
+
+function transactionUid() {
+  return `fd_tx_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
 }
 
 function money(n: number) {
@@ -52,6 +60,10 @@ function toPaymentMethod(value: string): PaymentMethod {
       return "bank_transfer";
     case "bank_transfer":
       return "bank_transfer";
+    case "post to room":
+    case "room folio":
+    case "room_folio":
+      return "room_folio";
     case "credit":
       return "credit";
     default:
@@ -177,6 +189,16 @@ export default function FrontDeskEntry() {
 
     syncShiftState();
   }, [shiftStatus, activeShift?.id, refreshActiveShift]);
+
+  useEffect(() => {
+    if (postToRoom && paymentMethod !== "Room Folio") {
+      setPaymentMethod("Room Folio");
+    }
+
+    if (!postToRoom && paymentMethod === "Room Folio") {
+      setPaymentMethod("Cash");
+    }
+  }, [postToRoom, paymentMethod]);
 
   const subtotal = useMemo(() => {
     return items.reduce((sum, item) => {
@@ -346,7 +368,9 @@ export default function FrontDeskEntry() {
       return;
     }
 
-    if (postToRoom && !findPostableRoomBooking(roomNo)) {
+    const roomBooking = postToRoom ? findPostableRoomBooking(roomNo) : null;
+
+    if (postToRoom && !roomBooking) {
       setMsg("Room posting requires an occupied or reserved room with an active booking.");
       return;
     }
@@ -359,6 +383,15 @@ export default function FrontDeskEntry() {
       const staffName =
         String((user as any)?.name || (user as any)?.fullName || "").trim() ||
         undefined;
+      const transactionId = transactionUid();
+      const effectivePaymentMethod = postToRoom ? "Room Folio" : paymentMethod;
+      const transactionItems = validItems.map((item) => ({
+        id: item.id,
+        name: item.name.trim(),
+        qty: Number(item.qty),
+        unitPrice: Number(item.unitPrice),
+        discount: Number(item.discount || 0),
+      }));
 
       validItems.forEach((item) => {
         addSale({
@@ -367,19 +400,45 @@ export default function FrontDeskEntry() {
           qty: Number(item.qty),
           unitPrice: Number(item.unitPrice),
           discount: Number(item.discount || 0),
-          paymentMethod: toPaymentMethod(paymentMethod),
-          customerName: customerName.trim() || undefined,
+          paymentMethod: toPaymentMethod(effectivePaymentMethod),
+          customerName:
+            customerName.trim() || (postToRoom ? roomBooking?.guestName : undefined),
           customerPhone: customerPhone.trim() || undefined,
           staffId,
           staffName,
+          transactionId,
+          bookingId: roomBooking?.id,
+          bookingCode: roomBooking?.bookingCode,
+          roomNo: postToRoom ? roomNo.trim() : undefined,
+          paymentMode: postToRoom ? "post_to_room" : "pay_now",
         });
       });
+
+      if (postToRoom && roomBooking) {
+        postRoomChargeToBooking(roomBooking.id, {
+          transactionId,
+          title: transactionType || "Room folio charge",
+          amount: subtotal,
+          source: "front-desk",
+          note: note.trim() || undefined,
+          items: transactionItems.map((item) => ({
+            name: item.name.trim(),
+            qty: Number(item.qty),
+            unitPrice: Number(item.unitPrice),
+            discount: Number(item.discount || 0),
+            total: Math.max(
+              0,
+              Number(item.qty) * Number(item.unitPrice) - Number(item.discount || 0)
+            ),
+          })),
+        });
+      }
 
       const itemCount = validItems.length;
       const extraNotes: string[] = [];
 
       if (postToRoom && roomNo.trim()) {
-        extraNotes.push(`Posted to room ${roomNo.trim()}`);
+        extraNotes.push(`Posted to room ${roomNo.trim()} folio`);
       }
       if (transactionType) {
         extraNotes.push(`Type: ${transactionType}`);
@@ -748,7 +807,11 @@ export default function FrontDeskEntry() {
                 name="postToRoom"
                 type="checkbox"
                 checked={postToRoom}
-                onChange={(e) => setPostToRoom(e.target.checked)}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setPostToRoom(checked);
+                  setPaymentMethod(checked ? "Room Folio" : "Cash");
+                }}
                 disabled={isReadOnly}
               />
               <label htmlFor="postToRoom" style={styles.labelInline}>
@@ -952,8 +1015,9 @@ export default function FrontDeskEntry() {
                   style={styles.input}
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  disabled={isReadOnly}
+                  disabled={isReadOnly || postToRoom}
                 >
+                  {postToRoom ? <option>Room Folio</option> : null}
                   <option>Cash</option>
                   <option>Card</option>
                   <option>MoMo</option>

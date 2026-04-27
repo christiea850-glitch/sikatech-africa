@@ -47,6 +47,7 @@ export type BookingRecord = {
   balance: number;
 
   notes?: string;
+  folioActivity?: BookingFolioActivity[];
 
   createdAt: number;
   updatedAt: number;
@@ -55,6 +56,26 @@ export type BookingRecord = {
     employeeId?: string;
     role?: string;
   };
+};
+
+export type BookingFolioActivityType = "charge" | "payment" | "note";
+
+export type BookingFolioActivity = {
+  id: string;
+  type: BookingFolioActivityType;
+  title: string;
+  amount: number;
+  createdAt: number;
+  transactionId?: string;
+  source?: string;
+  note?: string;
+  items?: Array<{
+    name: string;
+    qty: number;
+    unitPrice: number;
+    discount: number;
+    total: number;
+  }>;
 };
 
 const BOOKINGS_KEY = "sikatech_frontdesk_bookings_v1";
@@ -334,6 +355,57 @@ export function deriveRoomStatus(status: BookingStatus): RoomStatus {
     default:
       return "available";
   }
+}
+
+export function postRoomChargeToBooking(
+  id: string,
+  input: {
+    transactionId: string;
+    title: string;
+    amount: number;
+    source?: string;
+    note?: string;
+    items?: BookingFolioActivity["items"];
+  }
+) {
+  const amount = Math.max(0, safeNumber(input.amount, 0));
+  const list = getAllBookings();
+  let updated: BookingRecord | null = null;
+
+  const next = list.map((item) => {
+    if (item.id !== id) return item;
+
+    const activity: BookingFolioActivity = {
+      id: uid("folio"),
+      type: "charge",
+      title: String(input.title || "Room charge").trim(),
+      amount,
+      createdAt: Date.now(),
+      transactionId: input.transactionId,
+      source: input.source,
+      note: String(input.note || "").trim() || undefined,
+      items: input.items,
+    };
+
+    const totalAmount = Math.max(0, safeNumber(item.totalAmount, 0) + amount);
+    const amountPaid = clamp(safeNumber(item.amountPaid, 0), 0, totalAmount);
+    const balance = Math.max(0, totalAmount - amountPaid);
+
+    updated = {
+      ...item,
+      totalAmount,
+      amountPaid,
+      balance,
+      paymentStatus: balance <= 0 ? "paid" : amountPaid > 0 ? "partial" : "unpaid",
+      folioActivity: [activity, ...(item.folioActivity || [])],
+      updatedAt: Date.now(),
+    };
+
+    return updated;
+  });
+
+  saveBookings(next);
+  return updated;
 }
 
 export function normalizeRoomStatusForBookingStatus(

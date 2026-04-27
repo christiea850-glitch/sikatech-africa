@@ -28,6 +28,9 @@ type RoomCard = {
   checkInDate?: string;
   checkOutDate?: string;
   paymentStatus?: string;
+  totalAmount?: number;
+  amountPaid?: number;
+  balance?: number;
 };
 
 const DEFAULT_ROOMS: Array<{ roomNo: string; roomType: string }> = [
@@ -50,6 +53,10 @@ function formatDate(value?: string) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleDateString();
+}
+
+function money(n?: number) {
+  return Number.isFinite(Number(n)) ? Number(n).toFixed(2) : "0.00";
 }
 
 function normalizeStatus(value: string): RoomBoardStatus {
@@ -145,6 +152,9 @@ function buildRoomBoard(bookings: BookingRecord[]): RoomCard[] {
       checkInDate: canShowGuest(status) ? b.checkInDate : undefined,
       checkOutDate: canShowGuest(status) ? b.checkOutDate : undefined,
       paymentStatus: canShowGuest(status) ? b.paymentStatus : undefined,
+      totalAmount: b.totalAmount,
+      amountPaid: b.amountPaid,
+      balance: b.balance,
     });
   });
 
@@ -443,6 +453,18 @@ export default function RoomBoardPanel() {
                 <div style={styles.detailRow}>
                   <span style={styles.detailLabel}>Payment</span>
                   <span style={styles.detailValue}>{selectedRoom.paymentStatus || "—"}</span>
+                </div>
+                <div style={styles.detailRow}>
+                  <span style={styles.detailLabel}>Total</span>
+                  <span style={styles.detailValue}>{money(selectedRoom.totalAmount)}</span>
+                </div>
+                <div style={styles.detailRow}>
+                  <span style={styles.detailLabel}>Paid</span>
+                  <span style={styles.detailValue}>{money(selectedRoom.amountPaid)}</span>
+                </div>
+                <div style={styles.detailRow}>
+                  <span style={styles.detailLabel}>Balance</span>
+                  <span style={styles.detailValue}>{money(selectedRoom.balance)}</span>
                 </div>
               </div>
 
