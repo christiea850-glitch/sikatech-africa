@@ -19,6 +19,7 @@ import ShiftClosingSubmitPage from "./pages/ShiftClosingSubmitPage";
 import ReconcilePage from "./pages/ReconcilePage";
 import CashDeskClosingsPage from "./pages/CashDeskClosingsPage";
 import ExpensePage from "./expenses/ExpensePage";
+import AccountingWorkbenchPage from "./pages/AccountingWorkbenchPage";
 
 export default function App() {
   return (
@@ -40,6 +41,14 @@ export default function App() {
 
         <Route path="sales" element={<SalesPage />} />
         <Route path="sales-dashboard" element={<SalesDashboardPage />} />
+        <Route
+          path="accounting-workbench"
+          element={
+            <ProtectedRoute moduleKey="accounting-workbench">
+              <AccountingWorkbenchPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="expenses" element={<ExpensePage />} />
 
         <Route

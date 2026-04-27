@@ -62,6 +62,7 @@ export default function Sidebar() {
     if (key === "dashboard") return "/app/dashboard";
     if (key === "sales-entry") return "/app/sales";
     if (key === "sales-summary") return "/app/sales-dashboard";
+    if (key === "accounting-workbench") return "/app/accounting-workbench";
     if (key === "notifications") return "/app/notifications";
     if (key === "reconcile") return "/app/reconcile";
     if (key === "manage-modules") return "/app/manage-modules";
@@ -170,6 +171,15 @@ export default function Sidebar() {
         key: "cash-desk-closings",
         label: "Cash Desk Closings",
         path: modulePath("cash-desk-closings"),
+        group: "admin",
+      });
+    }
+
+    if (user.role === "accounting" || user.role === "admin") {
+      items.push({
+        key: "accounting-workbench",
+        label: "Accounting Workbench",
+        path: modulePath("accounting-workbench"),
         group: "admin",
       });
     }

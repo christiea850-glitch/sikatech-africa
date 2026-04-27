@@ -38,6 +38,12 @@ export default function ProtectedRoute({ children, moduleKey }: Props) {
       }
     }
 
+    if (moduleKey === "accounting-workbench") {
+      const allowed = user.role === "accounting" || user.role === "admin";
+      if (!allowed) return <Navigate to="/app/not-authorized" replace />;
+      return <>{children}</>;
+    }
+
     // Normal module access rules (admin bypass)
     const ok = canShowNav(user as any, modules as any, moduleKey) || user.role === "admin";
     if (!ok) return <Navigate to="/app/not-authorized" replace />;
