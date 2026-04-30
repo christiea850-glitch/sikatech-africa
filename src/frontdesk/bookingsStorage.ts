@@ -87,6 +87,7 @@ export type BookingFolioActivity = {
 };
 
 const BOOKINGS_KEY = "sikatech_frontdesk_bookings_v1";
+export const BOOKINGS_CHANGED_EVENT = "sikatech_frontdesk_bookings_changed";
 
 function uid(prefix = "bk") {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
@@ -99,6 +100,10 @@ function safeNumber(value: unknown, fallback = 0) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function roundMoney(value: number) {
+  return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
 }
 
 export function money(n: number) {
@@ -121,6 +126,11 @@ export function loadBookings(): BookingRecord[] {
 
 export function saveBookings(list: BookingRecord[]) {
   localStorage.setItem(BOOKINGS_KEY, JSON.stringify(list));
+  try {
+    window.dispatchEvent(new CustomEvent(BOOKINGS_CHANGED_EVENT));
+  } catch {
+    // Storage writes must still succeed in non-browser test contexts.
+  }
 }
 
 export function getAllBookings() {
@@ -439,8 +449,8 @@ export function recordPaymentToBooking(
     submittedBy?: string;
     submissionMode?: "manual" | "automatic";
   }
-) {
-  const amount = Math.max(0, safeNumber(input.amount, 0));
+): BookingRecord {
+  const amount = roundMoney(Math.max(0, safeNumber(input.amount, 0)));
   const list = getAllBookings();
   let updated: BookingRecord | null = null;
   let error: string | null = null;
@@ -448,28 +458,41 @@ export function recordPaymentToBooking(
   const next = list.map((item) => {
     if (item.id !== id) return item;
 
-    const currentBalance = Math.max(0, safeNumber(item.balance, 0));
+    const totalAmount = roundMoney(Math.max(0, safeNumber(item.totalAmount, 0)));
+    const currentAmountPaid = roundMoney(
+      clamp(safeNumber(item.amountPaid, 0), 0, totalAmount)
+    );
+    const currentBalance = roundMoney(Math.max(0, totalAmount - currentAmountPaid));
 
     if (amount <= 0) {
       error = "Enter a payment amount greater than 0.";
       return item;
     }
 
-    if (amount > currentBalance) {
+    if (currentBalance <= 0.01) {
+      error = "This booking has no unpaid balance.";
+      return item;
+    }
+
+    if (amount > currentBalance + 0.01) {
       error = "Payment cannot be greater than the unpaid balance.";
       return item;
     }
 
-    const totalAmount = Math.max(0, safeNumber(item.totalAmount, 0));
-    const amountPaid = clamp(safeNumber(item.amountPaid, 0) + amount, 0, totalAmount);
-    const balance = Math.max(0, totalAmount - amountPaid);
+    const appliedAmount = Math.min(amount, currentBalance);
+    const nextAmountPaid = roundMoney(
+      clamp(currentAmountPaid + appliedAmount, 0, totalAmount)
+    );
+    const remainingBalance = roundMoney(Math.max(0, totalAmount - nextAmountPaid));
+    const balance = remainingBalance <= 0.01 ? 0 : remainingBalance;
+    const amountPaid = balance === 0 ? totalAmount : nextAmountPaid;
     const paymentMethod = input.paymentMethod;
 
     const activity: BookingFolioActivity = {
       id: uid("payment"),
       type: "payment",
       title: `Payment - ${paymentMethod}`,
-      amount,
+      amount: appliedAmount,
       createdAt: Date.now(),
       source: input.source,
       paymentMethod,
@@ -485,7 +508,7 @@ export function recordPaymentToBooking(
       ...item,
       amountPaid,
       balance,
-      paymentStatus: balance <= 0 ? "paid" : amountPaid > 0 ? "partial" : "unpaid",
+      paymentStatus: balance <= 0.01 ? "paid" : "partial",
       folioActivity: [activity, ...(item.folioActivity || [])],
       updatedAt: Date.now(),
     };
@@ -497,8 +520,13 @@ export function recordPaymentToBooking(
     throw new Error(error);
   }
 
+  const savedBooking = next.find((item) => item.id === id) || updated;
+  if (!savedBooking) {
+    throw new Error("Booking was not found.");
+  }
+
   saveBookings(next);
-  return updated;
+  return savedBooking;
 }
 
 export function normalizeRoomStatusForBookingStatus(

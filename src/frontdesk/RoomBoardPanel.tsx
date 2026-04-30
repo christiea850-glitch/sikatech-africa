@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import {
+  BOOKINGS_CHANGED_EVENT,
   getAllBookings,
   normalizeRoomStatusForBookingStatus,
   roomStatusColor,
@@ -171,6 +172,12 @@ export default function RoomBoardPanel() {
     void version;
     return getAllBookings();
   }, [version]);
+
+  useEffect(() => {
+    const refreshBookings = () => setVersion((v) => v + 1);
+    window.addEventListener(BOOKINGS_CHANGED_EVENT, refreshBookings);
+    return () => window.removeEventListener(BOOKINGS_CHANGED_EVENT, refreshBookings);
+  }, []);
 
   const rooms = useMemo(() => buildRoomBoard(bookings), [bookings]);
 

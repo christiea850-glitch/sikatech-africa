@@ -4,7 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useSales } from "../sales/SalesContext";
 import { useExpenses } from "../expenses/ExpenseContext";
 import { useBusinessSetup } from "../setup/BusinessSetupContext";
-import { getAllBookings } from "../frontdesk/bookingsStorage";
+import { BOOKINGS_CHANGED_EVENT, getAllBookings } from "../frontdesk/bookingsStorage";
 import { formatDepartmentLabel, normalizeDepartmentKey } from "../lib/departments";
 import { useShift } from "../shifts/ShiftContext";
 import { formatShiftStatus, recordShiftSubmission, resolveShiftTrace, type ShiftTraceStatus } from "../lib/shiftTrace";
@@ -218,6 +218,7 @@ export default function AccountingWorkbenchPage() {
 
   const [reviewVersion, setReviewVersion] = useState(0);
   const [traceVersion, setTraceVersion] = useState(0);
+  const [bookingVersion, setBookingVersion] = useState(0);
   const [resolvedUnclosedAlerts, setResolvedUnclosedAlerts] = useState<string[]>(() => loadResolvedUnclosedAlerts());
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -249,8 +250,15 @@ export default function AccountingWorkbenchPage() {
     return new Map(reviews.map((item) => [item.recordId, item]));
   }, [reviews]);
 
+  useEffect(() => {
+    const refreshBookings = () => setBookingVersion((v) => v + 1);
+    window.addEventListener(BOOKINGS_CHANGED_EVENT, refreshBookings);
+    return () => window.removeEventListener(BOOKINGS_CHANGED_EVENT, refreshBookings);
+  }, []);
+
   const rows = useMemo<AccountingRow[]>(() => {
     void traceVersion;
+    void bookingVersion;
     const directSales: AccountingRow[] = (salesRecords || [])
       .filter(
         (sale) =>
@@ -394,7 +402,7 @@ export default function AccountingWorkbenchPage() {
     return [...roomBookingRows, ...directSales, ...folioRows, ...expenses].sort(
       (a, b) => new Date(b.transactionTime).getTime() - new Date(a.transactionTime).getTime()
     );
-  }, [salesRecords, expenseRecords, shifts, traceVersion]);
+  }, [salesRecords, expenseRecords, shifts, traceVersion, bookingVersion]);
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {

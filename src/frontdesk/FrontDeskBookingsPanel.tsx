@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { useShift } from "../shifts/ShiftContext";
 import {
   bookingStatusColor,
+  BOOKINGS_CHANGED_EVENT,
   createBooking,
   getAllBookings,
+  getBookingById,
   isFuture,
   isToday,
   normalizeRoomStatusForBookingStatus,
@@ -23,6 +25,10 @@ import {
 
 function money(n: number) {
   return Number.isFinite(n) ? n.toFixed(2) : "0.00";
+}
+
+function roundMoney(value: number) {
+  return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
 }
 
 function formatDate(value: string) {
@@ -191,12 +197,20 @@ export default function FrontDeskBookingsPanel() {
   }, [selectedBooking]);
 
   const selectedAmounts = useMemo(() => {
+    const total = Math.max(0, Number(selectedBooking?.totalAmount ?? 0) || 0);
+    const paid = Math.min(total, Math.max(0, Number(selectedBooking?.amountPaid ?? 0) || 0));
     return {
-      totalAmount: Math.max(0, Number(selectedBooking?.totalAmount ?? 0) || 0),
-      amountPaid: Math.max(0, Number(selectedBooking?.amountPaid ?? 0) || 0),
-      balance: Math.max(0, Number(selectedBooking?.balance ?? 0) || 0),
+      totalAmount: total,
+      amountPaid: paid,
+      balance: Math.max(0, total - paid),
     };
   }, [selectedBooking]);
+
+  useEffect(() => {
+    const refreshBookings = () => setVersion((v) => v + 1);
+    window.addEventListener(BOOKINGS_CHANGED_EVENT, refreshBookings);
+    return () => window.removeEventListener(BOOKINGS_CHANGED_EVENT, refreshBookings);
+  }, []);
 
   function resetFolioPaymentForm() {
     setFolioPaymentAmount(0);
@@ -270,12 +284,20 @@ export default function FrontDeskBookingsPanel() {
   }
 
   function handleRecordPayment() {
-    if (!selectedBooking) return;
+    if (!selectedBookingId) return;
 
-    const balance = selectedAmounts.balance;
-    const amount = Math.max(0, Number(folioPaymentAmount) || 0);
+    const latestBooking = getBookingById(selectedBookingId);
+    if (!latestBooking) {
+      setMsg("Booking was not found.");
+      return;
+    }
 
-    if (balance <= 0) {
+    const total = roundMoney(Math.max(0, Number(latestBooking.totalAmount) || 0));
+    const paid = roundMoney(Math.min(total, Math.max(0, Number(latestBooking.amountPaid) || 0)));
+    const balance = roundMoney(Math.max(0, total - paid));
+    const amount = roundMoney(Math.max(0, Number(folioPaymentAmount) || 0));
+
+    if (balance <= 0.01) {
       setMsg("This booking has no unpaid balance.");
       return;
     }
@@ -285,22 +307,28 @@ export default function FrontDeskBookingsPanel() {
       return;
     }
 
-    if (amount > balance) {
+    if (amount > balance + 0.01) {
       setMsg("Payment cannot be greater than the unpaid balance.");
       return;
     }
 
     try {
-      recordPaymentToBooking(selectedBooking.id, {
+      const submittedBy =
+        user?.employeeId || (user as any)?.username || (user as any)?.name || user?.role;
+      const updated = recordPaymentToBooking(latestBooking.id, {
         amount,
         paymentMethod: folioPaymentMethod,
         source: "front-desk",
         note: folioPaymentNote.trim() || undefined,
         shiftId: activeShift?.id ? String(activeShift.id) : undefined,
         shiftStatus: activeShift?.id ? "open" : "unclosed",
-        submittedBy: user?.employeeId,
+        submittedAt: new Date().toISOString(),
+        submittedBy,
+        submissionMode: "manual",
       });
-      const remainingBalance = Math.max(0, balance - amount);
+      const remainingBalance = roundMoney(
+        Math.max(0, Number(updated?.balance ?? balance - amount) || 0)
+      );
 
       setMsg(`Payment recorded. Remaining balance: ${money(remainingBalance)}.`);
       setFolioPaymentAmount(0);
@@ -760,12 +788,12 @@ export default function FrontDeskBookingsPanel() {
                   <button
                     type="button"
                     style={
-                      selectedAmounts.balance <= 0
+                      folioPaymentAmount <= 0
                         ? styles.disabledBtn
                         : styles.primaryBtn
                     }
                     onClick={handleRecordPayment}
-                    disabled={selectedAmounts.balance <= 0}
+                    disabled={folioPaymentAmount <= 0}
                   >
                     Record Payment
                   </button>

@@ -1,5 +1,5 @@
 // src/pages/SalesDashboardPage.tsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -18,7 +18,7 @@ import {
 import { useDepartments } from "../departments/DepartmentsContext";
 import { useSales } from "../sales/SalesContext";
 import { useExpenses } from "../expenses/ExpenseContext";
-import { getAllBookings } from "../frontdesk/bookingsStorage";
+import { BOOKINGS_CHANGED_EVENT, getAllBookings } from "../frontdesk/bookingsStorage";
 import { useShift } from "../shifts/ShiftContext";
 import { normalizeDepartmentKey } from "../lib/departments";
 import { formatShiftStatus, resolveShiftTrace } from "../lib/shiftTrace";
@@ -486,8 +486,16 @@ export default function SalesDashboardPage() {
   const [selectedTx, setSelectedTx] = useState<Tx | null>(null);
   const [selectedExpense, setSelectedExpense] = useState<ExpenseRow | null>(null);
   const [activeTab, setActiveTab] = useState<MainTab>("overview");
+  const [bookingVersion, setBookingVersion] = useState(0);
+
+  useEffect(() => {
+    const refreshBookings = () => setBookingVersion((v) => v + 1);
+    window.addEventListener(BOOKINGS_CHANGED_EVENT, refreshBookings);
+    return () => window.removeEventListener(BOOKINGS_CHANGED_EVENT, refreshBookings);
+  }, []);
 
   const rawTransactions = useMemo(() => {
+    void bookingVersion;
     const directSales = (records || [])
       .filter((r: any) => !isRoomFolioSaleRecord(r))
       .map((r: any) => {
@@ -564,7 +572,7 @@ export default function SalesDashboardPage() {
     );
 
     return [...directSales, ...folioRows];
-  }, [records, shifts]);
+  }, [records, shifts, bookingVersion]);
 
   const departmentOptions = useMemo(() => {
     const fromConfig = (departments || []).map((d: any) => ({
