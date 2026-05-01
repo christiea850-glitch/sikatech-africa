@@ -31,6 +31,7 @@ import {
 import {
   FINANCIAL_LEDGER_CHANGED_EVENT,
   loadLedgerEntries,
+  normalizeLedgerPaymentMethod,
   selectLedgerTotals,
   type CanonicalLedgerEntry,
 } from "../finance/financialLedger";
@@ -155,17 +156,6 @@ function getDateRangeLabel(startDate: string, endDate: string) {
   return `Until ${formatDateInputLabel(endDate)}`;
 }
 
-function getPaymentBucket(t: Tx) {
-  const pm = upper(t?.paymentMethod);
-
-  if (pm === "CASH") return "cash";
-  if (pm === "MOMO") return "momo";
-  if (pm === "CARD") return "card";
-  if (pm === "TRANSFER" || pm === "BANK_TRANSFER") return "transfer";
-
-  return "other";
-}
-
 function isRoomFolioSaleRecord(t: Tx) {
   return (
     lower(t?.paymentMode) === "post_to_room" ||
@@ -190,10 +180,6 @@ function getTxAmount(t: Tx) {
 
 function getRevenueAmount(t: Tx) {
   return isGuestPayment(t) ? 0 : getTxAmount(t);
-}
-
-function getCollectionAmount(t: Tx) {
-  return lower(t?.accountingSource) === "room_folio_charge" ? 0 : getTxAmount(t);
 }
 
 function getTxTime(t: Tx) {
@@ -770,31 +756,44 @@ export default function SalesDashboardPage() {
     [filteredLedgerEntries]
   );
 
+  const paymentBreakdown = useMemo(() => {
+    const emptyBreakdown = {
+      cash: 0,
+      momo: 0,
+      card: 0,
+      transfer: 0,
+      other: 0,
+      total: 0,
+    };
+
+    return filteredLedgerEntries
+      .filter((entry) => entry.sourceType === "guest_payment_collection")
+      .reduce((totals, entry) => {
+        const amount = Number(entry.collectionAmount) || 0;
+        const method = normalizeLedgerPaymentMethod(entry.paymentMethod, "cash");
+
+        if (method === "cash") totals.cash += amount;
+        else if (method === "momo") totals.momo += amount;
+        else if (method === "card") totals.card += amount;
+        else if (method === "transfer") totals.transfer += amount;
+        else totals.other += amount;
+
+        totals.total += amount;
+        return totals;
+      }, emptyBreakdown);
+  }, [filteredLedgerEntries]);
+
   const summary = useMemo(() => {
     let revenue = 0;
-    let cash = 0;
-    let momo = 0;
-    let card = 0;
-    let transfer = 0;
-    let other = 0;
 
     for (const t of filteredTransactions) {
-      const amount = getCollectionAmount(t);
       revenue += getRevenueAmount(t);
-
-      const bucket = getPaymentBucket(t);
-      if (bucket === "cash") cash += amount;
-      else if (bucket === "momo") momo += amount;
-      else if (bucket === "card") card += amount;
-      else if (bucket === "transfer") transfer += amount;
-      else other += amount;
     }
 
     const revenueTransactionCount = filteredTransactions.filter(
       (t: Tx) => getRevenueAmount(t) > 0
     ).length;
     const averageSale = revenueTransactionCount > 0 ? revenue / revenueTransactionCount : 0;
-    const collections = cash + momo + card + transfer + other;
     const ledgerNetProfit = ledgerTotals.revenue - ledgerTotals.expenses;
 
     return {
@@ -805,14 +804,14 @@ export default function SalesDashboardPage() {
       netProfit: ledgerNetProfit,
       averageSale,
       transactions: filteredTransactions.length,
-      cash,
-      momo,
-      card,
-      transfer,
-      other,
-      legacyCollections: collections,
+      cash: paymentBreakdown.cash,
+      momo: paymentBreakdown.momo,
+      card: paymentBreakdown.card,
+      transfer: paymentBreakdown.transfer,
+      other: paymentBreakdown.other,
+      paymentCollections: paymentBreakdown.total,
     };
-  }, [filteredTransactions, ledgerTotals]);
+  }, [filteredTransactions, ledgerTotals, paymentBreakdown]);
 
   const departmentPerformance = useMemo(() => {
     const map = new Map<
@@ -922,7 +921,7 @@ export default function SalesDashboardPage() {
   }, [visibleExpenses]);
 
   const paymentMix = useMemo(() => {
-    const total = summary.legacyCollections || 1;
+    const total = summary.paymentCollections || 1;
 
     return [
       { label: "Cash", value: summary.cash, percent: (summary.cash / total) * 100 },
