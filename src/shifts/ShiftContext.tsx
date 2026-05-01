@@ -59,6 +59,13 @@ function newestOpenShift(shifts: Shift[]): Shift | null {
   return open[0] ?? null;
 }
 
+function resolveBusinessId(raw: unknown) {
+  const value = String(raw ?? "").trim();
+  if (value === "biz_main") return 1;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
 export function ShiftProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
 
@@ -136,12 +143,16 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
     try {
       const res = await apiSubmitClosing(id);
       if (!res.ok) return setError(res.error || "Failed to submit closing");
+      const shift = shifts.find((item) => String(item.id) === id) || res.shift;
       recordShiftSubmission({
         shiftId: id,
         status: "submitted",
         submittedAt: new Date().toISOString(),
         submittedBy: (user as any)?.employeeId || "staff",
         submissionMode: "manual",
+        businessId: shift?.businessId || (user as any)?.businessId || resolveBusinessId(null),
+        branchId: shift?.branchId || (user as any)?.branchId,
+        departmentKey: shift?.departmentKey || deptKey,
       });
       await refresh(deptKey, true);
     } catch (e: any) {
@@ -169,6 +180,7 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
         submittedAt: new Date().toISOString(),
         submittedBy: (user as any)?.employeeId || "accounting",
         submissionMode: "manual",
+        notes: note,
       });
       await refresh(deptKey, true);
     } catch (e: any) {

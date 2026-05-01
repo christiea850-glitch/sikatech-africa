@@ -219,11 +219,22 @@ export default function SalesEntryPanel() {
       });
 
       recordShiftSubmission({
+        closingId: res.id,
         shiftId: activeShift.id,
         status: "submitted",
         submittedAt: new Date().toISOString(),
         submittedBy: String(user?.employeeId || "staff"),
         submissionMode: "manual",
+        businessId,
+        departmentKey: deptKey,
+        cashExpected,
+        cashCounted,
+        cardTotal,
+        momoTotal,
+        expensesTotal,
+        notes: note?.trim()
+          ? note.trim()
+          : `Submitted from SalesEntryPanel for shift ${activeShift.id}`,
       });
       setSubmittedLocal(true);
       setMsg(`Shift submitted for closing successfully. Closing ID: ${res.id}`);

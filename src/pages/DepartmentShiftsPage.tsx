@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { listShifts, openShift, submitClosing, type Shift } from "../shifts/shiftsApi";
 import { useAuth } from "../auth/AuthContext";
+import { recordShiftSubmission } from "../lib/shiftTrace";
 
 function fmt(ms?: number) {
   if (!ms) return "-";
@@ -75,6 +76,18 @@ export default function DepartmentShiftsPage() {
       setLoading(false);
       return;
     }
+
+    const shift = shifts.find((item) => String(item.id) === String(shiftId)) || res.shift;
+    recordShiftSubmission({
+      shiftId,
+      status: "submitted",
+      submittedAt: new Date().toISOString(),
+      submittedBy: (user as any)?.employeeId || "staff",
+      submissionMode: "manual",
+      businessId: (shift as any)?.businessId || (user as any)?.businessId,
+      branchId: (shift as any)?.branchId || (user as any)?.branchId,
+      departmentKey: (shift as any)?.departmentKey || departmentKey,
+    });
 
     await refresh();
     setLoading(false);

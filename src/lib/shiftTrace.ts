@@ -1,7 +1,9 @@
 import { normalizeDepartmentKey } from "./departments";
+import { ensureShiftClosingRecord, SHIFT_CLOSINGS_CHANGED_EVENT } from "../shifts/shiftClosingStore";
 
 export type ShiftTraceStatus = "open" | "unclosed" | "submitted" | "reviewed" | "auto_submitted";
 export type SubmissionMode = "manual" | "automatic";
+export const SHIFT_TRACE_CHANGED_EVENT = "sikatech_shift_trace_changed";
 
 export type ShiftTrace = {
   shiftId?: string;
@@ -35,6 +37,9 @@ function readTraceStore(): Record<string, ShiftTrace> {
 function writeTraceStore(store: Record<string, ShiftTrace>) {
   try {
     localStorage.setItem(TRACE_KEY, JSON.stringify(store));
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent(SHIFT_TRACE_CHANGED_EVENT));
+    }, 0);
   } catch {
     // Trace metadata should never block transaction visibility.
   }
@@ -42,23 +47,65 @@ function writeTraceStore(store: Record<string, ShiftTrace>) {
 
 export function recordShiftSubmission(input: {
   shiftId?: string | number;
+  closingId?: string | number;
   status?: ShiftTraceStatus;
   submittedAt?: string;
   submittedBy?: string;
   submissionMode?: SubmissionMode;
+  businessId?: string | number;
+  branchId?: string | null;
+  departmentKey?: string | null;
+  notes?: string | null;
+  cashExpected?: number;
+  cashCounted?: number;
+  cardTotal?: number;
+  momoTotal?: number;
+  transferTotal?: number;
+  expensesTotal?: number;
 }) {
   const shiftId = String(input.shiftId ?? "").trim();
   if (!shiftId) return;
+  const shiftStatus = input.status || "submitted";
+  const submittedAt = input.submittedAt || new Date().toISOString();
 
   const store = readTraceStore();
   store[shiftId] = {
     shiftId,
-    shiftStatus: input.status || "submitted",
-    submittedAt: input.submittedAt || new Date().toISOString(),
+    shiftStatus,
+    submittedAt,
     submittedBy: input.submittedBy,
     submissionMode: input.submissionMode || "manual",
   };
   writeTraceStore(store);
+
+  if (shiftStatus === "submitted" || shiftStatus === "auto_submitted" || shiftStatus === "reviewed") {
+    ensureShiftClosingRecord({
+      id: input.closingId,
+      shiftId,
+      businessId: input.businessId,
+      branchId: input.branchId,
+      departmentKey: input.departmentKey,
+      submittedAt,
+      submittedBy: input.submittedBy,
+      submissionMode: input.submissionMode || "manual",
+      status: shiftStatus,
+      notes: input.notes,
+      cashExpected: input.cashExpected,
+      cashCounted: input.cashCounted,
+      cardTotal: input.cardTotal,
+      momoTotal: input.momoTotal,
+      transferTotal: input.transferTotal,
+      expensesTotal: input.expensesTotal,
+    });
+  } else {
+    try {
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent(SHIFT_CLOSINGS_CHANGED_EVENT));
+      }, 0);
+    } catch {
+      // Best-effort cross-dashboard refresh only.
+    }
+  }
 }
 
 export function parseTraceTime(value: unknown) {
@@ -83,7 +130,7 @@ export function parseTraceTime(value: unknown) {
 export function normalizeShiftTraceStatus(status: unknown): ShiftTraceStatus {
   const value = String(status ?? "").trim().toLowerCase();
   if (value === "auto_submitted" || value === "auto-submitted") return "auto_submitted";
-  if (value === "accounting_reviewed" || value === "reviewed" || value === "manager_approved" || value === "closed") return "reviewed";
+  if (value === "accounting_reviewed" || value === "accounting_approved" || value === "reviewed" || value === "manager_approved" || value === "closed") return "reviewed";
   if (value === "closing_submitted" || value === "submitted" || value === "pending_close" || value === "pending_closing") return "submitted";
   if (value === "open") return "open";
   if (value === "unclosed") return "unclosed";

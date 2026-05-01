@@ -1,6 +1,15 @@
 // src/pages/CashDeskClosingsPage.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { recordShiftSubmission } from "../lib/shiftTrace";
+import {
+  getShiftClosingById,
+  loadShiftClosings,
+  reviewShiftClosing,
+  SHIFT_CLOSINGS_CHANGED_EVENT,
+  upsertShiftClosingRecord,
+  type ShiftClosingRecord,
+} from "../shifts/shiftClosingStore";
 
 type Role =
   | "admin"
@@ -25,6 +34,7 @@ type ClosingRow = {
   cash_counted: number | string;
   card_total: number | string;
   momo_total: number | string;
+  transfer_total?: number | string;
   expenses_total: number | string;
 
   notes?: string | null;
@@ -32,6 +42,7 @@ type ClosingRow = {
   accounting_reviewed_by_user_id?: number | string | null;
   accounting_reviewed_at?: string | null;
   accounting_note?: string | null;
+  accounting_review_status?: "pending" | "approved" | "rejected";
 
   manager_approved_by_user_id?: number | string | null;
   manager_approved_at?: string | null;
@@ -96,21 +107,16 @@ function resolveBusinessId(raw: unknown): number {
 }
 
 function canManagerApprove(role: string) {
-  return role === "manager" || role === "assistant_manager" || role === "admin";
+  void role;
+  return false;
 }
 
 function canAccountingReview(role: string) {
-  return role === "accounting" || role === "admin";
+  return role === "accounting";
 }
 
 function canReject(role: string) {
-  return (
-    role === "admin" ||
-    role === "manager" ||
-    role === "assistant_manager" ||
-    role === "accounting" ||
-    role === "auditor"
-  );
+  return role === "accounting";
 }
 
 function statusLabel(status: string) {
@@ -119,8 +125,12 @@ function statusLabel(status: string) {
       return "All";
     case "submitted":
       return "Submitted";
+    case "auto_submitted":
+      return "Auto Submitted";
     case "accounting_reviewed":
       return "Accounting Reviewed";
+    case "accounting_approved":
+      return "Accounting Approved";
     case "manager_approved":
       return "Manager Approved";
     case "rejected":
@@ -141,6 +151,7 @@ function badgeStyle(status: string): React.CSSProperties {
         display: "inline-block",
       };
     case "accounting_reviewed":
+    case "accounting_approved":
       return {
         padding: "6px 10px",
         borderRadius: 999,
@@ -175,6 +186,20 @@ function badgeStyle(status: string): React.CSSProperties {
   }
 }
 
+function sortRows(rows: ClosingRow[]) {
+  return [...rows].sort(
+    (a, b) =>
+      new Date(b.submitted_at || 0).getTime() - new Date(a.submitted_at || 0).getTime()
+  );
+}
+
+function mergeClosingRows(apiRows: ClosingRow[], localRows: ShiftClosingRecord[], status: string) {
+  const map = new Map<string, ClosingRow>();
+  apiRows.forEach((row) => map.set(String(row.id), row));
+  localRows.forEach((row) => map.set(String(row.id), row as ClosingRow));
+  return sortRows(Array.from(map.values()).filter((row) => !status || row.status === status));
+}
+
 export default function CashDeskClosingsPage() {
   const { user } = useAuth();
   const role = (user?.role ?? "staff") as Role;
@@ -197,6 +222,28 @@ export default function CashDeskClosingsPage() {
 
   const currentBusinessId = resolveBusinessId(user?.businessId);
 
+  function reviewerId() {
+    return user?.employeeId || (user as any)?.username || (user as any)?.name || role;
+  }
+
+  function mirrorClosingToLocal(row: ClosingRow) {
+    return upsertShiftClosingRecord({
+      id: row.id,
+      businessId: row.business_id || currentBusinessId,
+      shiftId: row.shift_id,
+      submittedAt: row.submitted_at,
+      submittedBy: row.submitted_by_user_id,
+      status: row.status,
+      cashExpected: Number(row.cash_expected) || 0,
+      cashCounted: Number(row.cash_counted) || 0,
+      cardTotal: Number(row.card_total) || 0,
+      momoTotal: Number(row.momo_total) || 0,
+      transferTotal: Number(row.transfer_total) || 0,
+      expensesTotal: Number(row.expenses_total) || 0,
+      notes: row.notes || null,
+    });
+  }
+
   async function load() {
     try {
       setErr(null);
@@ -205,6 +252,7 @@ export default function CashDeskClosingsPage() {
       const query = new URLSearchParams();
       query.set("businessId", String(currentBusinessId));
       if (status) query.set("status", status);
+      const localRows = loadShiftClosings();
 
       const res = await fetch(`${API_BASE}/api/shift-closing?${query.toString()}`, {
         headers: buildAuthHeaders(role),
@@ -213,15 +261,24 @@ export default function CashDeskClosingsPage() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setRows([]);
-        setErr(data?.error || `Failed to load (${res.status})`);
+        setRows(mergeClosingRows([], localRows, status));
+        setErr(
+          localRows.length > 0
+            ? "Server unavailable; showing locally captured closings."
+            : data?.error || `Failed to load (${res.status})`
+        );
         return;
       }
 
-      setRows(Array.isArray(data?.rows) ? data.rows : []);
+      setRows(mergeClosingRows(Array.isArray(data?.rows) ? data.rows : [], localRows, status));
     } catch (e: any) {
-      setRows([]);
-      setErr(e?.message || "Failed to fetch");
+      const localRows = loadShiftClosings();
+      setRows(mergeClosingRows([], localRows, status));
+      setErr(
+        localRows.length > 0
+          ? "Server unavailable; showing locally captured closings."
+          : e?.message || "Failed to fetch"
+      );
     } finally {
       setLoading(false);
     }
@@ -232,21 +289,30 @@ export default function CashDeskClosingsPage() {
       setErr(null);
       setBusyId(closingId);
 
-      const note = window.prompt("Optional accounting note:", "") ?? "";
+      const row = rows.find((item) => String(item.id) === String(closingId));
+      if (!row) {
+        setErr("Closing record was not found.");
+        return;
+      }
 
-      const res = await fetch(`${API_BASE}/api/shift-closing/${closingId}/accounting-review`, {
-        method: "PATCH",
-        headers: buildAuthHeaders(role),
-        body: JSON.stringify({
-          accountingNote: note.trim() || null,
-        }),
+      const note = window.prompt("Optional accounting approval note:", "") ?? "";
+      const local = getShiftClosingById(closingId) || mirrorClosingToLocal(row);
+      const updated = reviewShiftClosing({
+        id: local.id,
+        reviewStatus: "approved",
+        note,
+        reviewedBy: reviewerId(),
       });
 
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        setErr(data?.error || `Accounting review failed (${res.status})`);
-        return;
+      if (updated.shift_id) {
+        recordShiftSubmission({
+          shiftId: updated.shift_id,
+          status: "reviewed",
+          submittedAt: updated.accounting_reviewed_at || new Date().toISOString(),
+          submittedBy: String(reviewerId()),
+          submissionMode: "manual",
+          notes: note,
+        });
       }
 
       await load();
@@ -298,20 +364,19 @@ export default function CashDeskClosingsPage() {
         return;
       }
 
-      const res = await fetch(`${API_BASE}/api/shift-closing/${closingId}/reject`, {
-        method: "PATCH",
-        headers: buildAuthHeaders(role),
-        body: JSON.stringify({
-          reason: reason.trim(),
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        setErr(data?.error || `Reject failed (${res.status})`);
+      const row = rows.find((item) => String(item.id) === String(closingId));
+      if (!row) {
+        setErr("Closing record was not found.");
         return;
       }
+
+      const local = getShiftClosingById(closingId) || mirrorClosingToLocal(row);
+      reviewShiftClosing({
+        id: local.id,
+        reviewStatus: "rejected",
+        note: reason.trim(),
+        reviewedBy: reviewerId(),
+      });
 
       await load();
     } catch (e: any) {
@@ -324,6 +389,14 @@ export default function CashDeskClosingsPage() {
   useEffect(() => {
     if (!canSeePage) return;
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, canSeePage, currentBusinessId]);
+
+  useEffect(() => {
+    if (!canSeePage) return;
+    const refresh = () => load();
+    window.addEventListener(SHIFT_CLOSINGS_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(SHIFT_CLOSINGS_CHANGED_EVENT, refresh);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, canSeePage, currentBusinessId]);
 
@@ -364,7 +437,9 @@ export default function CashDeskClosingsPage() {
           >
             <option value="">All</option>
             <option value="submitted">Submitted</option>
+            <option value="auto_submitted">Auto Submitted</option>
             <option value="accounting_reviewed">Accounting Reviewed</option>
+            <option value="accounting_approved">Accounting Approved</option>
             <option value="manager_approved">Manager Approved</option>
             <option value="rejected">Rejected</option>
           </select>
@@ -424,7 +499,10 @@ export default function CashDeskClosingsPage() {
             <tbody>
               {rows.map((r) => {
                 const canDoAccountingReview =
-                  canAccountingReview(role) && r.status === "submitted";
+                  canAccountingReview(role) &&
+                  (r.status === "submitted" ||
+                    r.status === "auto_submitted" ||
+                    r.status === "accounting_reviewed");
 
                 const canDoManagerApprove =
                   canManagerApprove(role) && r.status === "accounting_reviewed";
@@ -497,7 +575,7 @@ export default function CashDeskClosingsPage() {
                             disabled={isBusy}
                             onClick={() => handleAccountingReview(r.id)}
                           >
-                            {isBusy ? "Working..." : "Accounting Review"}
+                            {isBusy ? "Working..." : "Approve"}
                           </button>
                         )}
 

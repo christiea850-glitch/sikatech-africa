@@ -373,11 +373,22 @@ export default function FrontDeskEntry() {
       });
 
       recordShiftSubmission({
+        closingId: res.id,
         shiftId: activeShift.id,
         status: "submitted",
         submittedAt: new Date().toISOString(),
         submittedBy: getStringField(user, "employeeId") || "staff",
         submissionMode: "manual",
+        businessId,
+        departmentKey: "front-desk",
+        cashExpected,
+        cashCounted,
+        cardTotal,
+        momoTotal,
+        expensesTotal,
+        notes: note?.trim()
+          ? note.trim()
+          : `Submitted from FrontDeskEntry for shift ${activeShift.id}`,
       });
       setSubmittedLocal(true);
       setMsg(`Shift submitted for closing successfully. Closing ID: ${res.id}`);

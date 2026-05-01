@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useBusinessSetup } from "../setup/BusinessSetupContext";
 import { submitShiftClosing } from "../api/shiftClosingApi";
+import { upsertShiftClosingRecord } from "../shifts/shiftClosingStore";
 
 function toNumber(v: string) {
   const n = Number(v);
@@ -50,6 +51,24 @@ export default function ShiftClosingSubmitPage() {
     try {
       const res = await submitShiftClosing({
         businessId,
+        cashExpected: toNumber(cashExpected),
+        cashCounted: toNumber(cashCounted),
+        cardTotal: toNumber(cardTotal),
+        momoTotal: toNumber(momoTotal),
+        expensesTotal: toNumber(expensesTotal),
+        notes: notes.trim() ? notes.trim() : null,
+      });
+
+      upsertShiftClosingRecord({
+        id: res.id,
+        businessId,
+        submittedAt: new Date().toISOString(),
+        submittedBy:
+          localStorage.getItem("dev_user_id") ||
+          localStorage.getItem("dev_role") ||
+          "staff",
+        submissionMode: "manual",
+        status: "submitted",
         cashExpected: toNumber(cashExpected),
         cashCounted: toNumber(cashCounted),
         cardTotal: toNumber(cardTotal),

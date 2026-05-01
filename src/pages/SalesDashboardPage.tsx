@@ -21,7 +21,8 @@ import { useExpenses } from "../expenses/ExpenseContext";
 import { BOOKINGS_CHANGED_EVENT, getAllBookings } from "../frontdesk/bookingsStorage";
 import { useShift } from "../shifts/ShiftContext";
 import { normalizeDepartmentKey } from "../lib/departments";
-import { formatShiftStatus, resolveShiftTrace } from "../lib/shiftTrace";
+import { formatShiftStatus, resolveShiftTrace, SHIFT_TRACE_CHANGED_EVENT } from "../lib/shiftTrace";
+import { SHIFT_CLOSINGS_CHANGED_EVENT } from "../shifts/shiftClosingStore";
 
 type Tx = any;
 type ExpenseRow = any;
@@ -487,6 +488,7 @@ export default function SalesDashboardPage() {
   const [selectedExpense, setSelectedExpense] = useState<ExpenseRow | null>(null);
   const [activeTab, setActiveTab] = useState<MainTab>("overview");
   const [bookingVersion, setBookingVersion] = useState(0);
+  const [shiftTraceVersion, setShiftTraceVersion] = useState(0);
 
   useEffect(() => {
     const refreshBookings = () => setBookingVersion((v) => v + 1);
@@ -494,8 +496,19 @@ export default function SalesDashboardPage() {
     return () => window.removeEventListener(BOOKINGS_CHANGED_EVENT, refreshBookings);
   }, []);
 
+  useEffect(() => {
+    const refreshShiftTrace = () => setShiftTraceVersion((v) => v + 1);
+    window.addEventListener(SHIFT_TRACE_CHANGED_EVENT, refreshShiftTrace);
+    window.addEventListener(SHIFT_CLOSINGS_CHANGED_EVENT, refreshShiftTrace);
+    return () => {
+      window.removeEventListener(SHIFT_TRACE_CHANGED_EVENT, refreshShiftTrace);
+      window.removeEventListener(SHIFT_CLOSINGS_CHANGED_EVENT, refreshShiftTrace);
+    };
+  }, []);
+
   const rawTransactions = useMemo(() => {
     void bookingVersion;
+    void shiftTraceVersion;
     const directSales = (records || [])
       .filter((r: any) => !isRoomFolioSaleRecord(r))
       .map((r: any) => {
@@ -572,7 +585,7 @@ export default function SalesDashboardPage() {
     );
 
     return [...directSales, ...folioRows];
-  }, [records, shifts, bookingVersion]);
+  }, [records, shifts, bookingVersion, shiftTraceVersion]);
 
   const departmentOptions = useMemo(() => {
     const fromConfig = (departments || []).map((d: any) => ({

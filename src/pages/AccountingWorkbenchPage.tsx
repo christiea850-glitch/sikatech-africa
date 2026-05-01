@@ -7,7 +7,13 @@ import { useBusinessSetup } from "../setup/BusinessSetupContext";
 import { BOOKINGS_CHANGED_EVENT, getAllBookings } from "../frontdesk/bookingsStorage";
 import { formatDepartmentLabel, normalizeDepartmentKey } from "../lib/departments";
 import { useShift } from "../shifts/ShiftContext";
-import { formatShiftStatus, recordShiftSubmission, resolveShiftTrace, type ShiftTraceStatus } from "../lib/shiftTrace";
+import { formatShiftStatus, recordShiftSubmission, resolveShiftTrace, SHIFT_TRACE_CHANGED_EVENT, type ShiftTraceStatus } from "../lib/shiftTrace";
+import {
+  loadShiftClosings,
+  reviewShiftClosing,
+  SHIFT_CLOSINGS_CHANGED_EVENT,
+  type ShiftClosingRecord,
+} from "../shifts/shiftClosingStore";
 import {
   loadAccountingWorkbenchReviews,
   upsertAccountingWorkbenchReview,
@@ -20,10 +26,12 @@ type SourceType =
   | "food_service_sale"
   | "department_pos_sale"
   | "guest_payment"
+  | "cash_desk_closing"
   | "expense";
 type GroupBy = "department" | "paymentMethod" | "staff" | "date" | "source";
 type DetailTab = "overview" | "transaction" | "shift" | "review";
-type WorkbenchTab = "overview" | "unclosed" | "records" | "review";
+type WorkbenchTab = "overview" | "unclosed" | "closings" | "records" | "review";
+type ClosingReviewAction = "approved" | "rejected";
 type PaymentState = "unpaid" | "partial" | "paid";
 type UnclosedShiftPriority = "high" | "medium" | "low";
 type UnclosedShiftAction = "review" | "reconcile" | "close";
@@ -61,6 +69,14 @@ type AccountingRow = {
   submittedAt?: string;
   submittedBy?: string;
   submissionMode?: string;
+  closingStatus?: string;
+  closingCashExpected?: number;
+  closingCashCounted?: number;
+  closingCardTotal?: number;
+  closingMomoTotal?: number;
+  closingTransferTotal?: number;
+  closingExpensesTotal?: number;
+  closingAccountingStatus?: string;
 };
 
 function money(n: number) {
@@ -94,6 +110,7 @@ function sourceLabel(source: SourceType) {
   if (source === "food_service_sale") return "Food & Service Sales";
   if (source === "department_pos_sale") return "Department POS Sales";
   if (source === "guest_payment") return "Guest Payments / Collections";
+  if (source === "cash_desk_closing") return "Cash Desk Closing";
   return "Expense";
 }
 
@@ -123,6 +140,22 @@ function paymentStateLabel(value?: PaymentState) {
   if (value === "partial") return "Partially Paid";
   if (value === "paid") return "Paid";
   return "Unpaid";
+}
+
+function closingStatusLabel(value?: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return "Pending";
+
+  return raw
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function shiftStatusFromClosing(status: string): ShiftTraceStatus {
+  if (status === "submitted" || status === "auto_submitted") return status;
+  return "reviewed";
 }
 
 function downloadText(filename: string, content: string, type: string) {
@@ -219,6 +252,7 @@ export default function AccountingWorkbenchPage() {
   const [reviewVersion, setReviewVersion] = useState(0);
   const [traceVersion, setTraceVersion] = useState(0);
   const [bookingVersion, setBookingVersion] = useState(0);
+  const [closingVersion, setClosingVersion] = useState(0);
   const [resolvedUnclosedAlerts, setResolvedUnclosedAlerts] = useState<string[]>(() => loadResolvedUnclosedAlerts());
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -230,6 +264,7 @@ export default function AccountingWorkbenchPage() {
   const [shiftStatusFilter, setShiftStatusFilter] = useState("all");
   const [groupBy, setGroupBy] = useState<GroupBy>("department");
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [closingNoteDrafts, setClosingNoteDrafts] = useState<Record<string, string>>({});
   const [statementGeneratedAt, setStatementGeneratedAt] = useState(() => new Date());
   const [selectedRecord, setSelectedRecord] = useState<AccountingRow | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("overview");
@@ -238,7 +273,14 @@ export default function AccountingWorkbenchPage() {
   const [showOlderUnclosedShifts, setShowOlderUnclosedShifts] = useState(false);
   const [collapsedUnclosedDates, setCollapsedUnclosedDates] = useState<Record<string, boolean>>({});
 
-  const allowed = user?.role === "accounting" || user?.role === "admin";
+  const role = String(user?.role || "").toLowerCase();
+  const allowed =
+    role === "accounting" ||
+    role === "admin" ||
+    role === "manager" ||
+    role === "assistant_manager" ||
+    role === "auditor";
+  const canEditReviewLayer = role === "accounting";
   const businessName = resolveBusinessName(user, setupBusinessName);
 
   const reviews = useMemo(() => {
@@ -254,6 +296,18 @@ export default function AccountingWorkbenchPage() {
     const refreshBookings = () => setBookingVersion((v) => v + 1);
     window.addEventListener(BOOKINGS_CHANGED_EVENT, refreshBookings);
     return () => window.removeEventListener(BOOKINGS_CHANGED_EVENT, refreshBookings);
+  }, []);
+
+  useEffect(() => {
+    const refreshClosings = () => setClosingVersion((v) => v + 1);
+    window.addEventListener(SHIFT_CLOSINGS_CHANGED_EVENT, refreshClosings);
+    return () => window.removeEventListener(SHIFT_CLOSINGS_CHANGED_EVENT, refreshClosings);
+  }, []);
+
+  useEffect(() => {
+    const refreshTrace = () => setTraceVersion((v) => v + 1);
+    window.addEventListener(SHIFT_TRACE_CHANGED_EVENT, refreshTrace);
+    return () => window.removeEventListener(SHIFT_TRACE_CHANGED_EVENT, refreshTrace);
   }, []);
 
   const rows = useMemo<AccountingRow[]>(() => {
@@ -375,6 +429,52 @@ export default function AccountingWorkbenchPage() {
         })
     );
 
+    const closingRows: AccountingRow[] = loadShiftClosings().map((closing) => {
+      const submittedAt =
+        closing.submitted_at || closing.created_at || closing.updated_at || new Date().toISOString();
+      const shiftStatus = shiftStatusFromClosing(String(closing.status || "submitted"));
+      const cashExpected = Number(closing.cash_expected) || 0;
+      const cashCounted = Number(closing.cash_counted) || 0;
+      const cardTotal = Number(closing.card_total) || 0;
+      const momoTotal = Number(closing.momo_total) || 0;
+      const transferTotal = Number(closing.transfer_total) || 0;
+      const expensesTotal = Number(closing.expenses_total) || 0;
+      const collectedTotal = cashCounted + cardTotal + momoTotal + transferTotal;
+
+      return {
+        id: `closing:${closing.id}`,
+        date: submittedAt,
+        source: "cash_desk_closing",
+        department: normalizeDepartmentKey(closing.department_key || "front-desk"),
+        paymentMethod: "closing",
+        staff: String(closing.submitted_by_user_id || "Front Desk"),
+        description: `Shift closing ${closing.shift_id || closing.id} (${closingStatusLabel(closing.status)})`,
+        revenue: 0,
+        expense: 0,
+        collection: 0,
+        roomFolioReceivable: 0,
+        guestPayment: 0,
+        transactionTime: submittedAt,
+        shiftId: closing.shift_id ? String(closing.shift_id) : undefined,
+        shiftStatus,
+        submittedAt,
+        submittedBy: closing.submitted_by_user_id
+          ? String(closing.submitted_by_user_id)
+          : undefined,
+        submissionMode: closing.submission_mode,
+        closingStatus: closing.status,
+        closingCashExpected: cashExpected,
+        closingCashCounted: cashCounted,
+        closingCardTotal: cardTotal,
+        closingMomoTotal: momoTotal,
+        closingTransferTotal: transferTotal,
+        closingExpensesTotal: expensesTotal,
+        closingAccountingStatus: closing.accounting_review_status || "pending",
+        note: closing.notes,
+        closingTotal: collectedTotal,
+      } as AccountingRow;
+    });
+
     const expenses: AccountingRow[] = (expenseRecords || []).map((expense) => {
       const trace = resolveShiftTrace(expense as any, shifts);
       return {
@@ -399,10 +499,10 @@ export default function AccountingWorkbenchPage() {
       };
     });
 
-    return [...roomBookingRows, ...directSales, ...folioRows, ...expenses].sort(
+    return [...roomBookingRows, ...directSales, ...folioRows, ...closingRows, ...expenses].sort(
       (a, b) => new Date(b.transactionTime).getTime() - new Date(a.transactionTime).getTime()
     );
-  }, [salesRecords, expenseRecords, shifts, traceVersion, bookingVersion]);
+  }, [salesRecords, expenseRecords, shifts, traceVersion, bookingVersion, closingVersion]);
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {
@@ -567,8 +667,13 @@ export default function AccountingWorkbenchPage() {
   const departments = Array.from(new Set(rows.map((row) => row.department))).sort();
   const paymentMethods = Array.from(new Set(rows.map((row) => row.paymentMethod))).sort();
   const staffOptions = Array.from(new Set(rows.map((row) => row.staff))).sort();
+  const closingRecords = useMemo(() => {
+    void closingVersion;
+    return loadShiftClosings();
+  }, [closingVersion]);
 
   function updateReview(row: AccountingRow, status: AccountingReviewStatus) {
+    if (!canEditReviewLayer) return;
     upsertAccountingWorkbenchReview({
       recordId: row.id,
       status,
@@ -578,12 +683,44 @@ export default function AccountingWorkbenchPage() {
   }
 
   function saveNote(row: AccountingRow) {
+    if (!canEditReviewLayer) return;
     upsertAccountingWorkbenchReview({
       recordId: row.id,
       status: reviewMap.get(row.id)?.status || "unreviewed",
       note: noteDrafts[row.id] ?? "",
     });
     setReviewVersion((v) => v + 1);
+  }
+
+  function updateClosingReview(closing: ShiftClosingRecord, action?: ClosingReviewAction) {
+    if (!canEditReviewLayer) return;
+
+    const note =
+      closingNoteDrafts[String(closing.id)] ??
+      closing.accounting_note ??
+      closing.notes ??
+      "";
+    const reviewedBy =
+      (user as any)?.employeeId || (user as any)?.username || user?.role || "accounting";
+    const updated = reviewShiftClosing({
+      id: closing.id,
+      reviewStatus: action,
+      note,
+      reviewedBy,
+    });
+
+    if (action === "approved" && updated.shift_id) {
+      recordShiftSubmission({
+        shiftId: updated.shift_id,
+        status: "reviewed",
+        submittedAt: updated.accounting_reviewed_at || new Date().toISOString(),
+        submittedBy: String(reviewedBy),
+        submissionMode: "manual",
+        notes: note,
+      });
+    }
+
+    setClosingVersion((v) => v + 1);
   }
 
   function exportCsv() {
@@ -693,7 +830,7 @@ export default function AccountingWorkbenchPage() {
   const groupByLabel = groupBy === "paymentMethod" ? "Payment Method" : groupBy.charAt(0).toUpperCase() + groupBy.slice(1);
 
   if (!allowed) {
-    return <div style={styles.notice}>Accounting Workbench is available to accounting and admin users only.</div>;
+    return <div style={styles.notice}>Accounting Workbench is available to accounting, manager, admin, and auditor users only.</div>;
   }
 
   return (
@@ -703,7 +840,7 @@ export default function AccountingWorkbenchPage() {
         <div>
           <div style={styles.eyebrow}>Accounting</div>
           <h1 style={styles.title}>Reconciliation Workbench</h1>
-          <p style={styles.subtitle}>Review sales, room folios, guest payments, and expenses without changing source records.</p>
+          <p style={styles.subtitle}>Review sales, room folios, guest payments, cash desk closings, and expenses without changing source records.</p>
         </div>
         <div style={styles.actions}>
           <button style={styles.secondaryBtn} onClick={exportCsv}>Export CSV</button>
@@ -715,6 +852,7 @@ export default function AccountingWorkbenchPage() {
       <div style={styles.workbenchTabs}>
         <WorkbenchTabButton active={activeTab === "overview"} onClick={() => setActiveTab("overview")}>Overview</WorkbenchTabButton>
         <WorkbenchTabButton active={activeTab === "unclosed"} onClick={() => setActiveTab("unclosed")}>Unclosed Shifts</WorkbenchTabButton>
+        <WorkbenchTabButton active={activeTab === "closings"} onClick={() => setActiveTab("closings")}>Cash Desk Closings</WorkbenchTabButton>
         <WorkbenchTabButton active={activeTab === "records"} onClick={() => setActiveTab("records")}>Financial Records</WorkbenchTabButton>
         <WorkbenchTabButton active={activeTab === "review"} onClick={() => setActiveTab("review")}>Review Status</WorkbenchTabButton>
       </div>
@@ -744,7 +882,7 @@ export default function AccountingWorkbenchPage() {
           <Field label="End Date"><input type="date" style={styles.input} value={endDate} onChange={(e) => setEndDate(e.target.value)} /></Field>
           <Field label="Department"><Select value={department} onChange={setDepartment} options={["all", ...departments]} labeler={(v) => v === "all" ? "All" : formatDepartmentLabel(v)} /></Field>
           <Field label="Payment Method"><Select value={paymentMethod} onChange={setPaymentMethod} options={["all", ...paymentMethods]} /></Field>
-          <Field label="Source / Type"><Select value={source} onChange={setSource} options={["all", "room_booking_revenue", "room_folio_charge", "food_service_sale", "department_pos_sale", "guest_payment", "expense"]} labeler={(v) => v === "all" ? "All" : sourceLabel(v as SourceType)} /></Field>
+          <Field label="Source / Type"><Select value={source} onChange={setSource} options={["all", "room_booking_revenue", "room_folio_charge", "food_service_sale", "department_pos_sale", "guest_payment", "cash_desk_closing", "expense"]} labeler={(v) => v === "all" ? "All" : sourceLabel(v as SourceType)} /></Field>
           <Field label="Staff"><Select value={staff} onChange={setStaff} options={["all", ...staffOptions]} /></Field>
           <Field label="Review Status"><Select value={reviewStatus} onChange={setReviewStatus} options={["all", "unreviewed", "reviewed", "issue"]} /></Field>
           <Field label="Shift Status"><Select value={shiftStatusFilter} onChange={setShiftStatusFilter} options={["all", "open", "unclosed", "submitted", "reviewed", "auto_submitted"]} labeler={(v) => v === "all" ? "All" : formatShiftStatus(v)} /></Field>
@@ -834,6 +972,100 @@ export default function AccountingWorkbenchPage() {
         </div>
       )}
 
+      {activeTab === "closings" && (
+        <div style={styles.panel}>
+          <h2 style={styles.sectionTitle}>Cash Desk Closings</h2>
+          <div style={styles.tableWrap}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <Th>Submitted</Th>
+                  <Th>Shift</Th>
+                  <Th>Dept</Th>
+                  <Th>Cash Expected</Th>
+                  <Th>Cash Counted</Th>
+                  <Th>Card</Th>
+                  <Th>MoMo</Th>
+                  <Th>Transfer</Th>
+                  <Th>Expenses</Th>
+                  <Th>Status</Th>
+                  <Th>Accounting</Th>
+                  <Th>Note</Th>
+                  <Th>Actions</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {closingRecords.map((closing) => {
+                  const reviewStatus = closing.accounting_review_status || "pending";
+                  const noteValue =
+                    closingNoteDrafts[String(closing.id)] ??
+                    closing.accounting_note ??
+                    closing.notes ??
+                    "";
+
+                  return (
+                    <tr key={String(closing.id)}>
+                      <Td>{closing.submitted_at ? formatDateTime(new Date(closing.submitted_at)) : "-"}</Td>
+                      <Td>{closing.shift_id ? String(closing.shift_id) : String(closing.id)}</Td>
+                      <Td>{formatDepartmentLabel(closing.department_key || "front-desk")}</Td>
+                      <Td>{money(Number(closing.cash_expected) || 0)}</Td>
+                      <Td>{money(Number(closing.cash_counted) || 0)}</Td>
+                      <Td>{money(Number(closing.card_total) || 0)}</Td>
+                      <Td>{money(Number(closing.momo_total) || 0)}</Td>
+                      <Td>{money(Number(closing.transfer_total) || 0)}</Td>
+                      <Td>{money(Number(closing.expenses_total) || 0)}</Td>
+                      <Td>
+                        <span style={closing.status === "rejected" ? styles.badgeDanger : closing.status === "accounting_approved" ? styles.badgeGood : styles.badgeWarn}>
+                          {closingStatusLabel(closing.status)}
+                        </span>
+                      </Td>
+                      <Td>
+                        <span style={reviewStatus === "approved" ? styles.badgeGood : reviewStatus === "rejected" ? styles.badgeDanger : styles.badgeMuted}>
+                          {closingStatusLabel(reviewStatus)}
+                        </span>
+                        {closing.accounting_reviewed_at ? (
+                          <div style={styles.detailLabel}>
+                            {formatDateTime(new Date(closing.accounting_reviewed_at))}
+                          </div>
+                        ) : null}
+                      </Td>
+                      <Td>
+                        <input
+                          style={styles.noteInput}
+                          value={noteValue}
+                          onChange={(e) =>
+                            setClosingNoteDrafts((prev) => ({
+                              ...prev,
+                              [String(closing.id)]: e.target.value,
+                            }))
+                          }
+                          placeholder="Accounting note"
+                          disabled={!canEditReviewLayer}
+                        />
+                      </Td>
+                      <Td>
+                        {canEditReviewLayer ? (
+                          <div style={styles.rowActions}>
+                            <button style={styles.smallBtn} onClick={() => updateClosingReview(closing)}>Save Note</button>
+                            <button style={styles.smallBtn} onClick={() => updateClosingReview(closing, "approved")}>Approve</button>
+                            <button style={styles.warnBtn} onClick={() => updateClosingReview(closing, "rejected")}>Reject</button>
+                          </div>
+                        ) : (
+                          <span style={styles.badgeMuted}>View only</span>
+                        )}
+                      </Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {closingRecords.length === 0 ? (
+            <div style={styles.emptyState}>No cash desk closings have been captured yet.</div>
+          ) : null}
+        </div>
+      )}
+
       {activeTab === "review" && (
         <div style={styles.panel}>
           <h2 style={styles.sectionTitle}>Review Status</h2>
@@ -898,6 +1130,7 @@ export default function AccountingWorkbenchPage() {
                         onClick={(e) => e.stopPropagation()}
                         onKeyDown={(e) => e.stopPropagation()}
                         placeholder="Accounting note"
+                        disabled={!canEditReviewLayer}
                       />
                     </Td>
                     <Td>
@@ -907,9 +1140,13 @@ export default function AccountingWorkbenchPage() {
                         onKeyDown={(e) => e.stopPropagation()}
                       >
                         <button style={styles.smallBtn} onClick={() => openRecordDetails(row)}>View details</button>
-                        <button style={styles.smallBtn} onClick={() => updateReview(row, "reviewed")}>Reviewed</button>
-                        <button style={styles.warnBtn} onClick={() => updateReview(row, "issue")}>Flag</button>
-                        <button style={styles.smallBtn} onClick={() => saveNote(row)}>Save Note</button>
+                        {canEditReviewLayer ? (
+                          <>
+                            <button style={styles.smallBtn} onClick={() => updateReview(row, "reviewed")}>Reviewed</button>
+                            <button style={styles.warnBtn} onClick={() => updateReview(row, "issue")}>Flag</button>
+                            <button style={styles.smallBtn} onClick={() => saveNote(row)}>Save Note</button>
+                          </>
+                        ) : null}
                       </div>
                     </Td>
                   </tr>
@@ -988,12 +1225,19 @@ export default function AccountingWorkbenchPage() {
                       value={noteDrafts[selectedRecord.id] ?? reviewMap.get(selectedRecord.id)?.note ?? ""}
                       onChange={(e) => setNoteDrafts((prev) => ({ ...prev, [selectedRecord.id]: e.target.value }))}
                       placeholder="Accounting note"
+                      disabled={!canEditReviewLayer}
                     />
                   </label>
                   <div style={{ ...styles.rowActions, ...styles.detailItemWide }}>
-                    <button style={styles.smallBtn} onClick={() => updateReview(selectedRecord, "reviewed")}>Reviewed</button>
-                    <button style={styles.warnBtn} onClick={() => updateReview(selectedRecord, "issue")}>Flag</button>
-                    <button style={styles.smallBtn} onClick={() => saveNote(selectedRecord)}>Save Note</button>
+                    {canEditReviewLayer ? (
+                      <>
+                        <button style={styles.smallBtn} onClick={() => updateReview(selectedRecord, "reviewed")}>Reviewed</button>
+                        <button style={styles.warnBtn} onClick={() => updateReview(selectedRecord, "issue")}>Flag</button>
+                        <button style={styles.smallBtn} onClick={() => saveNote(selectedRecord)}>Save Note</button>
+                      </>
+                    ) : (
+                      <span style={styles.badgeMuted}>View only</span>
+                    )}
                   </div>
                 </div>
               )}
