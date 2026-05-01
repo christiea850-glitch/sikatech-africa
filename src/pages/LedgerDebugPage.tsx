@@ -5,6 +5,7 @@ import {
   LEDGER_SOURCE_TYPES,
   loadLedgerEntries,
   selectLedgerTotals,
+  validateLedgerIntegrity,
   type CanonicalLedgerEntry,
 } from "../finance/financialLedger";
 
@@ -53,6 +54,10 @@ export default function LedgerDebugPage() {
 
   const entries = useMemo(() => loadLedgerEntries(), [refreshKey]);
   const departmentOptions = useMemo(() => uniqueDepartments(entries), [entries]);
+
+  useEffect(() => {
+    validateLedgerIntegrity(entries, "Ledger Debug");
+  }, [entries]);
 
   const filteredEntries = useMemo(() => {
     return entries.filter((entry) => {

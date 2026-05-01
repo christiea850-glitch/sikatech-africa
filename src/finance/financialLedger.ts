@@ -84,6 +84,9 @@ export type LedgerShiftTotals = Record<
   }
 >;
 
+const OVER_COLLECTION_TOLERANCE = 0.01;
+const overCollectionWarningKeys = new Set<string>();
+
 export function roundLedgerMoney(value: number) {
   return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
 }
@@ -95,13 +98,6 @@ export function deriveLedgerReceivableAmount(
   return roundLedgerMoney(roundLedgerMoney(revenueAmount) - roundLedgerMoney(collectionAmount));
 }
 
-export function deriveOutstandingReceivableAmount(
-  revenueAmount: number,
-  collectionAmount: number
-) {
-  return Math.max(0, deriveLedgerReceivableAmount(revenueAmount, collectionAmount));
-}
-
 function readLedgerArray(): CanonicalLedgerEntry[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(LEDGER_STORAGE_KEY) || "[]");
@@ -109,6 +105,93 @@ function readLedgerArray(): CanonicalLedgerEntry[] {
   } catch {
     return [];
   }
+}
+
+function ledgerEntryBookingId(entry: CanonicalLedgerEntry) {
+  if (entry.bookingId) return entry.bookingId;
+  if (entry.sourceType === "room_booking_revenue" && entry.sourceId) return entry.sourceId;
+
+  const idMatch = String(entry.id || "").match(
+    /^(?:guest_payment_collection|room_folio_charge):([^:]+):/
+  );
+  if (idMatch?.[1]) return idMatch[1];
+
+  const legacySourceMatch = String(entry.sourceId || "").match(
+    /^(booking_[^:]+):legacy_amount_paid$/
+  );
+  return legacySourceMatch?.[1] || null;
+}
+
+function ledgerEntryIntegrityKey(entry: CanonicalLedgerEntry) {
+  const bookingId = ledgerEntryBookingId(entry);
+
+  if (entry.sourceType === "room_booking_revenue" && bookingId) {
+    return `room_booking_revenue:${bookingId}`;
+  }
+
+  if (entry.sourceType === "guest_payment_collection" && bookingId) {
+    const isLegacy =
+      String(entry.id || "").includes("legacy_amount_paid") ||
+      String(entry.sourceId || "").includes("legacy_amount_paid");
+    return isLegacy
+      ? `guest_payment_collection:${bookingId}:legacy_amount_paid`
+      : `guest_payment_collection:${bookingId}:${entry.sourceId || entry.id}`;
+  }
+
+  return entry.id;
+}
+
+function normalizeLedgerEntriesForStorage(entries: CanonicalLedgerEntry[]) {
+  const byIntegrityKey = new Map<string, CanonicalLedgerEntry>();
+
+  entries.forEach((rawEntry) => {
+    const entry = createLedgerEntry(rawEntry);
+    const key = ledgerEntryIntegrityKey(entry);
+    const existing = byIntegrityKey.get(key);
+
+    if (existing) {
+      if (entry.sourceType === "guest_payment_collection") {
+        console.warn("Duplicate guest_payment_collection detected", {
+          keptEntryId: existing.id,
+          skippedEntryId: entry.id,
+          bookingId: entry.bookingId,
+          sourceId: entry.sourceId,
+        });
+      }
+
+      if (entry.sourceType === "room_booking_revenue") {
+        console.warn("Duplicate room_booking_revenue detected", {
+          keptEntryId: existing.id,
+          skippedEntryId: entry.id,
+          bookingId: entry.bookingId,
+          sourceId: entry.sourceId,
+        });
+      }
+
+      return;
+    }
+
+    byIntegrityKey.set(key, entry);
+  });
+
+  return Array.from(byIntegrityKey.values()).sort(
+    (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+  );
+}
+
+function warnIfOverCollected(totals: LedgerAmountTotals, context: string) {
+  if (totals.collections <= totals.revenue + OVER_COLLECTION_TOLERANCE) return;
+
+  const key = `${context}:${totals.revenue}:${totals.collections}`;
+  if (overCollectionWarningKeys.has(key)) return;
+  overCollectionWarningKeys.add(key);
+
+  console.warn("Over-collection detected", {
+    context,
+    revenueAmount: totals.revenue,
+    collectionAmount: totals.collections,
+    receivableAmount: totals.receivables,
+  });
 }
 
 function writeLedgerArray(entries: CanonicalLedgerEntry[]) {
@@ -127,21 +210,19 @@ export function loadLedgerEntries(): CanonicalLedgerEntry[] {
 }
 
 export function saveLedgerEntries(entries: CanonicalLedgerEntry[]) {
-  writeLedgerArray(entries);
+  const normalized = normalizeLedgerEntriesForStorage(entries);
+  validateLedgerIntegrity(normalized, "financial ledger");
+  writeLedgerArray(normalized);
 }
 
 export function upsertLedgerEntries(entries: CanonicalLedgerEntry[]) {
   if (entries.length === 0) return loadLedgerEntries();
 
   const current = loadLedgerEntries();
-  const byId = new Map(current.map((entry) => [entry.id, entry]));
-
-  entries.forEach((entry) => {
-    byId.set(entry.id, createLedgerEntry(entry));
-  });
-
-  const next = Array.from(byId.values()).sort(
-    (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+  const replacements = normalizeLedgerEntriesForStorage(entries);
+  const replacementIds = new Set(replacements.map((entry) => entry.id));
+  const next = normalizeLedgerEntriesForStorage(
+    replacements.concat(current.filter((entry) => !replacementIds.has(entry.id)))
   );
   if (JSON.stringify(next) === JSON.stringify(current)) return current;
   saveLedgerEntries(next);
@@ -153,26 +234,12 @@ export function replaceLedgerEntries(
   entries: CanonicalLedgerEntry[]
 ) {
   const current = loadLedgerEntries();
-  const replacements = new Map<string, CanonicalLedgerEntry>();
-
-  entries.forEach((entry) => {
-    const normalized = createLedgerEntry(entry);
-    replacements.set(normalized.id, normalized);
-  });
-
-  const byId = new Map<string, CanonicalLedgerEntry>();
-  current.forEach((entry) => {
-    if (!shouldReplace(entry) && !replacements.has(entry.id)) {
-      byId.set(entry.id, entry);
-    }
-  });
-
-  replacements.forEach((entry) => {
-    byId.set(entry.id, entry);
-  });
-
-  const next = Array.from(byId.values()).sort(
-    (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+  const replacements = normalizeLedgerEntriesForStorage(entries);
+  const replacementIds = new Set(replacements.map((entry) => entry.id));
+  const next = normalizeLedgerEntriesForStorage(
+    replacements.concat(
+      current.filter((entry) => !shouldReplace(entry) && !replacementIds.has(entry.id))
+    )
   );
   if (JSON.stringify(next) === JSON.stringify(current)) return current;
   saveLedgerEntries(next);
@@ -254,7 +321,7 @@ export function addLedgerEntryToTotals(
     revenue,
     collections,
     expenses: roundLedgerMoney(totals.expenses + entry.expenseAmount),
-    receivables: deriveOutstandingReceivableAmount(revenue, collections),
+    receivables: deriveLedgerReceivableAmount(revenue, collections),
     count: totals.count + 1,
   };
 }
@@ -264,6 +331,15 @@ export function selectLedgerTotals(entries: CanonicalLedgerEntry[]): LedgerAmoun
     (totals, entry) => addLedgerEntryToTotals(totals, entry),
     emptyLedgerTotals()
   );
+}
+
+export function validateLedgerIntegrity(
+  entries: CanonicalLedgerEntry[],
+  context = "ledger"
+) {
+  const totals = selectLedgerTotals(entries);
+  warnIfOverCollected(totals, context);
+  return totals;
 }
 
 export function selectTotalRevenue(entries: CanonicalLedgerEntry[]) {

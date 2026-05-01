@@ -216,6 +216,36 @@ function bookingPaymentLedgerEntry(
   });
 }
 
+function bookingFolioChargeLedgerEntry(
+  booking: BookingRecord,
+  activity: BookingFolioActivity
+) {
+  const amount = roundLedgerMoney(Math.max(0, safeNumber(activity.amount, 0)));
+  if (amount <= 0) return null;
+
+  return createLedgerEntry({
+    id: `room_folio_charge:${booking.id}:${activity.id}`,
+    occurredAt: toIso(activity.createdAt || booking.updatedAt || booking.createdAt),
+    departmentKey: "front-desk",
+    shiftId: activity.shiftId,
+    sourceType: "room_folio_charge",
+    sourceId: activity.transactionId || activity.id,
+    bookingId: activity.bookingId || booking.id,
+    bookingCode: activity.bookingCode || booking.bookingCode,
+    roomNo: activity.roomNo || booking.roomNo,
+    customerName: activity.customerName || booking.guestName,
+    paymentMethod: "room_folio",
+    revenueAmount: amount,
+    collectionAmount: 0,
+    expenseAmount: 0,
+    status: "posted",
+    createdBy: {
+      employeeId: activity.submittedBy,
+      role: booking.createdBy?.role,
+    },
+  });
+}
+
 function legacyBookingPaymentLedgerEntry(booking: BookingRecord, amount: number) {
   const paid = roundLedgerMoney(Math.max(0, amount));
   if (paid <= 0) return null;
@@ -239,25 +269,66 @@ function legacyBookingPaymentLedgerEntry(booking: BookingRecord, amount: number)
   });
 }
 
-function paymentActivityDedupeKey(activity: BookingFolioActivity) {
-  return String(
-    activity.id ||
-      [
-        activity.createdAt || 0,
-        activity.amount || 0,
-        activity.paymentMethod || "",
-        activity.transactionSource || "",
-      ].join(":")
-  );
+function activityFingerprint(activity: BookingFolioActivity) {
+  return [
+    activity.transactionId || "",
+    activity.createdAt || 0,
+    roundMoney(safeNumber(activity.amount, 0)),
+    activity.paymentMethod || "",
+    activity.transactionSource || "",
+  ].join(":");
 }
 
 function uniquePaymentActivities(activities: BookingFolioActivity[]) {
-  const byKey = new Map<string, BookingFolioActivity>();
+  const seenIds = new Set<string>();
+  const seenFingerprints = new Set<string>();
+  const unique: BookingFolioActivity[] = [];
+
   activities.forEach((activity) => {
-    const key = paymentActivityDedupeKey(activity);
-    if (!byKey.has(key)) byKey.set(key, activity);
+    const id = String(activity.id || "").trim();
+    const fingerprint = activityFingerprint(activity);
+    const duplicate = Boolean(
+      (id && seenIds.has(id)) || (fingerprint && seenFingerprints.has(fingerprint))
+    );
+
+    if (duplicate) {
+      console.warn("Duplicate guest_payment_collection detected", {
+        bookingId: activity.bookingId,
+        bookingCode: activity.bookingCode,
+        paymentActivityId: activity.id,
+        amount: activity.amount,
+      });
+      return;
+    }
+
+    if (id) seenIds.add(id);
+    if (fingerprint) seenFingerprints.add(fingerprint);
+    unique.push(activity);
   });
-  return Array.from(byKey.values());
+
+  return unique;
+}
+
+function uniqueChargeActivities(activities: BookingFolioActivity[]) {
+  const seenIds = new Set<string>();
+  const seenFingerprints = new Set<string>();
+  const unique: BookingFolioActivity[] = [];
+
+  activities.forEach((activity) => {
+    const id = String(activity.id || "").trim();
+    const fingerprint = activityFingerprint(activity);
+    const duplicate = Boolean(
+      (id && seenIds.has(id)) || (fingerprint && seenFingerprints.has(fingerprint))
+    );
+
+    if (duplicate) return;
+
+    if (id) seenIds.add(id);
+    if (fingerprint) seenFingerprints.add(fingerprint);
+    unique.push(activity);
+  });
+
+  return unique;
 }
 
 function uniqueLedgerEntries(entries: CanonicalLedgerEntry[]) {
@@ -268,28 +339,95 @@ function uniqueLedgerEntries(entries: CanonicalLedgerEntry[]) {
   return Array.from(byId.values());
 }
 
+function warnBookingOverCollection(booking: BookingRecord, attemptedCollection: number) {
+  console.warn("Over-collection detected", {
+    bookingId: booking.id,
+    bookingCode: booking.bookingCode,
+    revenueAmount: roundMoney(Math.max(0, safeNumber(booking.totalAmount, 0))),
+    collectionAmount: roundMoney(attemptedCollection),
+  });
+}
+
+function paymentEntriesForBooking(
+  booking: BookingRecord,
+  paymentActivities: BookingFolioActivity[],
+  paymentCap: number
+) {
+  const entries: CanonicalLedgerEntry[] = [];
+  let acceptedTotal = 0;
+
+  const oldestFirst = [...paymentActivities].sort(
+    (a, b) => safeNumber(a.createdAt, 0) - safeNumber(b.createdAt, 0)
+  );
+
+  oldestFirst.forEach((activity) => {
+    const amount = roundMoney(Math.max(0, safeNumber(activity.amount, 0)));
+    if (amount <= 0) return;
+
+    const nextTotal = roundMoney(acceptedTotal + amount);
+    if (nextTotal > paymentCap + 0.01) {
+      warnBookingOverCollection(booking, nextTotal);
+      return;
+    }
+
+    const entry = bookingPaymentLedgerEntry(booking, activity);
+    if (!entry) return;
+
+    entries.push(entry);
+    acceptedTotal = nextTotal;
+  });
+
+  return { entries, acceptedTotal };
+}
+
 function ledgerEntriesForBooking(booking: BookingRecord) {
   const entries: CanonicalLedgerEntry[] = [];
   const revenueEntry = bookingRevenueLedgerEntry(booking);
   if (revenueEntry) entries.push(revenueEntry);
 
-  const paymentActivities = uniquePaymentActivities(
-    (booking.folioActivity || []).filter((activity) => activity.type === "payment")
-  );
-  const paymentActivityTotal = roundMoney(
-    paymentActivities.reduce((sum, activity) => sum + safeNumber(activity.amount, 0), 0)
+  const chargeActivities = uniqueChargeActivities(
+    (booking.folioActivity || []).filter((activity) => activity.type === "charge")
   );
 
-  paymentActivities.forEach((activity) => {
-    const entry = bookingPaymentLedgerEntry(booking, activity);
+  chargeActivities.forEach((activity) => {
+    const entry = bookingFolioChargeLedgerEntry(booking, activity);
     if (entry) entries.push(entry);
   });
 
-  const missingPaidAmount = roundMoney(
-    Math.max(0, safeNumber(booking.amountPaid, 0) - paymentActivityTotal)
+  const revenueTotal = roundMoney(
+    entries.reduce((sum, entry) => sum + safeNumber(entry.revenueAmount, 0), 0)
   );
-  const legacyEntry = legacyBookingPaymentLedgerEntry(booking, missingPaidAmount);
-  if (legacyEntry) entries.push(legacyEntry);
+  const paymentCap = Math.min(
+    roundMoney(Math.max(0, safeNumber(booking.totalAmount, 0))),
+    revenueTotal
+  );
+
+  const paymentActivities = uniquePaymentActivities(
+    (booking.folioActivity || []).filter((activity) => activity.type === "payment")
+  );
+
+  const realPaymentResult = paymentEntriesForBooking(booking, paymentActivities, paymentCap);
+  entries.push(...realPaymentResult.entries);
+
+  const bookingAmountPaid = roundMoney(Math.max(0, safeNumber(booking.amountPaid, 0)));
+  if (paymentActivities.length === 0) {
+    if (bookingAmountPaid > paymentCap + 0.01) {
+      warnBookingOverCollection(booking, bookingAmountPaid);
+    }
+
+    const legacyEntry = legacyBookingPaymentLedgerEntry(
+      booking,
+      Math.min(bookingAmountPaid, paymentCap)
+    );
+    if (legacyEntry) entries.push(legacyEntry);
+  } else if (bookingAmountPaid > realPaymentResult.acceptedTotal + 0.01) {
+    console.warn("Legacy amountPaid ignored because real booking payments exist", {
+      bookingId: booking.id,
+      bookingCode: booking.bookingCode,
+      amountPaid: bookingAmountPaid,
+      realPaymentTotal: realPaymentResult.acceptedTotal,
+    });
+  }
 
   return uniqueLedgerEntries(entries);
 }
@@ -298,7 +436,9 @@ function bookingIdFromLedgerEntry(entry: CanonicalLedgerEntry) {
   if (entry.bookingId) return entry.bookingId;
   if (entry.sourceType === "room_booking_revenue" && entry.sourceId) return entry.sourceId;
 
-  const idMatch = String(entry.id || "").match(/^guest_payment_collection:([^:]+):/);
+  const idMatch = String(entry.id || "").match(
+    /^(?:guest_payment_collection|room_folio_charge):([^:]+):/
+  );
   if (idMatch?.[1]) return idMatch[1];
 
   const legacySourceMatch = String(entry.sourceId || "").match(/^(booking_[^:]+):legacy_amount_paid$/);
