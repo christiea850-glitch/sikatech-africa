@@ -30,6 +30,7 @@ import {
   normalizeLedgerPaymentMethod,
   selectDashboardLedgerSummary,
   selectDepartmentIntelligence,
+  selectSmartLedgerAlerts,
   type CanonicalLedgerEntry,
   type DepartmentIntelligenceClassification,
 } from "../finance/financialLedger";
@@ -44,11 +45,10 @@ type MainTab =
   | "departments"
   | "activity";
 
-type AlertTone = "danger" | "warning" | "success" | "info";
-
 type RangeFilter = "today" | "yesterday" | "week" | "month" | "all";
 type QuickRangeFilter = RangeFilter | "custom";
 type DateRange = { startDate: string; endDate: string };
+type DashboardFocus = "all" | "revenue" | "collections" | "receivables" | "expenses";
 const DEPARTMENT_ANALYTICS_LEDGER_SOURCE_TYPES = new Set([
   "room_booking_revenue",
   "guest_payment_collection",
@@ -300,17 +300,44 @@ function MetricCard({
   value,
   note,
   accent,
+  onClick,
+  active,
 }: {
   title: string;
   value: string;
   note: string;
   accent: string;
+  onClick?: () => void;
+  active?: boolean;
 }) {
-  return (
-    <div style={{ ...styles.metricCard, borderTop: `4px solid ${accent}` }}>
+  const content = (
+    <>
       <div style={styles.metricTitle}>{title}</div>
       <div style={styles.metricValue}>{value}</div>
       <div style={styles.metricNote}>{note}</div>
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        style={{
+          ...styles.metricCard,
+          ...styles.metricCardButton,
+          ...(active ? styles.metricCardActive : {}),
+          borderTop: `4px solid ${accent}`,
+        }}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ ...styles.metricCard, borderTop: `4px solid ${accent}` }}>
+      {content}
     </div>
   );
 }
@@ -410,7 +437,8 @@ export default function SalesDashboardPage() {
   const [dateRange, setDateRange] = useState<DateRange>(() =>
     loadAccountingDateRange(getPresetDateRange("today"))
   );
-  const [selectedDeptRow, setSelectedDeptRow] = useState<string | null>(null);
+  const [selectedFocus, setSelectedFocus] = useState<DashboardFocus>("all");
+  const [selectedDepartmentKey, setSelectedDepartmentKey] = useState<string | null>(null);
   const [selectedTx, setSelectedTx] = useState<Tx | null>(null);
   const [selectedExpense, setSelectedExpense] = useState<ExpenseRow | null>(null);
   const [activeTab, setActiveTab] = useState<MainTab>("overview");
@@ -454,20 +482,32 @@ export default function SalesDashboardPage() {
     return filterLedgerEntries(ledgerEntries, {
       startDate: dateRange.startDate,
       endDate: dateRange.endDate,
-      departmentKey: selectedDeptRow || departmentFilter,
+      departmentKey: selectedDepartmentKey || departmentFilter,
       search,
     });
-  }, [ledgerEntries, dateRange, departmentFilter, selectedDeptRow, search]);
+  }, [ledgerEntries, dateRange, departmentFilter, selectedDepartmentKey, search]);
+
+  const focusedLedgerEntries = useMemo(() => {
+    if (selectedFocus === "all") return filteredLedgerEntries;
+
+    return filteredLedgerEntries.filter((entry) => {
+      if (selectedFocus === "revenue") return entry.revenueAmount > 0;
+      if (selectedFocus === "collections") return entry.collectionAmount > 0;
+      if (selectedFocus === "receivables") return entry.receivableAmount > 0;
+      if (selectedFocus === "expenses") return entry.expenseAmount > 0;
+      return true;
+    });
+  }, [filteredLedgerEntries, selectedFocus]);
 
   const dashboardLedgerSummary = useMemo(
     () =>
       selectDashboardLedgerSummary(ledgerEntries, {
         startDate: dateRange.startDate,
         endDate: dateRange.endDate,
-        departmentKey: selectedDeptRow || departmentFilter,
+        departmentKey: selectedDepartmentKey || departmentFilter,
         search,
       }),
-    [ledgerEntries, dateRange, departmentFilter, selectedDeptRow, search]
+    [ledgerEntries, dateRange, departmentFilter, selectedDepartmentKey, search]
   );
 
   const paymentBreakdown = useMemo(() => {
@@ -679,7 +719,7 @@ export default function SalesDashboardPage() {
   }, [departmentPerformance]);
 
   const recentActivity = useMemo(() => {
-    const latestTransactions = filteredLedgerEntries
+    const latestTransactions = focusedLedgerEntries
       .filter((entry) => entry.revenueAmount > 0 || entry.collectionAmount > 0)
       .slice(0, 5)
       .map((entry) => ({
@@ -700,7 +740,7 @@ export default function SalesDashboardPage() {
         raw: entry,
       }));
 
-    const latestExpenses = filteredLedgerEntries
+    const latestExpenses = focusedLedgerEntries
       .filter((entry) => entry.sourceType === "expense")
       .slice(0, 5)
       .map((entry) => ({
@@ -718,7 +758,7 @@ export default function SalesDashboardPage() {
       transactions: latestTransactions,
       expenses: latestExpenses,
     };
-  }, [filteredLedgerEntries, departmentOptions]);
+  }, [focusedLedgerEntries, departmentOptions]);
   const overviewTrendData = useMemo(() => {
     const map = new Map<string, { label: string; revenue: number; expenses: number }>();
 
@@ -751,7 +791,7 @@ export default function SalesDashboardPage() {
 
       if (Number.isNaN(d.getTime())) return;
       if (departmentFilter !== "all" && dept !== departmentFilter) return;
-      if (selectedDeptRow && dept !== selectedDeptRow) return;
+      if (selectedDepartmentKey && dept !== selectedDepartmentKey) return;
 
       if (d >= todayStart) {
         todayRevenue += amount;
@@ -772,7 +812,7 @@ export default function SalesDashboardPage() {
       yesterdayRevenue,
       change,
     };
-  }, [ledgerEntries, departmentFilter, selectedDeptRow]);
+  }, [ledgerEntries, departmentFilter, selectedDepartmentKey]);
   const departmentTodayVsYesterday = useMemo(() => {
     const now = new Date();
 
@@ -801,7 +841,7 @@ export default function SalesDashboardPage() {
       const amount = Number(entry.revenueAmount) || 0;
 
       if (departmentFilter !== "all" && dept !== departmentFilter) return;
-      if (selectedDeptRow && dept !== selectedDeptRow) return;
+      if (selectedDepartmentKey && dept !== selectedDepartmentKey) return;
 
       const current = map.get(dept) || {
         department: dept,
@@ -842,7 +882,7 @@ export default function SalesDashboardPage() {
     });
 
     return rows.sort((a, b) => b.today - a.today);
-  }, [ledgerEntries, departmentFilter, selectedDeptRow]);
+  }, [ledgerEntries, departmentFilter, selectedDepartmentKey]);
   const hourlySalesTrend = useMemo(() => {
     const buckets = Array.from({ length: 24 }, (_, hour) => ({
       hour,
@@ -864,127 +904,10 @@ export default function SalesDashboardPage() {
 
     return buckets;
   }, [filteredLedgerEntries]);
-  const smartAlerts = useMemo(() => {
-    const alerts: Array<{
-      id: string;
-      title: string;
-      message: string;
-      tone: AlertTone;
-    }> = [];
-
-    if (summary.expenses > summary.revenue && summary.revenue > 0) {
-      alerts.push({
-        id: "overall-loss",
-        title: "Expenses above revenue",
-        message: `Visible expenses (${money(summary.expenses)}) are higher than revenue (${money(summary.revenue)}).`,
-        tone: "danger",
-      });
-    }
-
-    if (summary.transactions > 0 && summary.revenue > 0 && summary.cash > summary.revenue * 0.7) {
-      alerts.push({
-        id: "cash-heavy",
-        title: "Cash payments unusually high",
-        message: `${((summary.cash / summary.revenue) * 100).toFixed(
-          1
-        )}% of visible revenue is coming from cash.`,
-        tone: "warning",
-      });
-    }
-
-    if (expenseAnalytics.topCategory && expenseAnalytics.topCategory.percent >= 45) {
-      alerts.push({
-        id: "top-expense-category",
-        title: "One expense category is dominating",
-        message: `${formatCategoryLabel(
-          expenseAnalytics.topCategory.category
-        )} makes up ${expenseAnalytics.topCategory.percent.toFixed(1)}% of visible expenses.`,
-        tone: "warning",
-      });
-    }
-
-    const lossDepartments = departmentPerformance.filter((row) => row.net < 0);
-    if (lossDepartments.length > 0) {
-      const worst = [...lossDepartments].sort((a, b) => a.net - b.net)[0];
-      alerts.push({
-        id: "dept-loss",
-        title: "A department is operating at a loss",
-        message: `${getDepartmentLabel(
-          worst.department,
-          departmentOptions
-        )} has a visible net of ${money(worst.net)}.`,
-        tone: "danger",
-      });
-    }
-
-    if (todayVsYesterday.change >= 15 && todayVsYesterday.yesterdayRevenue > 0) {
-      alerts.push({
-        id: "revenue-up",
-        title: "Revenue is trending up",
-        message: `Today is up ${todayVsYesterday.change.toFixed(
-          1
-        )}% versus yesterday.`,
-        tone: "success",
-      });
-    }
-
-    if (todayVsYesterday.yesterdayRevenue === 0 && todayVsYesterday.todayRevenue > 0) {
-      alerts.push({
-        id: "new-revenue-today",
-        title: "New revenue recorded today",
-        message: `There were no visible sales yesterday, and today has started with ${money(
-          todayVsYesterday.todayRevenue
-        )} in revenue.`,
-        tone: "info",
-      });
-    }
-
-    if (todayVsYesterday.change <= -15 && todayVsYesterday.yesterdayRevenue > 0) {
-      alerts.push({
-        id: "revenue-down",
-        title: "Revenue dropped versus yesterday",
-        message: `Today is down ${Math.abs(todayVsYesterday.change).toFixed(
-          1
-        )}% versus yesterday.`,
-        tone: "danger",
-      });
-    }
-
-    if (departmentLeaderboard.length > 0 && departmentLeaderboard[0].net > 0) {
-      const leader = departmentLeaderboard[0];
-      alerts.push({
-        id: "leaderboard-top",
-        title: "Top department right now",
-        message: `${getDepartmentLabel(
-          leader.department,
-          departmentOptions
-        )} leads with net ${money(leader.net)}.`,
-        tone: "info",
-      });
-    }
-
-    const peakHour = [...hourlySalesTrend].sort((a, b) => b.sales - a.sales)[0];
-    if (peakHour && peakHour.sales > 0) {
-      alerts.push({
-        id: "peak-hour",
-        title: "Peak sales hour identified",
-        message: `${peakHour.label} is currently the strongest visible selling hour with ${money(
-          peakHour.sales
-        )} from ${peakHour.transactions} transaction(s).`,
-        tone: "info",
-      });
-    }
-
-    return alerts.slice(0, 6);
-  }, [
-    summary,
-    expenseAnalytics,
-    departmentPerformance,
-    todayVsYesterday,
-    departmentLeaderboard,
-    departmentOptions,
-    hourlySalesTrend,
-  ]);
+  const smartAlerts = useMemo(
+    () => selectSmartLedgerAlerts(filteredLedgerEntries),
+    [filteredLedgerEntries]
+  );
 
   const paymentChartData = useMemo(() => {
     return paymentMix.map((item) => ({
@@ -1026,11 +949,13 @@ export default function SalesDashboardPage() {
     }));
   }, [departmentTodayVsYesterday, departmentOptions]);
 
-  const activeViewingLabel = selectedDeptRow
-    ? `Viewing: ${getDepartmentLabel(selectedDeptRow, departmentOptions)} only`
+  const activeViewingLabel = selectedDepartmentKey
+    ? `Viewing: ${getDepartmentLabel(selectedDepartmentKey, departmentOptions)} only`
     : departmentFilter === "all"
     ? "Viewing: All sales departments"
     : `Viewing: ${getDepartmentLabel(departmentFilter, departmentOptions)}`;
+  const activeFocusLabel =
+    selectedFocus === "all" ? "All activity" : formatCategoryLabel(selectedFocus);
 
   const selectedDateRangeLabel = getDateRangeLabel(
     dateRange.startDate,
@@ -1055,8 +980,8 @@ export default function SalesDashboardPage() {
     return {
       generatedAt: new Date().toLocaleString(),
       range: selectedDateRangeLabel,
-      departmentView: selectedDeptRow
-        ? getDepartmentLabel(selectedDeptRow, departmentOptions)
+      departmentView: selectedDepartmentKey
+        ? getDepartmentLabel(selectedDepartmentKey, departmentOptions)
         : departmentFilter === "all"
         ? "All departments"
         : getDepartmentLabel(departmentFilter, departmentOptions),
@@ -1123,7 +1048,8 @@ export default function SalesDashboardPage() {
       smartAlerts: smartAlerts.map((x) => ({
         title: x.title,
         message: x.message,
-        tone: x.tone,
+        severity: x.severity,
+        recommendedAction: x.recommendedAction,
       })),
       departmentLeaderboard: departmentLeaderboard.map((row) => ({
         rank: row.rank,
@@ -1140,7 +1066,7 @@ export default function SalesDashboardPage() {
     };
   }, [
     selectedDateRangeLabel,
-    selectedDeptRow,
+    selectedDepartmentKey,
     departmentFilter,
     departmentOptions,
     summary,
@@ -1268,6 +1194,7 @@ export default function SalesDashboardPage() {
     } else {
       exportSummary.smartAlerts.forEach((alert, index) => {
         lines.push(`${index + 1}. ${alert.title} - ${alert.message}`);
+        lines.push(`Action: ${alert.recommendedAction}`);
       });
     }
     lines.push("");
@@ -1338,7 +1265,7 @@ export default function SalesDashboardPage() {
           value={departmentFilter}
           onChange={(e) => {
             setDepartmentFilter(e.target.value);
-            setSelectedDeptRow(null);
+            setSelectedDepartmentKey(null);
           }}
           style={styles.select}
         >
@@ -1442,11 +1369,21 @@ export default function SalesDashboardPage() {
 
       <div style={styles.chipsRow}>
         <div style={styles.chip}>{activeViewingLabel}</div>
+        <div style={styles.chip}>Focus: {activeFocusLabel}</div>
         <div style={styles.chip}>Range: {selectedDateRangeLabel}</div>
 
-        {selectedDeptRow && (
+        {selectedFocus !== "all" && (
           <button
-            onClick={() => setSelectedDeptRow(null)}
+            onClick={() => setSelectedFocus("all")}
+            style={styles.clearButton}
+          >
+            Clear focus
+          </button>
+        )}
+
+        {selectedDepartmentKey && (
+          <button
+            onClick={() => setSelectedDepartmentKey(null)}
             style={styles.clearButton}
           >
             Clear department row filter
@@ -1460,24 +1397,44 @@ export default function SalesDashboardPage() {
           value={money(summary.revenue)}
           note="All visible departments"
           accent="#D1A84B"
+          active={selectedFocus === "revenue"}
+          onClick={() => {
+            setSelectedFocus("revenue");
+            setActiveTab("activity");
+          }}
         />
         <MetricCard
           title="Collections"
           value={money(summary.collections)}
           note="Ledger collections"
           accent="#2563EB"
+          active={selectedFocus === "collections"}
+          onClick={() => {
+            setSelectedFocus("collections");
+            setActiveTab("activity");
+          }}
         />
         <MetricCard
           title="Receivables"
           value={money(summary.receivables)}
           note="Ledger receivables"
           accent="#F59E0B"
+          active={selectedFocus === "receivables"}
+          onClick={() => {
+            setSelectedFocus("receivables");
+            setActiveTab("activity");
+          }}
         />
         <MetricCard
           title="Expenses"
           value={money(summary.expenses)}
           note="Operational spending"
           accent="#EF4444"
+          active={selectedFocus === "expenses"}
+          onClick={() => {
+            setSelectedFocus("expenses");
+            setActiveTab("activity");
+          }}
         />
         <MetricCard
           title="Net Profit"
@@ -1534,22 +1491,35 @@ export default function SalesDashboardPage() {
             ) : (
               <div style={styles.alertsGrid}>
                 {smartAlerts.map((alert) => (
-                  <div
+                  <button
+                    type="button"
                     key={alert.id}
+                    onClick={() => {
+                      if (alert.departmentKey) setSelectedDepartmentKey(alert.departmentKey);
+                      if (alert.type === "high_expense") setSelectedFocus("expenses");
+                      if (alert.type === "collection_risk") setSelectedFocus("receivables");
+                      if (alert.type === "top_performer") setSelectedFocus("revenue");
+                      setActiveTab("activity");
+                    }}
                     style={{
                       ...styles.alertCard,
-                      ...(alert.tone === "danger"
+                      ...styles.alertCardButton,
+                      ...(alert.severity === "danger"
                         ? styles.alertDanger
-                        : alert.tone === "warning"
+                        : alert.severity === "warning"
                         ? styles.alertWarning
-                        : alert.tone === "success"
+                        : alert.severity === "success"
                         ? styles.alertSuccess
                         : styles.alertInfo),
                     }}
                   >
-                    <div style={styles.alertTitle}>{alert.title}</div>
+                    <div style={styles.alertTitle}>
+                      {alert.title}
+                      <span style={styles.alertBadge}>{alert.severity}</span>
+                    </div>
                     <div style={styles.alertMessage}>{alert.message}</div>
-                  </div>
+                    <div style={styles.alertAction}>{alert.recommendedAction}</div>
+                  </button>
                 ))}
               </div>
             )}
@@ -2206,13 +2176,13 @@ export default function SalesDashboardPage() {
                 </thead>
                 <tbody>
                   {departmentPerformance.map((row) => {
-                    const active = selectedDeptRow === row.department;
+                    const active = selectedDepartmentKey === row.department;
 
                     return (
                       <tr
                         key={row.department}
                         onClick={() =>
-                          setSelectedDeptRow((prev) =>
+                          setSelectedDepartmentKey((prev) =>
                             prev === row.department ? null : row.department
                           )
                         }
@@ -2359,7 +2329,7 @@ export default function SalesDashboardPage() {
           <div style={styles.sectionCard}>
             <div style={styles.sectionHeader}>
               <h2 style={styles.sectionTitle}>Top 5 Recent Transactions</h2>
-              <span style={styles.helperText}>Latest sales activity</span>
+              <span style={styles.helperText}>{activeFocusLabel}</span>
             </div>
 
             {recentActivity.transactions.length === 0 ? (
@@ -2396,7 +2366,7 @@ export default function SalesDashboardPage() {
           <div style={styles.sectionCard}>
             <div style={styles.sectionHeader}>
               <h2 style={styles.sectionTitle}>Top 5 Recent Expenses</h2>
-              <span style={styles.helperText}>Latest expense activity</span>
+              <span style={styles.helperText}>{activeFocusLabel}</span>
             </div>
 
             {recentActivity.expenses.length === 0 ? (
@@ -2712,6 +2682,16 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid #E5EAF3",
     boxShadow: "0 2px 10px rgba(15, 23, 42, 0.03)",
   },
+  metricCardButton: {
+    width: "100%",
+    textAlign: "left",
+    cursor: "pointer",
+    font: "inherit",
+  },
+  metricCardActive: {
+    outline: "2px solid #0F172A",
+    outlineOffset: 2,
+  },
   metricTitle: {
     fontSize: 14,
     fontWeight: 700,
@@ -2770,6 +2750,12 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 14,
     border: "1px solid transparent",
   },
+  alertCardButton: {
+    width: "100%",
+    textAlign: "left",
+    cursor: "pointer",
+    font: "inherit",
+  },
   alertDanger: {
     background: "#FEF2F2",
     border: "1px solid #FECACA",
@@ -2787,16 +2773,36 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid #BFDBFE",
   },
   alertTitle: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
     fontSize: 14,
     fontWeight: 800,
     color: "#0F172A",
     marginBottom: 6,
+  },
+  alertBadge: {
+    borderRadius: 999,
+    padding: "3px 8px",
+    background: "rgba(255, 255, 255, 0.72)",
+    border: "1px solid rgba(15, 23, 42, 0.1)",
+    color: "#334155",
+    fontSize: 11,
+    fontWeight: 800,
+    textTransform: "uppercase",
   },
   alertMessage: {
     fontSize: 13,
     color: "#475569",
     fontWeight: 600,
     lineHeight: 1.45,
+  },
+  alertAction: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#0F172A",
+    fontWeight: 800,
   },
   intelligenceGrid: {
     display: "grid",
@@ -3263,6 +3269,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
   },
 };
+
 
 
 

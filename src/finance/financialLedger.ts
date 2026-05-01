@@ -105,6 +105,27 @@ export type DepartmentIntelligenceRow = {
   insight: string;
 };
 
+export type SmartLedgerAlertType =
+  | "loss_making_department"
+  | "collection_risk"
+  | "high_expense"
+  | "top_performer"
+  | "unusual_activity";
+
+export type SmartLedgerAlertSeverity = "info" | "warning" | "danger" | "success";
+
+export type SmartLedgerAlert = {
+  id: string;
+  type: SmartLedgerAlertType;
+  severity: SmartLedgerAlertSeverity;
+  title: string;
+  message: string;
+  departmentKey?: string;
+  sourceType?: LedgerSourceType;
+  metricValue: number;
+  recommendedAction: string;
+};
+
 export type LedgerFilterInput = {
   startDate?: string;
   endDate?: string;
@@ -578,6 +599,111 @@ export function selectDepartmentIntelligence(
       };
     })
     .sort((a, b) => b.revenue - a.revenue);
+}
+
+export function selectSmartLedgerAlerts(
+  entries: CanonicalLedgerEntry[]
+): SmartLedgerAlert[] {
+  const departmentRows = selectDepartmentIntelligence(entries);
+  const alerts: SmartLedgerAlert[] = [];
+
+  departmentRows
+    .filter((row) => row.classification === "loss")
+    .sort((a, b) => a.net - b.net)
+    .slice(0, 3)
+    .forEach((row) => {
+      alerts.push({
+        id: `loss_making_department:${row.department}`,
+        type: "loss_making_department",
+        severity: "danger",
+        title: "Loss making department",
+        message: `${row.department} is running a net loss of ${roundLedgerMoney(row.net)}.`,
+        departmentKey: row.department,
+        metricValue: row.net,
+        recommendedAction: "Review expenses and pricing for this department.",
+      });
+    });
+
+  departmentRows
+    .filter((row) => row.revenue > 0 && row.collections < row.revenue)
+    .sort((a, b) => b.receivables - a.receivables)
+    .slice(0, 3)
+    .forEach((row) => {
+      alerts.push({
+        id: `collection_risk:${row.department}`,
+        type: "collection_risk",
+        severity: "warning",
+        title: "Collection risk",
+        message: `${row.department} has ${roundLedgerMoney(row.receivables)} still uncollected.`,
+        departmentKey: row.department,
+        sourceType: "guest_payment_collection",
+        metricValue: row.receivables,
+        recommendedAction: "Follow up unpaid balances and confirm guest payment status.",
+      });
+    });
+
+  departmentRows
+    .filter((row) => row.expenses > 0 && (row.expenses > row.revenue * 0.6 || row.net < 0))
+    .sort((a, b) => b.expenses - a.expenses)
+    .slice(0, 2)
+    .forEach((row) => {
+      alerts.push({
+        id: `high_expense:${row.department}`,
+        type: "high_expense",
+        severity: row.net < 0 ? "danger" : "warning",
+        title: "High expense pressure",
+        message: `${row.department} expenses are ${roundLedgerMoney(row.expenses)} against revenue of ${roundLedgerMoney(row.revenue)}.`,
+        departmentKey: row.department,
+        sourceType: "expense",
+        metricValue: row.expenses,
+        recommendedAction: "Check recent expense entries and approval notes.",
+      });
+    });
+
+  departmentRows
+    .filter((row) => row.classification === "top")
+    .sort((a, b) => b.net - a.net)
+    .slice(0, 2)
+    .forEach((row) => {
+      alerts.push({
+        id: `top_performer:${row.department}`,
+        type: "top_performer",
+        severity: "success",
+        title: "Top performer",
+        message: `${row.department} has a ${roundLedgerMoney(row.margin * 100)}% margin.`,
+        departmentKey: row.department,
+        metricValue: row.margin,
+        recommendedAction: "Use this department as the benchmark for staffing and pricing.",
+      });
+    });
+
+  const now = Date.now();
+  const recentEntries = entries.filter((entry) => {
+    const time = new Date(entry.occurredAt).getTime();
+    return Number.isFinite(time) && now - time <= 24 * 60 * 60 * 1000;
+  });
+  const recentRevenue = recentEntries.reduce(
+    (sum, entry) => sum + (Number(entry.revenueAmount) || 0),
+    0
+  );
+  const totalRevenue = entries.reduce(
+    (sum, entry) => sum + (Number(entry.revenueAmount) || 0),
+    0
+  );
+
+  if (recentEntries.length >= 10 || (totalRevenue > 0 && recentRevenue > totalRevenue * 0.5)) {
+    alerts.push({
+      id: "unusual_activity:recent_volume",
+      type: "unusual_activity",
+      severity: "info",
+      title: "Unusual activity",
+      message: `${recentEntries.length} ledger entries were posted in the last 24 hours.`,
+      metricValue: recentEntries.length,
+      recommendedAction: "Scan recent activity for duplicates, reversals, or unusually large entries.",
+    });
+  }
+
+  return alerts.slice(0, 8);
 }
 
 export function selectShiftTotals(entries: CanonicalLedgerEntry[]): LedgerShiftTotals {
