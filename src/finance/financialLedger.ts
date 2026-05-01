@@ -131,6 +131,32 @@ export type SmartLedgerAlertOptions = {
   departmentKeys?: string[];
 };
 
+export type DepartmentRootCauseExpenseCategory = {
+  category: string;
+  amount: number;
+  percent: number;
+};
+
+export type DepartmentRootCauseAnalysis = {
+  departmentKey: string;
+  revenue: {
+    total: number;
+    transactions: number;
+    averageSale: number;
+  };
+  expenses: {
+    total: number;
+    topCategories: DepartmentRootCauseExpenseCategory[];
+  };
+  net: {
+    value: number;
+    gap: number;
+    expenseToRevenueRatio: number;
+  };
+  causeInsight: string;
+  actionHint: string;
+};
+
 export type LedgerFilterInput = {
   startDate?: string;
   endDate?: string;
@@ -612,6 +638,98 @@ function formatLedgerDepartmentLabel(value: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function formatLedgerCategoryLabel(value: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return "Expense";
+
+  return raw
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function getExpenseCategoryKey(entry: CanonicalLedgerEntry) {
+  return String(entry.customerName || entry.sourceId || "expense").trim() || "expense";
+}
+
+export function selectDepartmentRootCauseAnalysis(
+  entries: CanonicalLedgerEntry[],
+  departmentKey: string
+): DepartmentRootCauseAnalysis {
+  const normalizedDepartmentKey = normalizeDepartmentKey(departmentKey);
+  const departmentEntries = filterLedgerEntries(entries, {
+    departmentKey: normalizedDepartmentKey,
+  });
+  const revenueEntries = departmentEntries.filter((entry) => entry.revenueAmount > 0);
+  const expenseEntries = departmentEntries.filter((entry) => entry.expenseAmount > 0);
+  const revenue = roundLedgerMoney(
+    revenueEntries.reduce((sum, entry) => sum + (Number(entry.revenueAmount) || 0), 0)
+  );
+  const expenses = roundLedgerMoney(
+    expenseEntries.reduce((sum, entry) => sum + (Number(entry.expenseAmount) || 0), 0)
+  );
+  const net = roundLedgerMoney(revenue - expenses);
+  const categoryMap = new Map<string, number>();
+
+  expenseEntries.forEach((entry) => {
+    const category = getExpenseCategoryKey(entry);
+    categoryMap.set(category, (categoryMap.get(category) || 0) + entry.expenseAmount);
+  });
+
+  const topCategories = Array.from(categoryMap.entries())
+    .map(([category, amount]) => ({
+      category,
+      amount: roundLedgerMoney(amount),
+      percent: expenses > 0 ? (amount / expenses) * 100 : 0,
+    }))
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 3);
+
+  const topCategory = topCategories[0];
+  const expenseToRevenueRatio = revenue > 0 ? expenses / revenue : expenses > 0 ? Infinity : 0;
+  let causeInsight = "Revenue and expenses are currently balanced.";
+  let actionHint = "Maintain current controls and monitor activity.";
+
+  if (expenses > revenue && revenue > 0) {
+    causeInsight = `Expenses are ${expenseToRevenueRatio.toFixed(1)}x higher than revenue.`;
+    actionHint = "Increase average sale price or volume.";
+  } else if (expenses > 0 && revenue === 0) {
+    causeInsight = "Expenses are recorded without matching revenue.";
+    actionHint = "Check if sales are missing or the department is inactive.";
+  } else if (topCategory && topCategory.percent >= 50) {
+    causeInsight = `Top expense category contributes ${topCategory.percent.toFixed(0)}% of total cost.`;
+    actionHint = `Reduce ${formatLedgerCategoryLabel(topCategory.category)} category (${topCategory.percent.toFixed(0)}%).`;
+  } else if (net < 0) {
+    causeInsight = `Revenue is short by ${roundLedgerMoney(Math.abs(net)).toFixed(2)}.`;
+    actionHint = "Reduce costs or increase sales volume.";
+  }
+
+  if (topCategory && expenses > revenue) {
+    actionHint = `Reduce ${formatLedgerCategoryLabel(topCategory.category)} category (${topCategory.percent.toFixed(0)}%).`;
+  }
+
+  return {
+    departmentKey: normalizedDepartmentKey,
+    revenue: {
+      total: revenue,
+      transactions: revenueEntries.length,
+      averageSale: revenueEntries.length > 0 ? roundLedgerMoney(revenue / revenueEntries.length) : 0,
+    },
+    expenses: {
+      total: expenses,
+      topCategories,
+    },
+    net: {
+      value: net,
+      gap: roundLedgerMoney(revenue - expenses),
+      expenseToRevenueRatio,
+    },
+    causeInsight,
+    actionHint,
+  };
 }
 
 export function selectSmartLedgerAlerts(

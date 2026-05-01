@@ -30,6 +30,7 @@ import {
   normalizeLedgerPaymentMethod,
   selectDashboardLedgerSummary,
   selectDepartmentIntelligence,
+  selectDepartmentRootCauseAnalysis,
   selectSmartLedgerAlerts,
   type CanonicalLedgerEntry,
   type DepartmentIntelligenceClassification,
@@ -912,6 +913,14 @@ export default function SalesDashboardPage() {
     [filteredLedgerEntries, departmentOptions]
   );
 
+  const drilldownDepartmentKey =
+    selectedDepartmentKey ||
+    (departmentFilter !== "all" ? departmentFilter : departmentPerformance[0]?.department || "");
+  const departmentRootCause = useMemo(() => {
+    if (!drilldownDepartmentKey) return null;
+    return selectDepartmentRootCauseAnalysis(filteredLedgerEntries, drilldownDepartmentKey);
+  }, [filteredLedgerEntries, drilldownDepartmentKey]);
+
   const paymentChartData = useMemo(() => {
     return paymentMix.map((item) => ({
       name: item.label,
@@ -1505,7 +1514,12 @@ export default function SalesDashboardPage() {
                       if (alert.type === "loss_making_department") setSelectedFocus("all");
                       if (alert.type === "no_activity") setSelectedFocus("all");
                       if (alert.type === "unusual_activity") setSelectedFocus("all");
-                      setActiveTab("activity");
+                      setActiveTab(
+                        alert.type === "loss_making_department" ||
+                          alert.type === "high_expense"
+                          ? "expenses"
+                          : "activity"
+                      );
                     }}
                     style={{
                       ...styles.alertCard,
@@ -1543,6 +1557,53 @@ export default function SalesDashboardPage() {
               </div>
             )}
           </ChartCard>
+
+          {departmentRootCause && (
+            <ChartCard
+              title="Breakdown Panel"
+              helper={getDepartmentLabel(departmentRootCause.departmentKey, departmentOptions)}
+            >
+              <div style={styles.breakdownGrid}>
+                <div style={styles.insightCard}>
+                  <div style={styles.insightLabel}>Revenue Breakdown</div>
+                  <div style={styles.breakdownLine}>
+                    <span>Total transactions</span>
+                    <strong>{departmentRootCause.revenue.transactions}</strong>
+                  </div>
+                  <div style={styles.breakdownLine}>
+                    <span>Average sale value</span>
+                    <strong>{money(departmentRootCause.revenue.averageSale)}</strong>
+                  </div>
+                </div>
+
+                <div style={styles.insightCard}>
+                  <div style={styles.insightLabel}>Expense Breakdown</div>
+                  {departmentRootCause.expenses.topCategories.length === 0 ? (
+                    <div style={styles.insightSub}>No expense categories found.</div>
+                  ) : (
+                    departmentRootCause.expenses.topCategories.map((category) => (
+                      <div key={category.category} style={styles.breakdownLine}>
+                        <span>{formatCategoryLabel(category.category)}</span>
+                        <strong>
+                          {money(category.amount)} ({category.percent.toFixed(0)}%)
+                        </strong>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div style={styles.insightCard}>
+                  <div style={styles.insightLabel}>Net Analysis</div>
+                  <div style={styles.breakdownLine}>
+                    <span>Revenue vs expenses gap</span>
+                    <strong>{money(departmentRootCause.net.gap)}</strong>
+                  </div>
+                  <div style={styles.insightSub}>{departmentRootCause.causeInsight}</div>
+                  <div style={styles.alertAction}>{departmentRootCause.actionHint}</div>
+                </div>
+              </div>
+            </ChartCard>
+          )}
 
           <div style={styles.intelligenceGrid}>
             <div style={styles.sectionCard}>
@@ -2881,6 +2942,21 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     color: "#475569",
     fontWeight: 600,
+  },
+  breakdownGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 12,
+  },
+  breakdownLine: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    fontSize: 13,
+    color: "#334155",
+    fontWeight: 600,
+    marginTop: 8,
   },
   highlightsGrid: {
     display: "grid",
