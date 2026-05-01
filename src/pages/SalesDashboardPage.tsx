@@ -29,7 +29,9 @@ import {
   loadLedgerEntries,
   normalizeLedgerPaymentMethod,
   selectDashboardLedgerSummary,
+  selectDepartmentIntelligence,
   type CanonicalLedgerEntry,
+  type DepartmentIntelligenceClassification,
 } from "../finance/financialLedger";
 
 type Tx = any;
@@ -47,16 +49,6 @@ type AlertTone = "danger" | "warning" | "success" | "info";
 type RangeFilter = "today" | "yesterday" | "week" | "month" | "all";
 type QuickRangeFilter = RangeFilter | "custom";
 type DateRange = { startDate: string; endDate: string };
-type DepartmentPerformanceRow = {
-  department: string;
-  transactions: number;
-  revenue: number;
-  collections: number;
-  receivables: number;
-  expenses: number;
-  net: number;
-};
-
 const DEPARTMENT_ANALYTICS_LEDGER_SOURCE_TYPES = new Set([
   "room_booking_revenue",
   "guest_payment_collection",
@@ -374,6 +366,15 @@ function TransactionItemBreakdown({ tx }: { tx: Tx }) {
   );
 }
 
+function departmentIntelligenceBadge(
+  classification: DepartmentIntelligenceClassification
+) {
+  if (classification === "top") return "Top Performer";
+  if (classification === "loss") return "Loss";
+  if (classification === "cash_risk") return "Risk";
+  return "Stable";
+}
+
 function getExpenseDepartmentValue(e: ExpenseRow) {
   return normalizeDepartmentKey(e?.departmentKey || e?.deptKey || e?.department || "unknown");
 }
@@ -522,35 +523,22 @@ export default function SalesDashboardPage() {
   }, [dashboardLedgerSummary, filteredLedgerEntries, paymentBreakdown]);
 
   const departmentPerformance = useMemo(() => {
-    const map = new Map<string, DepartmentPerformanceRow>();
+    const transactionCounts = new Map<string, number>();
 
     for (const entry of filteredLedgerEntries) {
       if (!DEPARTMENT_ANALYTICS_LEDGER_SOURCE_TYPES.has(entry.sourceType)) continue;
-
       const dept = getLedgerDepartmentValue(entry);
-      const current = map.get(dept) || {
-        department: dept,
-        transactions: 0,
-        revenue: 0,
-        collections: 0,
-        receivables: 0,
-        expenses: 0,
-        net: 0,
-      };
-
-      current.transactions += 1;
-      current.revenue += Number(entry.revenueAmount) || 0;
-      current.collections += Number(entry.collectionAmount) || 0;
-      current.receivables += Number(entry.receivableAmount) || 0;
-      current.expenses += Number(entry.expenseAmount) || 0;
-      map.set(dept, current);
+      transactionCounts.set(dept, (transactionCounts.get(dept) || 0) + 1);
     }
 
-    for (const row of map.values()) {
-      row.net = row.revenue - row.expenses;
-    }
-
-    return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue);
+    return selectDepartmentIntelligence(filteredLedgerEntries)
+      .map((row) => ({
+        ...row,
+        transactions: transactionCounts.get(row.department) || 0,
+        badge: departmentIntelligenceBadge(row.classification),
+      }))
+      .filter((row) => row.transactions > 0)
+      .sort((a, b) => b.revenue - a.revenue);
   }, [filteredLedgerEntries]);
 
   const expenseAnalytics = useMemo(() => {
@@ -678,26 +666,17 @@ export default function SalesDashboardPage() {
   const departmentLeaderboard = useMemo(() => {
     return departmentPerformance
       .map((row, index) => {
-        const isTopPerformer = departmentHighlights.topRevenue?.department === row.department;
-        const receivableRatio = row.revenue > 0 ? row.receivables / row.revenue : 0;
-        const collectionRatio = row.revenue > 0 ? row.collections / row.revenue : 1;
-        const needsAttention =
-          row.receivables > 0 && (receivableRatio >= 0.3 || collectionRatio < 0.7);
-        let status = "Watch";
-        if (isTopPerformer) status = "Top Performer";
-        else if (needsAttention) status = "Needs Attention";
-
         return {
           ...row,
           rank: index + 1,
-          marginPct: row.revenue > 0 ? (row.net / row.revenue) * 100 : 0,
+          marginPct: row.margin * 100,
           collectionPct: row.revenue > 0 ? (row.collections / row.revenue) * 100 : 0,
           receivablePct: row.revenue > 0 ? (row.receivables / row.revenue) * 100 : 0,
-          status,
+          status: row.badge,
         };
       })
       .sort((a, b) => b.revenue - a.revenue);
-  }, [departmentPerformance, departmentHighlights.topRevenue]);
+  }, [departmentPerformance]);
 
   const recentActivity = useMemo(() => {
     const latestTransactions = filteredLedgerEntries
@@ -1728,6 +1707,7 @@ export default function SalesDashboardPage() {
                           <div style={styles.leaderboardMeta}>
                             Revenue: {money(row.revenue)} • Expenses: {money(row.expenses)}
                           </div>
+                          <div style={styles.insightSub}>{row.insight}</div>
                         </div>
                       </div>
 
@@ -1745,7 +1725,7 @@ export default function SalesDashboardPage() {
                             ...styles.leaderboardStatus,
                             ...(row.status === "Top Performer"
                               ? styles.leaderboardStatusStrong
-                              : row.status === "Needs Attention"
+                              : row.status === "Loss" || row.status === "Risk"
                               ? styles.leaderboardStatusLoss
                               : styles.leaderboardStatusWatch),
                           }}
@@ -2169,6 +2149,7 @@ export default function SalesDashboardPage() {
                           <div style={styles.leaderboardMeta}>
                             Revenue: {money(row.revenue)} • Expenses: {money(row.expenses)}
                           </div>
+                          <div style={styles.insightSub}>{row.insight}</div>
                         </div>
                       </div>
 
@@ -2186,7 +2167,7 @@ export default function SalesDashboardPage() {
                             ...styles.leaderboardStatus,
                             ...(row.status === "Top Performer"
                               ? styles.leaderboardStatusStrong
-                              : row.status === "Needs Attention"
+                              : row.status === "Loss" || row.status === "Risk"
                               ? styles.leaderboardStatusLoss
                               : styles.leaderboardStatusWatch),
                           }}
@@ -2242,7 +2223,10 @@ export default function SalesDashboardPage() {
                         }}
                       >
                         <td style={styles.tdLeft}>
-                          {getDepartmentLabel(row.department, departmentOptions)}
+                          <div>{getDepartmentLabel(row.department, departmentOptions)}</div>
+                          <div style={styles.insightSub}>
+                            {row.badge} • {row.insight}
+                          </div>
                         </td>
                         <td style={styles.tdRight}>{row.transactions}</td>
                         <td style={styles.tdRight}>{money(row.revenue)}</td>

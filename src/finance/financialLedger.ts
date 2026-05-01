@@ -87,6 +87,24 @@ export type LedgerShiftTotals = Record<
   }
 >;
 
+export type DepartmentIntelligenceClassification =
+  | "loss"
+  | "top"
+  | "cash_risk"
+  | "normal";
+
+export type DepartmentIntelligenceRow = {
+  department: string;
+  revenue: number;
+  expenses: number;
+  net: number;
+  collections: number;
+  receivables: number;
+  margin: number;
+  classification: DepartmentIntelligenceClassification;
+  insight: string;
+};
+
 export type LedgerFilterInput = {
   startDate?: string;
   endDate?: string;
@@ -519,6 +537,47 @@ export function selectDepartmentTotals(
     );
     return totals;
   }, {} as LedgerDepartmentTotals);
+}
+
+export function selectDepartmentIntelligence(
+  entries: CanonicalLedgerEntry[]
+): DepartmentIntelligenceRow[] {
+  return Object.entries(selectDepartmentTotals(entries))
+    .map(([department, totals]) => {
+      const revenue = roundLedgerMoney(totals.revenue);
+      const expenses = roundLedgerMoney(totals.expenses);
+      const collections = roundLedgerMoney(totals.collections);
+      const net = roundLedgerMoney(revenue - expenses);
+      const receivables = roundLedgerMoney(revenue - collections);
+      const margin = revenue > 0 ? net / revenue : 0;
+
+      let classification: DepartmentIntelligenceClassification = "normal";
+      let insight = "Stable performance";
+
+      if (net < 0) {
+        classification = "loss";
+        insight = "Loss making department";
+      } else if (margin > 0.5) {
+        classification = "top";
+        insight = "High performing department";
+      } else if (collections < revenue) {
+        classification = "cash_risk";
+        insight = "Low collection rate";
+      }
+
+      return {
+        department: normalizeDepartmentKey(department),
+        revenue,
+        expenses,
+        net,
+        collections,
+        receivables,
+        margin,
+        classification,
+        insight,
+      };
+    })
+    .sort((a, b) => b.revenue - a.revenue);
 }
 
 export function selectShiftTotals(entries: CanonicalLedgerEntry[]): LedgerShiftTotals {
