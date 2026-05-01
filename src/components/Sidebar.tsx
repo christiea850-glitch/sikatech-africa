@@ -63,6 +63,7 @@ export default function Sidebar() {
     if (key === "sales-entry") return "/app/sales";
     if (key === "sales-summary") return "/app/sales-dashboard";
     if (key === "accounting-workbench") return "/app/accounting-workbench";
+    if (key === "ledger-debug") return "/app/ledger-debug";
     if (key === "notifications") return "/app/notifications";
     if (key === "reconcile") return "/app/reconcile";
     if (key === "manage-modules") return "/app/manage-modules";
@@ -180,6 +181,12 @@ export default function Sidebar() {
         key: "accounting-workbench",
         label: "Accounting Workbench",
         path: modulePath("accounting-workbench"),
+        group: "admin",
+      });
+      items.push({
+        key: "ledger-debug",
+        label: "Ledger Debug",
+        path: modulePath("ledger-debug"),
         group: "admin",
       });
     }

@@ -88,6 +88,20 @@ export function roundLedgerMoney(value: number) {
   return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
 }
 
+export function deriveLedgerReceivableAmount(
+  revenueAmount: number,
+  collectionAmount: number
+) {
+  return roundLedgerMoney(roundLedgerMoney(revenueAmount) - roundLedgerMoney(collectionAmount));
+}
+
+export function deriveOutstandingReceivableAmount(
+  revenueAmount: number,
+  collectionAmount: number
+) {
+  return Math.max(0, deriveLedgerReceivableAmount(revenueAmount, collectionAmount));
+}
+
 function readLedgerArray(): CanonicalLedgerEntry[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(LEDGER_STORAGE_KEY) || "[]");
@@ -124,6 +138,37 @@ export function upsertLedgerEntries(entries: CanonicalLedgerEntry[]) {
 
   entries.forEach((entry) => {
     byId.set(entry.id, createLedgerEntry(entry));
+  });
+
+  const next = Array.from(byId.values()).sort(
+    (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+  );
+  if (JSON.stringify(next) === JSON.stringify(current)) return current;
+  saveLedgerEntries(next);
+  return next;
+}
+
+export function replaceLedgerEntries(
+  shouldReplace: (entry: CanonicalLedgerEntry) => boolean,
+  entries: CanonicalLedgerEntry[]
+) {
+  const current = loadLedgerEntries();
+  const replacements = new Map<string, CanonicalLedgerEntry>();
+
+  entries.forEach((entry) => {
+    const normalized = createLedgerEntry(entry);
+    replacements.set(normalized.id, normalized);
+  });
+
+  const byId = new Map<string, CanonicalLedgerEntry>();
+  current.forEach((entry) => {
+    if (!shouldReplace(entry) && !replacements.has(entry.id)) {
+      byId.set(entry.id, entry);
+    }
+  });
+
+  replacements.forEach((entry) => {
+    byId.set(entry.id, entry);
   });
 
   const next = Array.from(byId.values()).sort(
@@ -202,11 +247,14 @@ export function addLedgerEntryToTotals(
     "revenueAmount" | "collectionAmount" | "expenseAmount" | "receivableAmount"
   >
 ): LedgerAmountTotals {
+  const revenue = roundLedgerMoney(totals.revenue + entry.revenueAmount);
+  const collections = roundLedgerMoney(totals.collections + entry.collectionAmount);
+
   return {
-    revenue: roundLedgerMoney(totals.revenue + entry.revenueAmount),
-    collections: roundLedgerMoney(totals.collections + entry.collectionAmount),
+    revenue,
+    collections,
     expenses: roundLedgerMoney(totals.expenses + entry.expenseAmount),
-    receivables: roundLedgerMoney(totals.receivables + entry.receivableAmount),
+    receivables: deriveOutstandingReceivableAmount(revenue, collections),
     count: totals.count + 1,
   };
 }
@@ -320,6 +368,8 @@ export function createLedgerEntry(
 ): CanonicalLedgerEntry {
   const sourceType = normalizeLedgerSourceType(input.sourceType);
   const sourceId = String(input.sourceId || "").trim() || "unknown";
+  const revenueAmount = roundLedgerMoney(input.revenueAmount || 0);
+  const collectionAmount = roundLedgerMoney(input.collectionAmount || 0);
 
   return {
     ...input,
@@ -332,9 +382,9 @@ export function createLedgerEntry(
       input.paymentMethod,
       defaultPaymentMethodForSourceType(sourceType)
     ),
-    revenueAmount: roundLedgerMoney(input.revenueAmount || 0),
-    collectionAmount: roundLedgerMoney(input.collectionAmount || 0),
-    receivableAmount: roundLedgerMoney(input.receivableAmount || 0),
+    revenueAmount,
+    collectionAmount,
+    receivableAmount: deriveLedgerReceivableAmount(revenueAmount, collectionAmount),
     expenseAmount: roundLedgerMoney(input.expenseAmount || 0),
     status: input.status || "posted",
   };

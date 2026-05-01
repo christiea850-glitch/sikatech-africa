@@ -20,6 +20,7 @@ import ReconcilePage from "./pages/ReconcilePage";
 import CashDeskClosingsPage from "./pages/CashDeskClosingsPage";
 import ExpensePage from "./expenses/ExpensePage";
 import AccountingWorkbenchPage from "./pages/AccountingWorkbenchPage";
+import LedgerDebugPage from "./pages/LedgerDebugPage";
 
 export default function App() {
   return (
@@ -46,6 +47,14 @@ export default function App() {
           element={
             <ProtectedRoute moduleKey="accounting-workbench">
               <AccountingWorkbenchPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="ledger-debug"
+          element={
+            <ProtectedRoute moduleKey="accounting-workbench">
+              <LedgerDebugPage />
             </ProtectedRoute>
           }
         />

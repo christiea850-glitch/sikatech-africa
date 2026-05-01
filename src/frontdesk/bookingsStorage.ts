@@ -1,7 +1,7 @@
 import {
   createLedgerEntry,
+  replaceLedgerEntries,
   roundLedgerMoney,
-  upsertLedgerEntries,
   type CanonicalLedgerEntry,
 } from "../finance/financialLedger";
 
@@ -180,7 +180,6 @@ function bookingRevenueLedgerEntry(booking: BookingRecord) {
     paymentMethod: "room_booking",
     revenueAmount,
     collectionAmount: 0,
-    receivableAmount: revenueAmount,
     expenseAmount: 0,
     status: "posted",
     createdBy: bookingCreatedBy(booking),
@@ -208,7 +207,6 @@ function bookingPaymentLedgerEntry(
     paymentMethod: activity.paymentMethod || "cash",
     revenueAmount: 0,
     collectionAmount: amount,
-    receivableAmount: -amount,
     expenseAmount: 0,
     status: "posted",
     createdBy: {
@@ -235,11 +233,39 @@ function legacyBookingPaymentLedgerEntry(booking: BookingRecord, amount: number)
     paymentMethod: "cash",
     revenueAmount: 0,
     collectionAmount: paid,
-    receivableAmount: -paid,
     expenseAmount: 0,
     status: "posted",
     createdBy: bookingCreatedBy(booking),
   });
+}
+
+function paymentActivityDedupeKey(activity: BookingFolioActivity) {
+  return String(
+    activity.id ||
+      [
+        activity.createdAt || 0,
+        activity.amount || 0,
+        activity.paymentMethod || "",
+        activity.transactionSource || "",
+      ].join(":")
+  );
+}
+
+function uniquePaymentActivities(activities: BookingFolioActivity[]) {
+  const byKey = new Map<string, BookingFolioActivity>();
+  activities.forEach((activity) => {
+    const key = paymentActivityDedupeKey(activity);
+    if (!byKey.has(key)) byKey.set(key, activity);
+  });
+  return Array.from(byKey.values());
+}
+
+function uniqueLedgerEntries(entries: CanonicalLedgerEntry[]) {
+  const byId = new Map<string, CanonicalLedgerEntry>();
+  entries.forEach((entry) => {
+    if (!byId.has(entry.id)) byId.set(entry.id, entry);
+  });
+  return Array.from(byId.values());
 }
 
 function ledgerEntriesForBooking(booking: BookingRecord) {
@@ -247,8 +273,8 @@ function ledgerEntriesForBooking(booking: BookingRecord) {
   const revenueEntry = bookingRevenueLedgerEntry(booking);
   if (revenueEntry) entries.push(revenueEntry);
 
-  const paymentActivities = (booking.folioActivity || []).filter(
-    (activity) => activity.type === "payment"
+  const paymentActivities = uniquePaymentActivities(
+    (booking.folioActivity || []).filter((activity) => activity.type === "payment")
   );
   const paymentActivityTotal = roundMoney(
     paymentActivities.reduce((sum, activity) => sum + safeNumber(activity.amount, 0), 0)
@@ -265,16 +291,42 @@ function ledgerEntriesForBooking(booking: BookingRecord) {
   const legacyEntry = legacyBookingPaymentLedgerEntry(booking, missingPaidAmount);
   if (legacyEntry) entries.push(legacyEntry);
 
-  return entries;
+  return uniqueLedgerEntries(entries);
+}
+
+function bookingIdFromLedgerEntry(entry: CanonicalLedgerEntry) {
+  if (entry.bookingId) return entry.bookingId;
+  if (entry.sourceType === "room_booking_revenue" && entry.sourceId) return entry.sourceId;
+
+  const idMatch = String(entry.id || "").match(/^guest_payment_collection:([^:]+):/);
+  if (idMatch?.[1]) return idMatch[1];
+
+  const legacySourceMatch = String(entry.sourceId || "").match(/^(booking_[^:]+):legacy_amount_paid$/);
+  return legacySourceMatch?.[1] || null;
+}
+
+function isLedgerEntryForBookingIds(
+  entry: CanonicalLedgerEntry,
+  bookingIds: Set<string>
+) {
+  const bookingId = bookingIdFromLedgerEntry(entry);
+  return Boolean(bookingId && bookingIds.has(bookingId));
 }
 
 function syncBookingLedgerEntries(booking: BookingRecord) {
-  upsertLedgerEntries(ledgerEntriesForBooking(booking));
+  replaceLedgerEntries(
+    (entry) => bookingIdFromLedgerEntry(entry) === booking.id,
+    ledgerEntriesForBooking(booking)
+  );
 }
 
 export function migrateBookingsToLedger(bookings: BookingRecord[] = loadBookings()) {
   const entries = bookings.flatMap((booking) => ledgerEntriesForBooking(booking));
-  upsertLedgerEntries(entries);
+  const bookingIds = new Set(bookings.map((booking) => booking.id));
+  replaceLedgerEntries(
+    (entry) => isLedgerEntryForBookingIds(entry, bookingIds),
+    entries
+  );
   return entries.length;
 }
 
