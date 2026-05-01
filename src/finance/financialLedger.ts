@@ -110,6 +110,7 @@ export type SmartLedgerAlertType =
   | "collection_risk"
   | "high_expense"
   | "top_performer"
+  | "no_activity"
   | "unusual_activity";
 
 export type SmartLedgerAlertSeverity = "info" | "warning" | "danger" | "success";
@@ -124,6 +125,10 @@ export type SmartLedgerAlert = {
   sourceType?: LedgerSourceType;
   metricValue: number;
   recommendedAction: string;
+};
+
+export type SmartLedgerAlertOptions = {
+  departmentKeys?: string[];
 };
 
 export type LedgerFilterInput = {
@@ -601,81 +606,117 @@ export function selectDepartmentIntelligence(
     .sort((a, b) => b.revenue - a.revenue);
 }
 
+function formatLedgerDepartmentLabel(value: string) {
+  return normalizeDepartmentKey(value)
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export function selectSmartLedgerAlerts(
-  entries: CanonicalLedgerEntry[]
+  entries: CanonicalLedgerEntry[],
+  options: SmartLedgerAlertOptions = {}
 ): SmartLedgerAlert[] {
   const departmentRows = selectDepartmentIntelligence(entries);
   const alerts: SmartLedgerAlert[] = [];
+  const severityRank: Record<SmartLedgerAlertSeverity, number> = {
+    danger: 0,
+    warning: 1,
+    info: 2,
+    success: 3,
+  };
+  const totalExpenses = departmentRows.reduce((sum, row) => sum + row.expenses, 0);
 
-  departmentRows
-    .filter((row) => row.classification === "loss")
-    .sort((a, b) => a.net - b.net)
-    .slice(0, 3)
-    .forEach((row) => {
-      alerts.push({
-        id: `loss_making_department:${row.department}`,
-        type: "loss_making_department",
-        severity: "danger",
-        title: "Loss making department",
-        message: `${row.department} is running a net loss of ${roundLedgerMoney(row.net)}.`,
-        departmentKey: row.department,
-        metricValue: row.net,
-        recommendedAction: "Review expenses and pricing for this department.",
-      });
+  const worstLoss = departmentRows
+    .filter((row) => row.net < 0)
+    .sort((a, b) => a.net - b.net)[0];
+  if (worstLoss) {
+    const label = formatLedgerDepartmentLabel(worstLoss.department);
+    alerts.push({
+      id: `loss_making_department:${worstLoss.department}`,
+      type: "loss_making_department",
+      severity: "danger",
+      title: "Loss making department",
+      message: `${label} is operating at a loss of ${roundLedgerMoney(worstLoss.net).toFixed(2)}.`,
+      departmentKey: worstLoss.department,
+      metricValue: worstLoss.net,
+      recommendedAction: "Review expenses or increase pricing.",
     });
+  }
 
-  departmentRows
-    .filter((row) => row.revenue > 0 && row.collections < row.revenue)
-    .sort((a, b) => b.receivables - a.receivables)
-    .slice(0, 3)
-    .forEach((row) => {
-      alerts.push({
-        id: `collection_risk:${row.department}`,
-        type: "collection_risk",
-        severity: "warning",
-        title: "Collection risk",
-        message: `${row.department} has ${roundLedgerMoney(row.receivables)} still uncollected.`,
-        departmentKey: row.department,
-        sourceType: "guest_payment_collection",
-        metricValue: row.receivables,
-        recommendedAction: "Follow up unpaid balances and confirm guest payment status.",
-      });
+  const weakestCollection = departmentRows
+    .filter((row) => row.revenue > 0 && row.collections / row.revenue < 0.7)
+    .sort((a, b) => a.collections / a.revenue - b.collections / b.revenue)[0];
+  if (weakestCollection) {
+    const label = formatLedgerDepartmentLabel(weakestCollection.department);
+    const collectionRate = Math.round((weakestCollection.collections / weakestCollection.revenue) * 100);
+    alerts.push({
+      id: `collection_risk:${weakestCollection.department}`,
+      type: "collection_risk",
+      severity: "warning",
+      title: "Low collection rate",
+      message: `${label} has low collection rate (${collectionRate}%).`,
+      departmentKey: weakestCollection.department,
+      sourceType: "guest_payment_collection",
+      metricValue: collectionRate,
+      recommendedAction: "Follow up on outstanding payments.",
     });
+  }
 
-  departmentRows
-    .filter((row) => row.expenses > 0 && (row.expenses > row.revenue * 0.6 || row.net < 0))
-    .sort((a, b) => b.expenses - a.expenses)
-    .slice(0, 2)
-    .forEach((row) => {
-      alerts.push({
-        id: `high_expense:${row.department}`,
-        type: "high_expense",
-        severity: row.net < 0 ? "danger" : "warning",
-        title: "High expense pressure",
-        message: `${row.department} expenses are ${roundLedgerMoney(row.expenses)} against revenue of ${roundLedgerMoney(row.revenue)}.`,
-        departmentKey: row.department,
-        sourceType: "expense",
-        metricValue: row.expenses,
-        recommendedAction: "Check recent expense entries and approval notes.",
-      });
+  const expenseLeader = departmentRows
+    .filter((row) => totalExpenses > 0 && row.expenses / totalExpenses > 0.5)
+    .sort((a, b) => b.expenses - a.expenses)[0];
+  if (expenseLeader) {
+    const label = formatLedgerDepartmentLabel(expenseLeader.department);
+    alerts.push({
+      id: `high_expense:${expenseLeader.department}`,
+      type: "high_expense",
+      severity: "warning",
+      title: "High expense concentration",
+      message: `${label} contributes majority of expenses.`,
+      departmentKey: expenseLeader.department,
+      sourceType: "expense",
+      metricValue: expenseLeader.expenses,
+      recommendedAction: "Audit expense categories.",
     });
+  }
 
-  departmentRows
-    .filter((row) => row.classification === "top")
-    .sort((a, b) => b.net - a.net)
-    .slice(0, 2)
-    .forEach((row) => {
-      alerts.push({
-        id: `top_performer:${row.department}`,
-        type: "top_performer",
-        severity: "success",
-        title: "Top performer",
-        message: `${row.department} has a ${roundLedgerMoney(row.margin * 100)}% margin.`,
-        departmentKey: row.department,
-        metricValue: row.margin,
-        recommendedAction: "Use this department as the benchmark for staffing and pricing.",
-      });
+  const topRevenue = departmentRows
+    .filter((row) => row.revenue > 0)
+    .sort((a, b) => b.revenue - a.revenue)[0];
+  if (topRevenue) {
+    const label = formatLedgerDepartmentLabel(topRevenue.department);
+    alerts.push({
+      id: `top_performer:${topRevenue.department}`,
+      type: "top_performer",
+      severity: "success",
+      title: "Top performer",
+      message: `${label} is top performing department.`,
+      departmentKey: topRevenue.department,
+      metricValue: topRevenue.revenue,
+      recommendedAction: "Maintain strategy or scale operations.",
     });
+  }
+
+  const activeDepartmentKeys = new Set(departmentRows.map((row) => row.department));
+  const inactiveDepartment = (options.departmentKeys || [])
+    .map((key) => normalizeDepartmentKey(key))
+    .filter((key) => key && key !== "unknown" && !activeDepartmentKeys.has(key))
+    .sort()[0];
+  if (inactiveDepartment) {
+    const label = formatLedgerDepartmentLabel(inactiveDepartment);
+    alerts.push({
+      id: `no_activity:${inactiveDepartment}`,
+      type: "no_activity",
+      severity: "info",
+      title: "No department activity",
+      message: `${label} has no activity.`,
+      departmentKey: inactiveDepartment,
+      metricValue: 0,
+      recommendedAction: "Check if department is inactive or misconfigured.",
+    });
+  }
 
   const now = Date.now();
   const recentEntries = entries.filter((entry) => {
@@ -703,7 +744,13 @@ export function selectSmartLedgerAlerts(
     });
   }
 
-  return alerts.slice(0, 8);
+  return alerts
+    .sort(
+      (a, b) =>
+        severityRank[a.severity] - severityRank[b.severity] ||
+        Math.abs(b.metricValue) - Math.abs(a.metricValue)
+    )
+    .slice(0, 5);
 }
 
 export function selectShiftTotals(entries: CanonicalLedgerEntry[]): LedgerShiftTotals {

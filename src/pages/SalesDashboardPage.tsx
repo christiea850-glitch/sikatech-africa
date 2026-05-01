@@ -905,8 +905,11 @@ export default function SalesDashboardPage() {
     return buckets;
   }, [filteredLedgerEntries]);
   const smartAlerts = useMemo(
-    () => selectSmartLedgerAlerts(filteredLedgerEntries),
-    [filteredLedgerEntries]
+    () =>
+      selectSmartLedgerAlerts(filteredLedgerEntries, {
+        departmentKeys: departmentOptions.map((department) => department.value),
+      }),
+    [filteredLedgerEntries, departmentOptions]
   );
 
   const paymentChartData = useMemo(() => {
@@ -1499,6 +1502,9 @@ export default function SalesDashboardPage() {
                       if (alert.type === "high_expense") setSelectedFocus("expenses");
                       if (alert.type === "collection_risk") setSelectedFocus("receivables");
                       if (alert.type === "top_performer") setSelectedFocus("revenue");
+                      if (alert.type === "loss_making_department") setSelectedFocus("all");
+                      if (alert.type === "no_activity") setSelectedFocus("all");
+                      if (alert.type === "unusual_activity") setSelectedFocus("all");
                       setActiveTab("activity");
                     }}
                     style={{
@@ -1515,7 +1521,20 @@ export default function SalesDashboardPage() {
                   >
                     <div style={styles.alertTitle}>
                       {alert.title}
-                      <span style={styles.alertBadge}>{alert.severity}</span>
+                      <span
+                        style={{
+                          ...styles.alertBadge,
+                          ...(alert.severity === "danger"
+                            ? styles.alertBadgeDanger
+                            : alert.severity === "warning"
+                            ? styles.alertBadgeWarning
+                            : alert.severity === "success"
+                            ? styles.alertBadgeSuccess
+                            : styles.alertBadgeInfo),
+                        }}
+                      >
+                        {alert.severity}
+                      </span>
                     </div>
                     <div style={styles.alertMessage}>{alert.message}</div>
                     <div style={styles.alertAction}>{alert.recommendedAction}</div>
@@ -2785,12 +2804,26 @@ const styles: Record<string, React.CSSProperties> = {
   alertBadge: {
     borderRadius: 999,
     padding: "3px 8px",
-    background: "rgba(255, 255, 255, 0.72)",
     border: "1px solid rgba(15, 23, 42, 0.1)",
-    color: "#334155",
     fontSize: 11,
     fontWeight: 800,
     textTransform: "uppercase",
+  },
+  alertBadgeDanger: {
+    background: "#DC2626",
+    color: "#FFFFFF",
+  },
+  alertBadgeWarning: {
+    background: "#F59E0B",
+    color: "#111827",
+  },
+  alertBadgeSuccess: {
+    background: "#16A34A",
+    color: "#FFFFFF",
+  },
+  alertBadgeInfo: {
+    background: "#2563EB",
+    color: "#FFFFFF",
   },
   alertMessage: {
     fontSize: 13,
