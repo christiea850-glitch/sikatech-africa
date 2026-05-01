@@ -20,6 +20,11 @@ import {
   upsertAccountingWorkbenchReview,
   type AccountingReviewStatus,
 } from "../accounting/accountingWorkbenchStorage";
+import {
+  ACCOUNTING_DATE_RANGE_CHANGED_EVENT,
+  loadAccountingDateRange,
+  saveAccountingDateRange,
+} from "../accounting/accountingDateRangeStorage";
 
 type SourceType =
   | "room_booking_revenue"
@@ -256,8 +261,7 @@ export default function AccountingWorkbenchPage() {
   const [bookingVersion, setBookingVersion] = useState(0);
   const [closingVersion, setClosingVersion] = useState(0);
   const [resolvedUnclosedAlerts, setResolvedUnclosedAlerts] = useState<string[]>(() => loadResolvedUnclosedAlerts());
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [dateRange, setDateRange] = useState(() => loadAccountingDateRange());
   const [department, setDepartment] = useState("all");
   const [paymentMethod, setPaymentMethod] = useState("all");
   const [source, setSource] = useState("all");
@@ -284,6 +288,8 @@ export default function AccountingWorkbenchPage() {
     role === "auditor";
   const canEditReviewLayer = role === "accounting";
   const businessName = resolveBusinessName(user, setupBusinessName);
+  const startDate = dateRange.startDate;
+  const endDate = dateRange.endDate;
 
   const reviews = useMemo(() => {
     void reviewVersion;
@@ -310,6 +316,18 @@ export default function AccountingWorkbenchPage() {
     const refreshTrace = () => setTraceVersion((v) => v + 1);
     window.addEventListener(SHIFT_TRACE_CHANGED_EVENT, refreshTrace);
     return () => window.removeEventListener(SHIFT_TRACE_CHANGED_EVENT, refreshTrace);
+  }, []);
+
+  useEffect(() => {
+    const syncDateRange = () => {
+      const next = loadAccountingDateRange();
+      setDateRange((prev) =>
+        prev.startDate === next.startDate && prev.endDate === next.endDate ? prev : next
+      );
+    };
+    window.addEventListener(ACCOUNTING_DATE_RANGE_CHANGED_EVENT, syncDateRange);
+    return () =>
+      window.removeEventListener(ACCOUNTING_DATE_RANGE_CHANGED_EVENT, syncDateRange);
   }, []);
 
   useEffect(() => {
@@ -619,7 +637,7 @@ export default function AccountingWorkbenchPage() {
     const resolved = new Set(resolvedUnclosedAlerts);
     const map = new Map<string, UnclosedShiftAlert>();
 
-    rows.forEach((row) => {
+    filtered.forEach((row) => {
       if (row.shiftStatus !== "unclosed" && row.shiftStatus !== "auto_submitted") return;
 
       const shiftDate = dateOnly(row.transactionTime) || dateOnly(row.date) || "unknown";
@@ -648,7 +666,7 @@ export default function AccountingWorkbenchPage() {
     });
 
     return Array.from(map.values()).sort((a, b) => b.shiftDate.localeCompare(a.shiftDate));
-  }, [rows, resolvedUnclosedAlerts]);
+  }, [filtered, resolvedUnclosedAlerts]);
 
   const unclosedShiftDateGroups = useMemo(() => {
     const map = new Map<string, UnclosedShiftAlert[]>();
@@ -682,6 +700,18 @@ export default function AccountingWorkbenchPage() {
     void closingVersion;
     return loadShiftClosings();
   }, [closingVersion]);
+  const filteredClosingRecords = useMemo(() => {
+    const ids = new Set(
+      filtered
+        .filter((row) => row.source === "cash_desk_closing")
+        .map((row) => row.id.replace(/^closing:/, ""))
+    );
+    return closingRecords.filter((closing) => ids.has(String(closing.id)));
+  }, [closingRecords, filtered]);
+
+  function updateDateRange(patch: Partial<typeof dateRange>) {
+    setDateRange((prev) => saveAccountingDateRange({ ...prev, ...patch }));
+  }
 
   function updateReview(row: AccountingRow, status: AccountingReviewStatus) {
     if (!canEditReviewLayer) return;
@@ -889,8 +919,8 @@ export default function AccountingWorkbenchPage() {
 
       <div style={styles.panel}>
         <div style={styles.filterGrid}>
-          <Field label="Start Date"><input type="date" style={styles.input} value={startDate} onChange={(e) => setStartDate(e.target.value)} /></Field>
-          <Field label="End Date"><input type="date" style={styles.input} value={endDate} onChange={(e) => setEndDate(e.target.value)} /></Field>
+          <Field label="Start Date"><input type="date" style={styles.input} value={startDate} onChange={(e) => updateDateRange({ startDate: e.target.value })} /></Field>
+          <Field label="End Date"><input type="date" style={styles.input} value={endDate} onChange={(e) => updateDateRange({ endDate: e.target.value })} /></Field>
           <Field label="Department"><Select value={department} onChange={setDepartment} options={["all", ...departments]} labeler={(v) => v === "all" ? "All" : formatDepartmentLabel(v)} /></Field>
           <Field label="Payment Method"><Select value={paymentMethod} onChange={setPaymentMethod} options={["all", ...paymentMethods]} /></Field>
           <Field label="Source / Type"><Select value={source} onChange={setSource} options={["all", "room_booking_revenue", "room_folio_charge", "food_service_sale", "department_pos_sale", "guest_payment", "cash_desk_closing", "expense"]} labeler={(v) => v === "all" ? "All" : sourceLabel(v as SourceType)} /></Field>
@@ -1006,7 +1036,7 @@ export default function AccountingWorkbenchPage() {
                 </tr>
               </thead>
               <tbody>
-                {closingRecords.map((closing) => {
+                {filteredClosingRecords.map((closing) => {
                   const reviewStatus = closing.accounting_review_status || "pending";
                   const noteValue =
                     closingNoteDrafts[String(closing.id)] ??
@@ -1071,7 +1101,7 @@ export default function AccountingWorkbenchPage() {
               </tbody>
             </table>
           </div>
-          {closingRecords.length === 0 ? (
+          {filteredClosingRecords.length === 0 ? (
             <div style={styles.emptyState}>No cash desk closings have been captured yet.</div>
           ) : null}
         </div>

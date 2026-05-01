@@ -32,6 +32,7 @@ type ShiftLike = {
 
 type ShiftApiLike = {
   activeShift?: ShiftLike | null;
+  openForDept?: (departmentKey?: string) => Promise<void> | void;
   refreshActiveShift?: () => Promise<void> | void;
 };
 
@@ -185,7 +186,7 @@ function findPostableRoomBooking(roomNo: string): BookingRecord | null {
 
 export default function FrontDeskEntry() {
   const { user } = useAuth();
-  const { activeShift, refreshActiveShift } = useShift() as ShiftApiLike;
+  const { activeShift, openForDept, refreshActiveShift } = useShift() as ShiftApiLike;
   const { addSale } = useSales();
 
   const [tab, setTab] = useState<TabKey>("overview");
@@ -212,18 +213,35 @@ export default function FrontDeskEntry() {
 
   const isReadOnly =
     submittedLocal ||
+    shiftStatus === "submitted" ||
+    shiftStatus === "pending_close" ||
+    shiftStatus === "pending_closing" ||
+    shiftStatus === "closing-submitted" ||
     shiftStatus === "closing_submitted" ||
+    shiftStatus === "reviewed" ||
+    shiftStatus === "accounting_approved" ||
     shiftStatus === "accounting_reviewed" ||
+    shiftStatus === "approved" ||
     shiftStatus === "manager_approved" ||
-    shiftStatus === "closed";
+    shiftStatus === "closed" ||
+    shiftStatus === "auto_submitted";
+  const canOpenShift = !busy && !isReadOnly && !activeShift?.id;
+  const canSubmitClose = !busy && !isReadOnly && !!activeShift?.id;
 
   useEffect(() => {
     async function syncShiftState() {
       if (
         shiftStatus === "closing_submitted" ||
+        shiftStatus === "submitted" ||
+        shiftStatus === "pending_close" ||
+        shiftStatus === "pending_closing" ||
+        shiftStatus === "reviewed" ||
+        shiftStatus === "accounting_approved" ||
         shiftStatus === "accounting_reviewed" ||
+        shiftStatus === "approved" ||
         shiftStatus === "manager_approved" ||
-        shiftStatus === "closed"
+        shiftStatus === "closed" ||
+        shiftStatus === "auto_submitted"
       ) {
         setSubmittedLocal(true);
 
@@ -234,7 +252,7 @@ export default function FrontDeskEntry() {
             //
           }
         }
-      } else if (shiftStatus === "open" || !shiftStatus) {
+      } else if (shiftStatus === "open") {
         setSubmittedLocal(false);
       }
     }
@@ -415,6 +433,16 @@ export default function FrontDeskEntry() {
       } catch {
         setMsg("Unable to refresh shift right now.");
       }
+    }
+  }
+
+  async function onOpenShift() {
+    if (!canOpenShift || typeof openForDept !== "function") return;
+    setMsg(null);
+    try {
+      await openForDept("front-desk");
+    } catch (e: unknown) {
+      setMsg(getErrorMessage(e, "Unable to open shift right now."));
     }
   }
 
@@ -630,14 +658,18 @@ export default function FrontDeskEntry() {
             Refresh
           </button>
 
-          <button style={styles.btnDisabled} disabled>
+          <button
+            style={canOpenShift ? styles.btnPrimary : styles.btnDisabled}
+            onClick={onOpenShift}
+            disabled={!canOpenShift}
+          >
             Open Shift
           </button>
 
           <button
-            style={isReadOnly ? styles.btnDisabled : styles.btnPrimary}
+            style={canSubmitClose ? styles.btnPrimary : styles.btnDisabled}
             onClick={onSubmitClose}
-            disabled={busy || isReadOnly || !activeShift?.id}
+            disabled={!canSubmitClose}
           >
             {busy ? "Submitting..." : "Submit Close"}
           </button>

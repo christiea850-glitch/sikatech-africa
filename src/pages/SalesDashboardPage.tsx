@@ -23,6 +23,11 @@ import { useShift } from "../shifts/ShiftContext";
 import { normalizeDepartmentKey } from "../lib/departments";
 import { formatShiftStatus, resolveShiftTrace, SHIFT_TRACE_CHANGED_EVENT } from "../lib/shiftTrace";
 import { SHIFT_CLOSINGS_CHANGED_EVENT } from "../shifts/shiftClosingStore";
+import {
+  hasAccountingDateRange,
+  loadAccountingDateRange,
+  saveAccountingDateRange,
+} from "../accounting/accountingDateRangeStorage";
 
 type Tx = any;
 type ExpenseRow = any;
@@ -479,9 +484,11 @@ export default function SalesDashboardPage() {
 
   const [search, setSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
-  const [quickRange, setQuickRange] = useState<QuickRangeFilter>("today");
+  const [quickRange, setQuickRange] = useState<QuickRangeFilter>(() =>
+    hasAccountingDateRange() ? "custom" : "today"
+  );
   const [dateRange, setDateRange] = useState<DateRange>(() =>
-    getPresetDateRange("today")
+    loadAccountingDateRange(getPresetDateRange("today"))
   );
   const [selectedDeptRow, setSelectedDeptRow] = useState<string | null>(null);
   const [selectedTx, setSelectedTx] = useState<Tx | null>(null);
@@ -1563,7 +1570,9 @@ export default function SalesDashboardPage() {
               value={dateRange.startDate}
               onChange={(e) => {
                 setQuickRange("custom");
-                setDateRange((prev) => ({ ...prev, startDate: e.target.value }));
+                setDateRange((prev) =>
+                  saveAccountingDateRange({ ...prev, startDate: e.target.value })
+                );
               }}
               style={styles.dateInput}
             />
@@ -1576,7 +1585,9 @@ export default function SalesDashboardPage() {
               value={dateRange.endDate}
               onChange={(e) => {
                 setQuickRange("custom");
-                setDateRange((prev) => ({ ...prev, endDate: e.target.value }));
+                setDateRange((prev) =>
+                  saveAccountingDateRange({ ...prev, endDate: e.target.value })
+                );
               }}
               style={styles.dateInput}
             />
@@ -1588,7 +1599,7 @@ export default function SalesDashboardPage() {
               const next = e.target.value as QuickRangeFilter;
               setQuickRange(next);
               if (next !== "custom") {
-                setDateRange(getPresetDateRange(next));
+                setDateRange(saveAccountingDateRange(getPresetDateRange(next)));
               }
             }}
             style={styles.select}
