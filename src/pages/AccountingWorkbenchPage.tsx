@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { useSales } from "../sales/SalesContext";
-import { useExpenses } from "../expenses/ExpenseContext";
 import { useBusinessSetup } from "../setup/BusinessSetupContext";
-import { BOOKINGS_CHANGED_EVENT, getAllBookings } from "../frontdesk/bookingsStorage";
 import { formatDepartmentLabel, normalizeDepartmentKey } from "../lib/departments";
 import { useShift } from "../shifts/ShiftContext";
 import { formatShiftStatus, recordShiftSubmission, resolveShiftTrace, SHIFT_TRACE_CHANGED_EVENT, type ShiftTraceStatus } from "../lib/shiftTrace";
@@ -25,15 +22,15 @@ import {
   loadAccountingDateRange,
   saveAccountingDateRange,
 } from "../accounting/accountingDateRangeStorage";
+import {
+  FINANCIAL_LEDGER_CHANGED_EVENT,
+  LEDGER_SOURCE_TYPES,
+  loadLedgerEntries,
+  selectAccountingLedgerRows,
+  type LedgerSourceType,
+} from "../finance/financialLedger";
 
-type SourceType =
-  | "room_booking_revenue"
-  | "room_folio_charge"
-  | "food_service_sale"
-  | "department_pos_sale"
-  | "guest_payment"
-  | "cash_desk_closing"
-  | "expense";
+type SourceType = LedgerSourceType;
 type GroupBy = "department" | "paymentMethod" | "staff" | "date" | "source";
 type DetailTab = "overview" | "transaction" | "shift" | "review";
 type WorkbenchTab = "overview" | "unclosed" | "closings" | "records" | "review";
@@ -92,10 +89,6 @@ function money(n: number) {
   return (Number.isFinite(n) ? n : 0).toFixed(2);
 }
 
-function lower(value: unknown) {
-  return String(value ?? "").trim().toLowerCase();
-}
-
 function dateOnly(value: string) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "";
@@ -116,33 +109,12 @@ function inRange(value: string, start: string, end: string) {
 function sourceLabel(source: SourceType) {
   if (source === "room_booking_revenue") return "Room Booking Revenue";
   if (source === "room_folio_charge") return "Room Folio Charges";
-  if (source === "food_service_sale") return "Food & Service Sales";
-  if (source === "department_pos_sale") return "Department POS Sales";
-  if (source === "guest_payment") return "Guest Payments / Collections";
-  if (source === "cash_desk_closing") return "Cash Desk Closing";
+  if (source === "direct_pos_sale") return "Direct POS Sales";
+  if (source === "department_sale") return "Department Sales";
+  if (source === "guest_payment_collection") return "Guest Payments / Collections";
+  if (source === "room_folio_settlement") return "Room Folio Settlements";
+  if (source === "shift_closing_review") return "Shift Closing Review";
   return "Expense";
-}
-
-function directSaleSource(departmentKey: string): SourceType {
-  return normalizeDepartmentKey(departmentKey) === "front-desk"
-    ? "food_service_sale"
-    : "department_pos_sale";
-}
-
-function roomBookingBaseRevenue(booking: any) {
-  const folioCharges = (booking.folioActivity || [])
-    .filter((activity: any) => activity.type === "charge")
-    .reduce((sum: number, activity: any) => sum + (Number(activity.amount) || 0), 0);
-
-  return Math.max(0, (Number(booking.totalAmount) || 0) - folioCharges);
-}
-
-function normalizePaymentState(value: unknown): PaymentState | undefined {
-  const raw = String(value ?? "").trim().toLowerCase();
-  if (raw === "paid") return "paid";
-  if (raw === "partial" || raw === "partially_paid" || raw === "partially-paid") return "partial";
-  if (raw === "unpaid") return "unpaid";
-  return undefined;
 }
 
 function paymentStateLabel(value?: PaymentState) {
@@ -160,12 +132,6 @@ function closingStatusLabel(value?: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-}
-
-function shiftStatusFromClosing(status: string): ShiftTraceStatus {
-  if (status === "auto_submitted") return "auto_submitted";
-  if (status === "pending") return "submitted";
-  return "reviewed";
 }
 
 function closingPaymentBreakdown(closing: ShiftClosingRecord) {
@@ -312,13 +278,11 @@ function priorityLabel(priority: UnclosedShiftPriority) {
 export default function AccountingWorkbenchPage() {
   const { user } = useAuth();
   const { businessName: setupBusinessName } = useBusinessSetup();
-  const { records: salesRecords } = useSales();
-  const { records: expenseRecords } = useExpenses();
   const { shifts } = useShift();
 
   const [reviewVersion, setReviewVersion] = useState(0);
   const [traceVersion, setTraceVersion] = useState(0);
-  const [bookingVersion, setBookingVersion] = useState(0);
+  const [ledgerVersion, setLedgerVersion] = useState(0);
   const [closingVersion, setClosingVersion] = useState(0);
   const [resolvedUnclosedAlerts, setResolvedUnclosedAlerts] = useState<string[]>(() => loadResolvedUnclosedAlerts());
   const [dateRange, setDateRange] = useState(() => loadAccountingDateRange());
@@ -362,9 +326,13 @@ export default function AccountingWorkbenchPage() {
   }, [reviews]);
 
   useEffect(() => {
-    const refreshBookings = () => setBookingVersion((v) => v + 1);
-    window.addEventListener(BOOKINGS_CHANGED_EVENT, refreshBookings);
-    return () => window.removeEventListener(BOOKINGS_CHANGED_EVENT, refreshBookings);
+    const refreshLedger = () => setLedgerVersion((v) => v + 1);
+    window.addEventListener(FINANCIAL_LEDGER_CHANGED_EVENT, refreshLedger);
+    window.addEventListener("storage", refreshLedger);
+    return () => {
+      window.removeEventListener(FINANCIAL_LEDGER_CHANGED_EVENT, refreshLedger);
+      window.removeEventListener("storage", refreshLedger);
+    };
   }, []);
 
   useEffect(() => {
@@ -400,210 +368,65 @@ export default function AccountingWorkbenchPage() {
     if (changed) setClosingVersion((v) => v + 1);
   }, [shifts, user]);
 
+  const ledgerEntries = useMemo(() => {
+    void ledgerVersion;
+    return loadLedgerEntries();
+  }, [ledgerVersion]);
+
   const rows = useMemo<AccountingRow[]>(() => {
-    // Compatibility: Accounting Workbench still composes rows from old stores until Phase 6C.
     void traceVersion;
-    void bookingVersion;
-    const directSales: AccountingRow[] = (salesRecords || [])
-      .filter(
-        (sale) =>
-          lower(sale.paymentMode) !== "post_to_room" &&
-          lower(sale.paymentMethod) !== "room_folio"
-      )
-      .map((sale) => {
-        const trace = resolveShiftTrace(sale as any, shifts);
-        return {
-          id: `sale:${sale.id}`,
-          date: sale.createdAt,
-          source: directSaleSource(sale.deptKey),
-          department: normalizeDepartmentKey(sale.deptKey),
-          paymentMethod: sale.paymentMethod || "other",
-          staff: sale.staffName || sale.staffId || "unknown",
-          description: sale.productName || "Sale",
-          customerName: sale.customerName,
-          transactionSource: (sale as any).transactionSource || "direct_pos_sale",
-          revenue: Number(sale.total) || 0,
-          expense: 0,
-          collection: Number(sale.total) || 0,
-          roomFolioReceivable: 0,
-          guestPayment: 0,
-          paymentState: "paid",
-          transactionTime: sale.createdAt,
-          shiftId: trace.shiftId,
-          shiftStatus: trace.shiftStatus,
-          submittedAt: trace.submittedAt,
-          submittedBy: trace.submittedBy,
-          submissionMode: trace.submissionMode,
-        };
-      });
-
-    const roomBookingRows: AccountingRow[] = getAllBookings()
-      .flatMap((booking) => {
-        const amount = roomBookingBaseRevenue(booking);
-        if (amount <= 0) return [];
-
-        const bookingDate = new Date(booking.createdAt || booking.updatedAt || Date.now()).toISOString();
+    return selectAccountingLedgerRows(ledgerEntries)
+      .map((row) => {
         const trace = resolveShiftTrace(
           {
-            ...booking,
-            createdAt: bookingDate,
-            deptKey: "front-desk",
-            department: "front-desk",
+            id: row.id,
+            createdAt: row.date,
+            deptKey: row.department,
+            department: row.department,
+            shiftId: row.shiftId,
           },
           shifts
         );
-
-        const row: AccountingRow = {
-          id: `booking:${booking.id}`,
-          date: bookingDate,
-          source: "room_booking_revenue",
-          department: normalizeDepartmentKey("front-desk"),
-          paymentMethod: "room_booking",
-          staff: booking.createdBy?.employeeId || "Front Desk",
-          description: `Room booking ${booking.bookingCode || booking.roomNo || ""}`.trim(),
-          revenue: amount,
-          expense: 0,
-          collection: 0,
-          roomFolioReceivable: 0,
-          guestPayment: 0,
-          bookingId: booking.id,
-          bookingCode: booking.bookingCode,
-          roomNo: booking.roomNo,
-          customerName: booking.guestName,
-          transactionSource: "room_booking",
-          paymentState: normalizePaymentState(booking.paymentStatus) || "unpaid",
-          transactionTime: bookingDate,
-          shiftId: trace.shiftId,
-          shiftStatus: trace.shiftStatus,
-          submittedAt: trace.submittedAt,
-          submittedBy: trace.submittedBy,
-          submissionMode: trace.submissionMode,
-        };
-
-        return [row];
-      });
-
-    const folioRows: AccountingRow[] = getAllBookings().flatMap((booking) =>
-      (booking.folioActivity || [])
-        .filter((activity) => activity.type === "charge" || activity.type === "payment")
-        .map((activity) => {
-          const amount = Number(activity.amount) || 0;
-          const isPayment = activity.type === "payment";
-          const activityDate = new Date(activity.createdAt).toISOString();
-          const trace = resolveShiftTrace(
-            {
-              ...activity,
-              createdAt: activityDate,
-              deptKey: "front-desk",
-              department: "front-desk",
-            },
-            shifts
-          );
-          return {
-            id: `folio:${booking.id}:${activity.id}`,
-            date: activityDate,
-            source: isPayment ? "guest_payment" : "room_folio_charge",
-            department: normalizeDepartmentKey("front-desk"),
-            paymentMethod: isPayment ? activity.paymentMethod || "other" : "room_folio",
-            staff: "Front Desk",
-            description: activity.title || sourceLabel(isPayment ? "guest_payment" : "room_folio_charge"),
-            revenue: isPayment ? 0 : amount,
-            expense: 0,
-            collection: isPayment ? amount : 0,
-            roomFolioReceivable: isPayment ? 0 : amount,
-            guestPayment: isPayment ? amount : 0,
-            bookingId: activity.bookingId || booking.id,
-            bookingCode: activity.bookingCode || booking.bookingCode,
-            roomNo: activity.roomNo || booking.roomNo,
-            customerName: activity.customerName || booking.guestName,
-            transactionSource:
-              activity.transactionSource ||
-              (isPayment ? "guest_payment" : "room_folio_charge"),
-            paymentState: isPayment ? "paid" : normalizePaymentState(booking.paymentStatus) || "unpaid",
-            transactionTime: activityDate,
-            shiftId: trace.shiftId,
-            shiftStatus: trace.shiftStatus,
-            submittedAt: trace.submittedAt,
-            submittedBy: trace.submittedBy,
-            submissionMode: trace.submissionMode,
-          };
-        })
-    );
-
-    const closingRows: AccountingRow[] = loadShiftClosings().map((closing) => {
-      const submittedAt =
-        closing.submitted_at || closing.created_at || closing.updated_at || new Date().toISOString();
-      const shiftStatus = closing.shift_status || shiftStatusFromClosing(String(closing.status || "pending"));
-      const cashExpected = Number(closing.cash_expected) || 0;
-      const cashCounted = Number(closing.cash_counted) || 0;
-      const cardTotal = Number(closing.card_total) || 0;
-      const momoTotal = Number(closing.momo_total) || 0;
-      const transferTotal = Number(closing.transfer_total) || 0;
-      const expensesTotal = Number(closing.expenses_total) || 0;
-      const collectedTotal = cashCounted + cardTotal + momoTotal + transferTotal;
+        const paymentState: PaymentState =
+          row.collection > 0 || (row.revenue > 0 && row.collection >= row.revenue)
+            ? "paid"
+            : row.collection > 0
+            ? "partial"
+            : "unpaid";
+        const positiveReceivable = Math.max(0, Number(row.receivable) || 0);
 
       return {
-        id: `closing:${closing.id}`,
-        date: submittedAt,
-        source: "cash_desk_closing",
-        department: normalizeDepartmentKey(closing.department_key || "front-desk"),
-        paymentMethod: "closing",
-        staff: String(closing.submitted_by_user_id || "Front Desk"),
-        description: `Shift closing ${closing.shift_id || closing.id} (${closingStatusLabel(closing.status)})`,
-        revenue: 0,
-        expense: 0,
-        collection: 0,
-        roomFolioReceivable: 0,
-        guestPayment: 0,
-        transactionTime: submittedAt,
-        shiftId: closing.shift_id ? String(closing.shift_id) : undefined,
-        shiftStatus,
-        submittedAt,
-        submittedBy: closing.submitted_by_user_id
-          ? String(closing.submitted_by_user_id)
-          : undefined,
-        submissionMode: closing.submission_mode,
-        closingStatus: closing.status,
-        closingCashExpected: cashExpected,
-        closingCashCounted: cashCounted,
-        closingCardTotal: cardTotal,
-        closingMomoTotal: momoTotal,
-        closingTransferTotal: transferTotal,
-        closingExpensesTotal: expensesTotal,
-        closingAccountingStatus: closing.accounting_review_status || "pending",
-        note: closing.notes,
-        closingTotal: collectedTotal,
-      } as AccountingRow;
-    });
-
-    const expenses: AccountingRow[] = (expenseRecords || []).map((expense) => {
-      const trace = resolveShiftTrace(expense as any, shifts);
-      return {
-        id: `expense:${expense.id}`,
-        date: expense.createdAt,
-        source: "expense",
-        department: normalizeDepartmentKey(expense.deptKey),
-        paymentMethod: "expense",
-        staff: expense.enteredByName || expense.enteredBy || "unknown",
-        description: expense.description || expense.category || "Expense",
-        revenue: 0,
-        expense: Number(expense.amount) || 0,
-        collection: 0,
-        roomFolioReceivable: 0,
-        guestPayment: 0,
-        transactionTime: expense.createdAt,
+        id: row.id,
+        date: row.date,
+        source: row.source as SourceType,
+        department: normalizeDepartmentKey(row.department),
+        paymentMethod: row.paymentMethod,
+        staff: row.staff,
+        description: row.description || sourceLabel(row.source as SourceType),
+        revenue: row.revenue,
+        expense: row.expense,
+        collection: row.collection,
+        roomFolioReceivable:
+          row.source === "room_folio_charge" || row.source === "room_booking_revenue"
+            ? positiveReceivable
+            : 0,
+        guestPayment: row.source === "guest_payment_collection" ? row.collection : 0,
+        bookingId: row.bookingId,
+        bookingCode: row.bookingCode,
+        roomNo: row.roomNo,
+        customerName: row.customerName,
+        transactionSource: row.source,
+        paymentState,
+        transactionTime: row.date,
         shiftId: trace.shiftId,
         shiftStatus: trace.shiftStatus,
         submittedAt: trace.submittedAt,
         submittedBy: trace.submittedBy,
         submissionMode: trace.submissionMode,
       };
-    });
-
-    return [...roomBookingRows, ...directSales, ...folioRows, ...closingRows, ...expenses].sort(
-      (a, b) => new Date(b.transactionTime).getTime() - new Date(a.transactionTime).getTime()
-    );
-  }, [salesRecords, expenseRecords, shifts, traceVersion, bookingVersion, closingVersion]);
+      })
+      .sort((a, b) => new Date(b.transactionTime).getTime() - new Date(a.transactionTime).getTime());
+  }, [ledgerEntries, shifts, traceVersion]);
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {
@@ -637,8 +460,7 @@ export default function AccountingWorkbenchPage() {
         acc.guestPayments += row.guestPayment;
         if (row.source === "room_booking_revenue") acc.roomBookingRevenue += row.revenue;
         if (row.source === "room_folio_charge") acc.roomFolioCharges += row.revenue;
-        if (row.source === "food_service_sale") acc.foodServiceSales += row.revenue;
-        if (row.source === "department_pos_sale") acc.departmentPosSales += row.revenue;
+        if (row.source === "direct_pos_sale") acc.departmentPosSales += row.revenue;
         if (row.paymentMethod === "cash") acc.cash += row.collection;
         if (row.paymentMethod === "momo") acc.momo += row.collection;
         if (row.paymentMethod === "card") acc.card += row.collection;
@@ -775,8 +597,8 @@ export default function AccountingWorkbenchPage() {
   const filteredClosingRecords = useMemo(() => {
     const ids = new Set(
       filtered
-        .filter((row) => row.source === "cash_desk_closing")
-        .map((row) => row.id.replace(/^closing:/, ""))
+        .filter((row) => row.source === "shift_closing_review")
+        .map((row) => row.id.replace(/^shift_closing_review:/, ""))
     );
     return closingRecords.filter((closing) => ids.has(String(closing.id)));
   }, [closingRecords, filtered]);
@@ -1027,7 +849,7 @@ export default function AccountingWorkbenchPage() {
           <Field label="End Date"><input type="date" style={styles.input} value={endDate} onChange={(e) => updateDateRange({ endDate: e.target.value })} /></Field>
           <Field label="Department"><Select value={department} onChange={setDepartment} options={["all", ...departments]} labeler={(v) => v === "all" ? "All" : formatDepartmentLabel(v)} /></Field>
           <Field label="Payment Method"><Select value={paymentMethod} onChange={setPaymentMethod} options={["all", ...paymentMethods]} /></Field>
-          <Field label="Source / Type"><Select value={source} onChange={setSource} options={["all", "room_booking_revenue", "room_folio_charge", "food_service_sale", "department_pos_sale", "guest_payment", "cash_desk_closing", "expense"]} labeler={(v) => v === "all" ? "All" : sourceLabel(v as SourceType)} /></Field>
+          <Field label="Source / Type"><Select value={source} onChange={setSource} options={["all", ...LEDGER_SOURCE_TYPES]} labeler={(v) => v === "all" ? "All" : sourceLabel(v as SourceType)} /></Field>
           <Field label="Staff"><Select value={staff} onChange={setStaff} options={["all", ...staffOptions]} /></Field>
           <Field label="Review Status"><Select value={reviewStatus} onChange={setReviewStatus} options={["all", "unreviewed", "reviewed", "issue"]} /></Field>
           <Field label="Shift Status"><Select value={shiftStatusFilter} onChange={setShiftStatusFilter} options={["all", "open", "unclosed", "submitted", "reviewed", "auto_submitted"]} labeler={(v) => v === "all" ? "All" : formatShiftStatus(v)} /></Field>

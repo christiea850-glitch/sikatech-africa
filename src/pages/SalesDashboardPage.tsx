@@ -16,13 +16,8 @@ import {
   Line,
 } from "recharts";
 import { useDepartments } from "../departments/DepartmentsContext";
-import { useSales } from "../sales/SalesContext";
-import { useExpenses } from "../expenses/ExpenseContext";
-import { BOOKINGS_CHANGED_EVENT, getAllBookings } from "../frontdesk/bookingsStorage";
-import { useShift } from "../shifts/ShiftContext";
 import { normalizeDepartmentKey } from "../lib/departments";
-import { formatShiftStatus, resolveShiftTrace, SHIFT_TRACE_CHANGED_EVENT } from "../lib/shiftTrace";
-import { SHIFT_CLOSINGS_CHANGED_EVENT } from "../shifts/shiftClosingStore";
+import { formatShiftStatus } from "../lib/shiftTrace";
 import {
   hasAccountingDateRange,
   loadAccountingDateRange,
@@ -33,7 +28,7 @@ import {
   filterLedgerEntries,
   loadLedgerEntries,
   normalizeLedgerPaymentMethod,
-  selectLedgerTotals,
+  selectDashboardLedgerSummary,
   type CanonicalLedgerEntry,
 } from "../finance/financialLedger";
 
@@ -75,10 +70,6 @@ function money(n: number) {
 
 function upper(value: unknown) {
   return String(value ?? "").trim().toUpperCase();
-}
-
-function lower(value: unknown) {
-  return String(value ?? "").trim().toLowerCase();
 }
 
 function formatDepartmentLabel(value: string) {
@@ -173,19 +164,11 @@ function getDateRangeLabel(startDate: string, endDate: string) {
   return `Until ${formatDateInputLabel(endDate)}`;
 }
 
-function isRoomFolioSaleRecord(t: Tx) {
-  return (
-    lower(t?.paymentMode) === "post_to_room" ||
-    lower(t?.paymentMethod) === "room_folio"
-  );
-}
-
-function isGuestPayment(t: Tx) {
-  return lower(t?.accountingSource) === "guest_payment";
-}
-
 function getTxAmount(t: Tx) {
   const value =
+    Number(t?.collectionAmount) ||
+    Number(t?.revenueAmount) ||
+    Number(t?.expenseAmount) ||
     Number(t?.grandTotal) ||
     Number(t?.total) ||
     Number(t?.amountPaid) ||
@@ -195,12 +178,8 @@ function getTxAmount(t: Tx) {
   return Number.isFinite(value) ? value : 0;
 }
 
-function getRevenueAmount(t: Tx) {
-  return isGuestPayment(t) ? 0 : getTxAmount(t);
-}
-
 function getTxTime(t: Tx) {
-  return t?.createdAt || t?.timestamp || t?.date || "";
+  return t?.occurredAt || t?.createdAt || t?.timestamp || t?.date || "";
 }
 
 function parseDashboardDate(value: string | number) {
@@ -242,80 +221,6 @@ function formatShortDate(value: string) {
   });
 }
 
-function withinDateRange(dateValue: string | number, startDate: string, endDate: string) {
-  if (!startDate && !endDate) return true;
-  if (!dateValue) return false;
-
-  const d = parseDashboardDate(dateValue);
-  if (Number.isNaN(d.getTime())) return false;
-
-  const start = startDate ? new Date(`${startDate}T00:00:00`) : null;
-  const end = endDate ? new Date(`${endDate}T00:00:00`) : null;
-
-  if (start && Number.isNaN(start.getTime())) return false;
-  if (end && Number.isNaN(end.getTime())) return false;
-
-  if (end) end.setDate(end.getDate() + 1);
-
-  if (start && d < start) return false;
-  if (end && d >= end) return false;
-
-  return true;
-}
-
-function getSearchBlob(t: Tx) {
-  return [
-    t?.id,
-    t?.txId,
-    t?.departmentId,
-    t?.departmentName,
-    t?.department,
-    t?.deptKey,
-    t?.staffId,
-    t?.staffName,
-    t?.employeeId,
-    t?.customerPhone,
-    t?.phone,
-    t?.roomNumber,
-    t?.room,
-    t?.itemName,
-    t?.productName,
-    Array.isArray(t?.items) ? t.items.map((x: any) => x?.name).join(" ") : "",
-    t?.paymentMethod,
-    t?.accountingSource,
-    t?.bookingCode,
-    t?.guestName,
-    t?.roomNo,
-    t?.status,
-    t?.shiftReconciliationStatus,
-    getDepartmentValue(t),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
-function getLedgerDepartmentValue(entry: CanonicalLedgerEntry) {
-  return normalizeDepartmentKey(entry.departmentKey || "unknown");
-}
-
-function getExpenseSearchBlob(e: ExpenseRow) {
-  return [
-    e?.id,
-    e?.deptKey,
-    e?.category,
-    e?.description,
-    e?.note,
-    e?.enteredBy,
-    e?.enteredByName,
-    e?.amount,
-    normalizeDepartmentKey(e?.deptKey),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
 function statusLabel(t: Tx) {
   return upper(t?.status || "PAID");
 }
@@ -325,15 +230,20 @@ function getDepartmentValue(t: Tx) {
     t?.departmentId ||
       t?.departmentName ||
       t?.department ||
+      t?.departmentKey ||
       t?.deptKey ||
       "unknown"
   );
 }
 
-function getStaffLabel(t: Tx) {
-  if (t?.accountingSource === "room_folio_charge") return "Front Desk / Folio";
-  if (t?.accountingSource === "guest_payment") return "Front Desk / Guest Payment";
+function getLedgerDepartmentValue(entry: CanonicalLedgerEntry) {
+  return normalizeDepartmentKey(entry.departmentKey || "unknown");
+}
 
+function getStaffLabel(t: Tx) {
+  if (t?.createdBy?.name || t?.createdBy?.employeeId) {
+    return t.createdBy.name || t.createdBy.employeeId;
+  }
   const id = t?.staffId || t?.employeeId || "—";
   const name = t?.staffName || t?.cashierName || "";
 
@@ -341,8 +251,7 @@ function getStaffLabel(t: Tx) {
 }
 
 function getAccountingSourceLabel(t: Tx) {
-  if (t?.accountingSource === "room_folio_charge") return "Room folio charge";
-  if (t?.accountingSource === "guest_payment") return "Guest payment";
+  if (t?.sourceType) return formatCategoryLabel(t.sourceType);
   return "Direct sale";
 }
 
@@ -466,7 +375,7 @@ function TransactionItemBreakdown({ tx }: { tx: Tx }) {
 }
 
 function getExpenseDepartmentValue(e: ExpenseRow) {
-  return normalizeDepartmentKey(e?.deptKey || e?.department || "unknown");
+  return normalizeDepartmentKey(e?.departmentKey || e?.deptKey || e?.department || "unknown");
 }
 
 function ChartCard({
@@ -491,9 +400,6 @@ function ChartCard({
 
 export default function SalesDashboardPage() {
   const { departments = [] } = useDepartments();
-  const { records } = useSales();
-  const { records: expenseRecords } = useExpenses();
-  const { shifts } = useShift();
 
   const [search, setSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
@@ -507,25 +413,7 @@ export default function SalesDashboardPage() {
   const [selectedTx, setSelectedTx] = useState<Tx | null>(null);
   const [selectedExpense, setSelectedExpense] = useState<ExpenseRow | null>(null);
   const [activeTab, setActiveTab] = useState<MainTab>("overview");
-  const [bookingVersion, setBookingVersion] = useState(0);
-  const [shiftTraceVersion, setShiftTraceVersion] = useState(0);
   const [ledgerVersion, setLedgerVersion] = useState(0);
-
-  useEffect(() => {
-    const refreshBookings = () => setBookingVersion((v) => v + 1);
-    window.addEventListener(BOOKINGS_CHANGED_EVENT, refreshBookings);
-    return () => window.removeEventListener(BOOKINGS_CHANGED_EVENT, refreshBookings);
-  }, []);
-
-  useEffect(() => {
-    const refreshShiftTrace = () => setShiftTraceVersion((v) => v + 1);
-    window.addEventListener(SHIFT_TRACE_CHANGED_EVENT, refreshShiftTrace);
-    window.addEventListener(SHIFT_CLOSINGS_CHANGED_EVENT, refreshShiftTrace);
-    return () => {
-      window.removeEventListener(SHIFT_TRACE_CHANGED_EVENT, refreshShiftTrace);
-      window.removeEventListener(SHIFT_CLOSINGS_CHANGED_EVENT, refreshShiftTrace);
-    };
-  }, []);
 
   useEffect(() => {
     const refreshLedger = () => setLedgerVersion((v) => v + 1);
@@ -539,117 +427,10 @@ export default function SalesDashboardPage() {
 
   const ledgerEntries = useMemo(() => loadLedgerEntries(), [ledgerVersion]);
 
-  const rawTransactions = useMemo(() => {
-    // Compatibility: detailed transaction panels still read old sales/bookings storage.
-    void bookingVersion;
-    void shiftTraceVersion;
-    const directSales = (records || [])
-      .filter((r: any) => !isRoomFolioSaleRecord(r))
-      .map((r: any) => {
-        const trace = resolveShiftTrace(
-          {
-            ...r,
-            deptKey: normalizeDepartmentKey(r.deptKey),
-            department: normalizeDepartmentKey(r.department || r.deptKey),
-          },
-          shifts
-        );
-
-        return {
-          ...r,
-          txId: r.id,
-          itemName: r.productName,
-          amount: r.total,
-          status: "PAID",
-          accountingSource: "direct_sale",
-          transactionSource: "direct_pos_sale",
-          deptKey: normalizeDepartmentKey(r.deptKey),
-          department: normalizeDepartmentKey(r.department || r.deptKey),
-          bookingId: undefined,
-          bookingCode: undefined,
-          roomNo: undefined,
-          shiftId: trace.shiftId,
-          shiftReconciliationStatus: trace.shiftStatus,
-          submittedAt: trace.submittedAt,
-          submittedBy: trace.submittedBy,
-          submissionMode: trace.submissionMode,
-        };
-      });
-
-    const folioRows = getAllBookings().flatMap((booking) =>
-      (booking.folioActivity || [])
-        .filter((activity) => activity.type === "charge" || activity.type === "payment")
-        .map((activity) => {
-          const isPayment = activity.type === "payment";
-          const amount = Number(activity.amount) || 0;
-
-          const activityRecord = {
-            ...activity,
-            createdAt: new Date(activity.createdAt).toISOString(),
-            deptKey: "front-desk",
-            department: "front-desk",
-          };
-          const trace = resolveShiftTrace(activityRecord, shifts);
-
-          return {
-            id: activity.id,
-            txId: activity.transactionId || activity.id,
-            createdAt: new Date(activity.createdAt).toISOString(),
-            deptKey: normalizeDepartmentKey("front-desk"),
-            department: normalizeDepartmentKey("front-desk"),
-            itemName: activity.title,
-            productName: activity.title,
-            items: activity.items || [],
-            amount,
-            total: amount,
-            paymentMethod: isPayment ? activity.paymentMethod || "other" : "room_folio",
-            paymentMode: isPayment ? "pay_now" : "post_to_room",
-            status: isPayment ? "PAID" : "POSTED_TO_ROOM",
-            accountingSource: isPayment ? "guest_payment" : "room_folio_charge",
-            transactionSource:
-              activity.transactionSource ||
-              (isPayment ? "guest_payment" : "room_folio_charge"),
-            bookingId: activity.bookingId || booking.id,
-            bookingCode: activity.bookingCode || booking.bookingCode,
-            roomNo: activity.roomNo || booking.roomNo,
-            guestName: booking.guestName,
-            customerName: activity.customerName || booking.guestName,
-            customerPhone: booking.guestPhone,
-            note: activity.note,
-            shiftId: trace.shiftId,
-            shiftReconciliationStatus: trace.shiftStatus,
-            submittedAt: trace.submittedAt,
-            submittedBy: trace.submittedBy,
-            submissionMode: trace.submissionMode,
-          };
-        })
-    );
-
-    return [...directSales, ...folioRows];
-  }, [records, shifts, bookingVersion, shiftTraceVersion]);
-
   const departmentOptions = useMemo(() => {
     const fromConfig = (departments || []).map((d: any) => ({
       value: normalizeDepartmentKey(d?.key || d?.id || d?.name),
       label: formatDepartmentLabel(d?.name || d?.key || d?.id),
-    }));
-
-    const txDepts = Array.from(
-      new Set(rawTransactions.map((t: Tx) => getDepartmentValue(t)).filter(Boolean))
-    ).map((value) => ({
-      value,
-      label: formatDepartmentLabel(value),
-    }));
-
-    const expenseDepts = Array.from(
-      new Set(
-        (expenseRecords || [])
-          .map((e: any) => normalizeDepartmentKey(e?.deptKey || e?.department || "unknown"))
-          .filter(Boolean)
-      )
-    ).map((value) => ({
-      value,
-      label: formatDepartmentLabel(value),
     }));
 
     const ledgerDepts = Array.from(
@@ -659,7 +440,7 @@ export default function SalesDashboardPage() {
       label: formatDepartmentLabel(value),
     }));
 
-    const merged = [...fromConfig, ...txDepts, ...expenseDepts, ...ledgerDepts];
+    const merged = [...fromConfig, ...ledgerDepts];
     const seen = new Set<string>();
 
     return merged.filter((item) => {
@@ -667,61 +448,7 @@ export default function SalesDashboardPage() {
       seen.add(item.value);
       return true;
     });
-  }, [departments, rawTransactions, expenseRecords, ledgerEntries]);
-
-  const filteredTransactions = useMemo(() => {
-    const q = search.trim().toLowerCase();
-
-    return rawTransactions
-      .filter((t: Tx) =>
-        withinDateRange(getTxTime(t), dateRange.startDate, dateRange.endDate)
-      )
-      .filter((t: Tx) => {
-        if (departmentFilter === "all") return true;
-        return getDepartmentValue(t) === departmentFilter;
-      })
-      .filter((t: Tx) => {
-        if (!selectedDeptRow) return true;
-        return getDepartmentValue(t) === selectedDeptRow;
-      })
-      .filter((t: Tx) => {
-        if (!q) return true;
-        return getSearchBlob(t).includes(q);
-      })
-      .sort((a: Tx, b: Tx) => {
-        const da = new Date(getTxTime(a)).getTime() || 0;
-        const db = new Date(getTxTime(b)).getTime() || 0;
-        return db - da;
-      });
-  }, [rawTransactions, dateRange, departmentFilter, selectedDeptRow, search]);
-
-  const visibleExpenses = useMemo(() => {
-    // Compatibility: expense detail panels still read old expense storage.
-    const q = search.trim().toLowerCase();
-
-    return (expenseRecords || [])
-      .filter((e: ExpenseRow) =>
-        withinDateRange(e?.createdAt, dateRange.startDate, dateRange.endDate)
-      )
-      .filter((e: ExpenseRow) => {
-        if (departmentFilter === "all") return true;
-        return getExpenseDepartmentValue(e) === departmentFilter;
-      })
-      .filter((e: ExpenseRow) => {
-        if (!selectedDeptRow) return true;
-        return getExpenseDepartmentValue(e) === selectedDeptRow;
-      })
-      .filter((e: ExpenseRow) => {
-        if (!q) return true;
-        return getExpenseSearchBlob(e).includes(q);
-      })
-      .sort((a: ExpenseRow, b: ExpenseRow) => {
-        const da = new Date(a?.createdAt).getTime() || 0;
-        const db = new Date(b?.createdAt).getTime() || 0;
-        return db - da;
-      });
-  }, [expenseRecords, dateRange, departmentFilter, selectedDeptRow, search]);
-
+  }, [departments, ledgerEntries]);
   const filteredLedgerEntries = useMemo(() => {
     return filterLedgerEntries(ledgerEntries, {
       startDate: dateRange.startDate,
@@ -731,9 +458,15 @@ export default function SalesDashboardPage() {
     });
   }, [ledgerEntries, dateRange, departmentFilter, selectedDeptRow, search]);
 
-  const ledgerTotals = useMemo(
-    () => selectLedgerTotals(filteredLedgerEntries),
-    [filteredLedgerEntries]
+  const dashboardLedgerSummary = useMemo(
+    () =>
+      selectDashboardLedgerSummary(ledgerEntries, {
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+        departmentKey: selectedDeptRow || departmentFilter,
+        search,
+      }),
+    [ledgerEntries, dateRange, departmentFilter, selectedDeptRow, search]
   );
 
   const paymentBreakdown = useMemo(() => {
@@ -764,26 +497,21 @@ export default function SalesDashboardPage() {
   }, [filteredLedgerEntries]);
 
   const summary = useMemo(() => {
-    let revenue = 0;
-
-    for (const t of filteredTransactions) {
-      revenue += getRevenueAmount(t);
-    }
-
-    const revenueTransactionCount = filteredTransactions.filter(
-      (t: Tx) => getRevenueAmount(t) > 0
+    const ledgerTotals = dashboardLedgerSummary.totals;
+    const revenueTransactionCount = filteredLedgerEntries.filter(
+      (entry) => entry.revenueAmount > 0
     ).length;
-    const averageSale = revenueTransactionCount > 0 ? revenue / revenueTransactionCount : 0;
-    const ledgerNetProfit = ledgerTotals.revenue - ledgerTotals.expenses;
+    const averageSale =
+      revenueTransactionCount > 0 ? ledgerTotals.revenue / revenueTransactionCount : 0;
 
     return {
       revenue: ledgerTotals.revenue,
       collections: ledgerTotals.collections,
       receivables: ledgerTotals.receivables,
       expenses: ledgerTotals.expenses,
-      netProfit: ledgerNetProfit,
+      netProfit: dashboardLedgerSummary.netProfit,
       averageSale,
-      transactions: filteredTransactions.length,
+      transactions: filteredLedgerEntries.length,
       cash: paymentBreakdown.cash,
       momo: paymentBreakdown.momo,
       card: paymentBreakdown.card,
@@ -791,7 +519,7 @@ export default function SalesDashboardPage() {
       other: paymentBreakdown.other,
       paymentCollections: paymentBreakdown.total,
     };
-  }, [filteredTransactions, ledgerTotals, paymentBreakdown]);
+  }, [dashboardLedgerSummary, filteredLedgerEntries, paymentBreakdown]);
 
   const departmentPerformance = useMemo(() => {
     const map = new Map<string, DepartmentPerformanceRow>();
@@ -833,9 +561,9 @@ export default function SalesDashboardPage() {
 
     let total = 0;
 
-    for (const e of visibleExpenses) {
-      const category = String(e?.category || "miscellaneous").trim();
-      const amount = Number(e?.amount) || 0;
+    for (const entry of filteredLedgerEntries.filter((item) => item.sourceType === "expense")) {
+      const category = String(entry.sourceId || entry.customerName || "expense").trim();
+      const amount = Number(entry.expenseAmount) || 0;
 
       total += amount;
 
@@ -863,24 +591,24 @@ export default function SalesDashboardPage() {
       rows,
       topCategory,
     };
-  }, [visibleExpenses]);
+  }, [filteredLedgerEntries]);
 
   const departmentExpenseAnalytics = useMemo(() => {
     const map = new Map<string, { department: string; amount: number }>();
 
-    for (const e of visibleExpenses) {
-      const dept = getExpenseDepartmentValue(e);
+    for (const entry of filteredLedgerEntries.filter((item) => item.sourceType === "expense")) {
+      const dept = getLedgerDepartmentValue(entry);
       const current = map.get(dept) || {
         department: dept,
         amount: 0,
       };
 
-      current.amount += Number(e?.amount) || 0;
+      current.amount += Number(entry.expenseAmount) || 0;
       map.set(dept, current);
     }
 
     return Array.from(map.values()).sort((a, b) => b.amount - a.amount);
-  }, [visibleExpenses]);
+  }, [filteredLedgerEntries]);
 
   const paymentMix = useMemo(() => {
     const total = summary.paymentCollections || 1;
@@ -972,64 +700,59 @@ export default function SalesDashboardPage() {
   }, [departmentPerformance, departmentHighlights.topRevenue]);
 
   const recentActivity = useMemo(() => {
-    const latestTransactions = filteredTransactions.slice(0, 5).map((t: Tx) => ({
-      type: "transaction",
-      id: t?.txId || t?.id || "—",
-      time: getTxTime(t),
-      amount: getTxAmount(t),
-      department: getDepartmentLabel(getDepartmentValue(t), departmentOptions),
-      title:
-        t?.accountingSource === "room_folio_charge"
-          ? `Room folio charge - ${t?.roomNo || "room"}`
-          : t?.accountingSource === "guest_payment"
-          ? `Guest payment - ${t?.roomNo || "room"}`
-          : `${getDepartmentLabel(getDepartmentValue(t), departmentOptions)} sale`,
-      subtitle: `${getStaffLabel(t)} • ${upper(t?.paymentMethod || "other")}`,
-      raw: t,
-    }));
+    const latestTransactions = filteredLedgerEntries
+      .filter((entry) => entry.revenueAmount > 0 || entry.collectionAmount > 0)
+      .slice(0, 5)
+      .map((entry) => ({
+        type: "transaction",
+        id: entry.id,
+        time: entry.occurredAt,
+        amount: entry.collectionAmount || entry.revenueAmount,
+        department: getDepartmentLabel(getLedgerDepartmentValue(entry), departmentOptions),
+        title:
+          entry.sourceType === "room_folio_charge"
+            ? `Room folio charge - ${entry.roomNo || "room"}`
+            : entry.sourceType === "guest_payment_collection"
+            ? `Guest payment - ${entry.roomNo || "room"}`
+            : `${getDepartmentLabel(getLedgerDepartmentValue(entry), departmentOptions)} sale`,
+        subtitle: `${entry.createdBy?.name || entry.createdBy?.employeeId || "Ledger"} - ${upper(
+          entry.paymentMethod || "other"
+        )}`,
+        raw: entry,
+      }));
 
-    const latestExpenses = visibleExpenses.slice(0, 5).map((e: ExpenseRow) => ({
-      type: "expense",
-      id: e?.id || "—",
-      time: e?.createdAt || "",
-      amount: Number(e?.amount) || 0,
-      department: getDepartmentLabel(getExpenseDepartmentValue(e), departmentOptions),
-      title: `${getDepartmentLabel(
-        getExpenseDepartmentValue(e),
-        departmentOptions
-      )} expense`,
-      subtitle: `${formatCategoryLabel(e?.category || "miscellaneous")} • ${
-        e?.description || "No description"
-      }`,
-      raw: e,
-    }));
+    const latestExpenses = filteredLedgerEntries
+      .filter((entry) => entry.sourceType === "expense")
+      .slice(0, 5)
+      .map((entry) => ({
+        type: "expense",
+        id: entry.id,
+        time: entry.occurredAt,
+        amount: Number(entry.expenseAmount) || 0,
+        department: getDepartmentLabel(getLedgerDepartmentValue(entry), departmentOptions),
+        title: `${getDepartmentLabel(getLedgerDepartmentValue(entry), departmentOptions)} expense`,
+        subtitle: entry.customerName || entry.sourceId || "Expense",
+        raw: entry,
+      }));
 
     return {
       transactions: latestTransactions,
       expenses: latestExpenses,
     };
-  }, [filteredTransactions, visibleExpenses, departmentOptions]);
-
+  }, [filteredLedgerEntries, departmentOptions]);
   const overviewTrendData = useMemo(() => {
     const map = new Map<string, { label: string; revenue: number; expenses: number }>();
 
-    filteredTransactions.forEach((t) => {
-      const key = formatShortDate(getTxTime(t));
+    filteredLedgerEntries.forEach((entry) => {
+      const key = formatShortDate(entry.occurredAt);
       const current = map.get(key) || { label: key, revenue: 0, expenses: 0 };
-      current.revenue += getRevenueAmount(t);
-      map.set(key, current);
-    });
-
-    visibleExpenses.forEach((e) => {
-      const key = formatShortDate(e?.createdAt || "");
-      const current = map.get(key) || { label: key, revenue: 0, expenses: 0 };
-      current.expenses += Number(e?.amount) || 0;
+      current.revenue += Number(entry.revenueAmount) || 0;
+      current.expenses += Number(entry.expenseAmount) || 0;
       map.set(key, current);
     });
 
     return Array.from(map.values()).slice(-10);
-  }, [filteredTransactions, visibleExpenses]);
-
+  }, [filteredLedgerEntries]);
   const todayVsYesterday = useMemo(() => {
     const now = new Date();
 
@@ -1042,10 +765,10 @@ export default function SalesDashboardPage() {
     let todayRevenue = 0;
     let yesterdayRevenue = 0;
 
-    rawTransactions.forEach((t: Tx) => {
-      const d = new Date(getTxTime(t));
-      const amount = getRevenueAmount(t);
-      const dept = getDepartmentValue(t);
+    ledgerEntries.forEach((entry) => {
+      const d = new Date(entry.occurredAt);
+      const amount = Number(entry.revenueAmount) || 0;
+      const dept = getLedgerDepartmentValue(entry);
 
       if (Number.isNaN(d.getTime())) return;
       if (departmentFilter !== "all" && dept !== departmentFilter) return;
@@ -1070,8 +793,7 @@ export default function SalesDashboardPage() {
       yesterdayRevenue,
       change,
     };
-  }, [rawTransactions, departmentFilter, selectedDeptRow]);
-
+  }, [ledgerEntries, departmentFilter, selectedDeptRow]);
   const departmentTodayVsYesterday = useMemo(() => {
     const now = new Date();
 
@@ -1092,12 +814,12 @@ export default function SalesDashboardPage() {
       }
     >();
 
-    rawTransactions.forEach((t: Tx) => {
-      const d = new Date(getTxTime(t));
+    ledgerEntries.forEach((entry) => {
+      const d = new Date(entry.occurredAt);
       if (Number.isNaN(d.getTime())) return;
 
-      const dept = getDepartmentValue(t);
-      const amount = getRevenueAmount(t);
+      const dept = getLedgerDepartmentValue(entry);
+      const amount = Number(entry.revenueAmount) || 0;
 
       if (departmentFilter !== "all" && dept !== departmentFilter) return;
       if (selectedDeptRow && dept !== selectedDeptRow) return;
@@ -1141,8 +863,7 @@ export default function SalesDashboardPage() {
     });
 
     return rows.sort((a, b) => b.today - a.today);
-  }, [rawTransactions, departmentFilter, selectedDeptRow]);
-
+  }, [ledgerEntries, departmentFilter, selectedDeptRow]);
   const hourlySalesTrend = useMemo(() => {
     const buckets = Array.from({ length: 24 }, (_, hour) => ({
       hour,
@@ -1151,20 +872,19 @@ export default function SalesDashboardPage() {
       transactions: 0,
     }));
 
-    filteredTransactions.forEach((t) => {
-      const d = new Date(getTxTime(t));
+    filteredLedgerEntries.forEach((entry) => {
+      const d = new Date(entry.occurredAt);
       if (Number.isNaN(d.getTime())) return;
 
       const hour = d.getHours();
-      const amount = getRevenueAmount(t);
+      const amount = Number(entry.revenueAmount) || 0;
 
       buckets[hour].sales += amount;
       buckets[hour].transactions += 1;
     });
 
     return buckets;
-  }, [filteredTransactions]);
-
+  }, [filteredLedgerEntries]);
   const smartAlerts = useMemo(() => {
     const alerts: Array<{
       id: string;
@@ -2793,7 +2513,7 @@ export default function SalesDashboardPage() {
           </div>
 
           <div style={styles.detailGrid}>
-            <DetailItem label="Time" value={formatDateTime(selectedExpense?.createdAt)} />
+            <DetailItem label="Time" value={formatDateTime(getTxTime(selectedExpense))} />
             <DetailItem
               label="Department"
               value={getDepartmentLabel(
@@ -2803,15 +2523,19 @@ export default function SalesDashboardPage() {
             />
             <DetailItem
               label="Category"
-              value={formatCategoryLabel(selectedExpense?.category)}
+              value={formatCategoryLabel(
+                selectedExpense?.category || selectedExpense?.sourceType
+              )}
             />
             <DetailItem
               label="Amount"
-              value={money(Number(selectedExpense?.amount) || 0)}
+              value={money(getTxAmount(selectedExpense))}
             />
             <DetailItem
               label="Entered By"
               value={
+                selectedExpense?.createdBy?.name ||
+                selectedExpense?.createdBy?.employeeId ||
                 selectedExpense?.enteredByName ||
                 selectedExpense?.enteredBy ||
                 "—"
@@ -3555,3 +3279,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
   },
 };
+
+
+
+
