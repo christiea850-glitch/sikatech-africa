@@ -1,6 +1,7 @@
 // src/auth/AuthContext.tsx
 import { createContext, useContext, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { normalizeDepartmentKey } from "../lib/departments";
 
 /* -------------------- Types -------------------- */
 export type Role =
@@ -62,21 +63,8 @@ function cleanString(x: unknown): string | undefined {
  * We accept underscores/spaces and normalize to dashes.
  */
 function normalizeDeptKey(x: unknown): string | undefined {
-  const s = cleanString(x);
-  if (!s) return undefined;
-
-  const v = s
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/_/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-  // normalize common variations
-  if (v === "frontdesk" || v === "front-desk" || v === "front-desk") return "front-desk";
-  if (v === "laundry-cleaning" || v === "laundry-cleaning") return "laundry-cleaning";
-
-  return v;
+  const key = normalizeDepartmentKey(x);
+  return key === "unknown" ? undefined : key;
 }
 
 function inferDepartmentKey(employeeIdRaw: string): string | undefined {

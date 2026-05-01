@@ -30,6 +30,7 @@ import {
 } from "../accounting/accountingDateRangeStorage";
 import {
   FINANCIAL_LEDGER_CHANGED_EVENT,
+  filterLedgerEntries,
   loadLedgerEntries,
   normalizeLedgerPaymentMethod,
   selectLedgerTotals,
@@ -298,33 +299,6 @@ function getLedgerDepartmentValue(entry: CanonicalLedgerEntry) {
   return normalizeDepartmentKey(entry.departmentKey || "unknown");
 }
 
-function getLedgerSearchBlob(entry: CanonicalLedgerEntry) {
-  return [
-    entry.id,
-    entry.sourceType,
-    entry.sourceId,
-    entry.departmentKey,
-    entry.shiftId,
-    entry.bookingId,
-    entry.bookingCode,
-    entry.roomNo,
-    entry.customerName,
-    entry.paymentMethod,
-    entry.status,
-    entry.createdBy?.employeeId,
-    entry.createdBy?.name,
-    entry.createdBy?.role,
-    entry.revenueAmount,
-    entry.collectionAmount,
-    entry.receivableAmount,
-    entry.expenseAmount,
-    getLedgerDepartmentValue(entry),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
 function getExpenseSearchBlob(e: ExpenseRow) {
   return [
     e?.id,
@@ -566,6 +540,7 @@ export default function SalesDashboardPage() {
   const ledgerEntries = useMemo(() => loadLedgerEntries(), [ledgerVersion]);
 
   const rawTransactions = useMemo(() => {
+    // Compatibility: detailed transaction panels still read old sales/bookings storage.
     void bookingVersion;
     void shiftTraceVersion;
     const directSales = (records || [])
@@ -721,6 +696,7 @@ export default function SalesDashboardPage() {
   }, [rawTransactions, dateRange, departmentFilter, selectedDeptRow, search]);
 
   const visibleExpenses = useMemo(() => {
+    // Compatibility: expense detail panels still read old expense storage.
     const q = search.trim().toLowerCase();
 
     return (expenseRecords || [])
@@ -747,24 +723,12 @@ export default function SalesDashboardPage() {
   }, [expenseRecords, dateRange, departmentFilter, selectedDeptRow, search]);
 
   const filteredLedgerEntries = useMemo(() => {
-    const q = search.trim().toLowerCase();
-
-    return ledgerEntries
-      .filter((entry) =>
-        withinDateRange(entry.occurredAt, dateRange.startDate, dateRange.endDate)
-      )
-      .filter((entry) => {
-        if (departmentFilter === "all") return true;
-        return getLedgerDepartmentValue(entry) === departmentFilter;
-      })
-      .filter((entry) => {
-        if (!selectedDeptRow) return true;
-        return getLedgerDepartmentValue(entry) === selectedDeptRow;
-      })
-      .filter((entry) => {
-        if (!q) return true;
-        return getLedgerSearchBlob(entry).includes(q);
-      });
+    return filterLedgerEntries(ledgerEntries, {
+      startDate: dateRange.startDate,
+      endDate: dateRange.endDate,
+      departmentKey: selectedDeptRow || departmentFilter,
+      search,
+    });
   }, [ledgerEntries, dateRange, departmentFilter, selectedDeptRow, search]);
 
   const ledgerTotals = useMemo(

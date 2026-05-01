@@ -1,6 +1,12 @@
 // src/expenses/ExpenseContext.tsx
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createLedgerEntry,
+  removeLedgerEntries,
+  upsertLedgerEntries,
+} from "../finance/financialLedger";
+import { normalizeDepartmentKey } from "../lib/departments";
 
 export type ExpenseCategory =
   | "inventory"
@@ -66,12 +72,6 @@ function uid() {
   return Math.random().toString(36).slice(2, 10) + "-" + Date.now().toString(36);
 }
 
-function normalizeDeptKey(value: unknown) {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase();
-}
-
 function load(): ExpenseRecord[] {
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -88,11 +88,53 @@ function save(list: ExpenseRecord[]) {
   localStorage.setItem(LS_KEY, JSON.stringify(list));
 }
 
+function expenseLedgerEntry(record: ExpenseRecord) {
+  const amount = Math.max(0, Number(record.amount) || 0);
+  if (amount <= 0) return null;
+
+  return createLedgerEntry({
+    id: `expense:${record.id}`,
+    occurredAt: record.createdAt,
+    departmentKey: normalizeDepartmentKey(record.deptKey),
+    shiftId: record.shiftId,
+    sourceType: "expense",
+    sourceId: record.id,
+    customerName: record.description,
+    paymentMethod: "expense",
+    revenueAmount: 0,
+    collectionAmount: 0,
+    expenseAmount: amount,
+    status: "posted",
+    createdBy: {
+      employeeId: record.enteredBy,
+      name: record.enteredByName,
+      role: "staff",
+    },
+  });
+}
+
+function syncExpensesToLedger(records: ExpenseRecord[]) {
+  const entries = records
+    .map((record) => expenseLedgerEntry(record))
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+
+  upsertLedgerEntries(entries);
+}
+
+function removeExpenseLedgerEntries(ids: Set<string>) {
+  removeLedgerEntries((entry) => entry.sourceType === "expense" && ids.has(entry.sourceId));
+}
+
 export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   const [records, setRecords] = useState<ExpenseRecord[]>(() => load());
 
   useEffect(() => {
+    // Legacy expense storage is preserved for existing screens while the ledger becomes canonical.
     save(records);
+  }, [records]);
+
+  useEffect(() => {
+    syncExpensesToLedger(records);
   }, [records]);
 
   const api = useMemo<ExpenseContextType>(() => {
@@ -104,7 +146,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         id: uid(),
         createdAt: new Date().toISOString(),
 
-        deptKey: normalizeDeptKey(input.deptKey),
+        deptKey: normalizeDepartmentKey(input.deptKey),
 
         category: input.category,
         description: String(input.description ?? "").trim(),
@@ -122,13 +164,17 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       };
 
       setRecords((prev) => [next, ...prev]);
+      const ledgerEntry = expenseLedgerEntry(next);
+      if (ledgerEntry) upsertLedgerEntries([ledgerEntry]);
     };
 
     const deleteExpense: ExpenseContextType["deleteExpense"] = (id) => {
       setRecords((prev) => prev.filter((r) => r.id !== id));
+      removeExpenseLedgerEntries(new Set([id]));
     };
 
     const clearAllExpenses: ExpenseContextType["clearAllExpenses"] = () => {
+      removeExpenseLedgerEntries(new Set(records.map((record) => record.id)));
       setRecords([]);
     };
 

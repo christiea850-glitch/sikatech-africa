@@ -1,4 +1,11 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createLedgerEntry,
+  normalizeLedgerPaymentMethod,
+  removeLedgerEntries,
+  upsertLedgerEntries,
+} from "../finance/financialLedger";
+import { normalizeDepartmentKey } from "../lib/departments";
 
 export type PaymentMethod =
   | "cash"
@@ -104,6 +111,47 @@ function normalizeSaleRecord(record: SaleRecord): SaleRecord {
   };
 }
 
+function saleLedgerEntry(record: SaleRecord) {
+  if (isRoomFolioSale(record)) return null;
+
+  const amount = Math.max(0, Number(record.total) || 0);
+  if (amount <= 0) return null;
+
+  return createLedgerEntry({
+    id: `direct_pos_sale:${record.id}`,
+    occurredAt: record.createdAt,
+    departmentKey: normalizeDepartmentKey(record.deptKey),
+    shiftId: record.shiftId,
+    sourceType: "direct_pos_sale",
+    sourceId: record.id,
+    customerName: record.customerName,
+    paymentMethod: normalizeLedgerPaymentMethod(record.paymentMethod, "other"),
+    revenueAmount: amount,
+    collectionAmount: amount,
+    expenseAmount: 0,
+    status: "posted",
+    createdBy: {
+      employeeId: record.staffId,
+      name: record.staffName,
+      role: "staff",
+    },
+  });
+}
+
+function syncSalesToLedger(records: SaleRecord[]) {
+  const entries = records
+    .map((record) => saleLedgerEntry(record))
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+
+  upsertLedgerEntries(entries);
+}
+
+function removeSaleLedgerEntries(ids: Set<string>) {
+  removeLedgerEntries(
+    (entry) => entry.sourceType === "direct_pos_sale" && ids.has(entry.sourceId)
+  );
+}
+
 function load(): SaleRecord[] {
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -123,7 +171,12 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
   const [records, setRecords] = useState<SaleRecord[]>(() => load());
 
   useEffect(() => {
+    // Legacy sales storage is preserved for existing screens while the ledger becomes canonical.
     save(records);
+  }, [records]);
+
+  useEffect(() => {
+    syncSalesToLedger(records);
   }, [records]);
 
   const api = useMemo<SalesContextType>(() => {
@@ -171,13 +224,17 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       };
 
       setRecords((prev) => [next, ...prev]);
+      const ledgerEntry = saleLedgerEntry(next);
+      if (ledgerEntry) upsertLedgerEntries([ledgerEntry]);
     };
 
     const deleteSale: SalesContextType["deleteSale"] = (id) => {
       setRecords((prev) => prev.filter((r) => r.id !== id));
+      removeSaleLedgerEntries(new Set([id]));
     };
 
     const clearAll: SalesContextType["clearAll"] = () => {
+      removeSaleLedgerEntries(new Set(records.map((record) => record.id)));
       setRecords([]);
     };
 

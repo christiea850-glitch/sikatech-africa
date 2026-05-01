@@ -139,6 +139,7 @@ function hasShift(record: Record<string, unknown>, shiftId: string) {
 }
 
 function computeShiftTotals(shiftId?: string | number | null): Totals {
+  // Compatibility: shift closings still compute from old sales/booking/expense stores for now.
   const id = String(shiftId ?? "").trim();
   const totals: Totals = {
     cashExpected: 0,

@@ -1,3 +1,5 @@
+import { normalizeDepartmentKey } from "../lib/departments";
+
 export const LEDGER_SOURCE_TYPES = [
   "direct_pos_sale",
   "room_booking_revenue",
@@ -16,6 +18,7 @@ export const LEDGER_PAYMENT_METHODS = [
   "momo",
   "card",
   "transfer",
+  "other",
   "room_folio",
   "room_booking",
   "expense",
@@ -83,6 +86,14 @@ export type LedgerShiftTotals = Record<
     paymentMethods: LedgerPaymentMethodTotals;
   }
 >;
+
+export type LedgerFilterInput = {
+  startDate?: string;
+  endDate?: string;
+  departmentKey?: string;
+  search?: string;
+  sourceTypes?: LedgerSourceType[];
+};
 
 const OVER_COLLECTION_TOLERANCE = 0.01;
 const overCollectionWarningKeys = new Set<string>();
@@ -209,6 +220,16 @@ export function loadLedgerEntries(): CanonicalLedgerEntry[] {
   );
 }
 
+export function removeLedgerEntries(
+  shouldRemove: (entry: CanonicalLedgerEntry) => boolean
+) {
+  const current = loadLedgerEntries();
+  const next = current.filter((entry) => !shouldRemove(entry));
+  if (JSON.stringify(next) === JSON.stringify(current)) return current;
+  saveLedgerEntries(next);
+  return next;
+}
+
 export function saveLedgerEntries(entries: CanonicalLedgerEntry[]) {
   const normalized = normalizeLedgerEntriesForStorage(entries);
   validateLedgerIntegrity(normalized, "financial ledger");
@@ -265,6 +286,9 @@ export function normalizeLedgerPaymentMethod(
     return "card";
   }
   if (normalized === "transfer" || normalized === "bank_transfer") return "transfer";
+  if (normalized === "other" || normalized === "unknown" || normalized === "credit") {
+    return "other";
+  }
   if (normalized === "room_folio" || normalized === "post_to_room") return "room_folio";
   if (normalized === "room_booking" || normalized === "booking") return "room_booking";
   if (normalized === "expense") return "expense";
@@ -356,6 +380,115 @@ export function selectTotalExpenses(entries: CanonicalLedgerEntry[]) {
 
 export function selectReceivables(entries: CanonicalLedgerEntry[]) {
   return selectLedgerTotals(entries).receivables;
+}
+
+function ledgerDateInRange(value: string, startDate?: string, endDate?: string) {
+  if (!startDate && !endDate) return true;
+  if (!value) return false;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+
+  const start = startDate ? new Date(`${startDate}T00:00:00`) : null;
+  const end = endDate ? new Date(`${endDate}T00:00:00`) : null;
+
+  if (start && Number.isNaN(start.getTime())) return false;
+  if (end && Number.isNaN(end.getTime())) return false;
+  if (end) end.setDate(end.getDate() + 1);
+
+  if (start && date < start) return false;
+  if (end && date >= end) return false;
+  return true;
+}
+
+function ledgerSearchText(entry: CanonicalLedgerEntry) {
+  return [
+    entry.id,
+    entry.sourceType,
+    entry.sourceId,
+    entry.departmentKey,
+    entry.shiftId,
+    entry.bookingId,
+    entry.bookingCode,
+    entry.roomNo,
+    entry.customerName,
+    entry.paymentMethod,
+    entry.status,
+    entry.createdBy?.employeeId,
+    entry.createdBy?.name,
+    entry.createdBy?.role,
+    entry.revenueAmount,
+    entry.collectionAmount,
+    entry.receivableAmount,
+    entry.expenseAmount,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+export function filterLedgerEntries(
+  entries: CanonicalLedgerEntry[],
+  filters: LedgerFilterInput = {}
+) {
+  const departmentKey =
+    filters.departmentKey && filters.departmentKey !== "all"
+      ? normalizeDepartmentKey(filters.departmentKey)
+      : "";
+  const search = String(filters.search || "").trim().toLowerCase();
+  const sourceTypes = filters.sourceTypes?.length ? new Set(filters.sourceTypes) : null;
+
+  return entries.filter((entry) => {
+    if (sourceTypes && !sourceTypes.has(entry.sourceType)) return false;
+    if (!ledgerDateInRange(entry.occurredAt, filters.startDate, filters.endDate)) {
+      return false;
+    }
+    if (departmentKey && normalizeDepartmentKey(entry.departmentKey) !== departmentKey) {
+      return false;
+    }
+    if (search && !ledgerSearchText(entry).includes(search)) return false;
+    return true;
+  });
+}
+
+export function selectDashboardLedgerSummary(
+  entries: CanonicalLedgerEntry[],
+  filters: LedgerFilterInput = {}
+) {
+  const filteredEntries = filterLedgerEntries(entries, filters);
+  const totals = selectLedgerTotals(filteredEntries);
+  return {
+    entries: filteredEntries,
+    totals,
+    netProfit: roundLedgerMoney(totals.revenue - totals.expenses),
+  };
+}
+
+export function selectAccountingLedgerRows(
+  entries: CanonicalLedgerEntry[],
+  filters: LedgerFilterInput = {}
+) {
+  return filterLedgerEntries(entries, filters).map((entry) => ({
+    id: entry.id,
+    date: entry.occurredAt,
+    source: entry.sourceType,
+    department: normalizeDepartmentKey(entry.departmentKey),
+    paymentMethod: entry.paymentMethod,
+    staff: entry.createdBy?.name || entry.createdBy?.employeeId || "unknown",
+    description: entry.customerName || entry.bookingCode || entry.sourceId,
+    revenue: entry.revenueAmount,
+    expense: entry.expenseAmount,
+    collection: entry.collectionAmount,
+    receivable: entry.receivableAmount,
+    net: roundLedgerMoney(entry.revenueAmount - entry.expenseAmount),
+    bookingId: entry.bookingId,
+    bookingCode: entry.bookingCode,
+    roomNo: entry.roomNo,
+    customerName: entry.customerName,
+    shiftId: entry.shiftId,
+    status: entry.status,
+    raw: entry,
+  }));
 }
 
 export function createEmptyPaymentMethodTotals(): LedgerPaymentMethodTotals {
@@ -451,7 +584,7 @@ export function createLedgerEntry(
     ...input,
     id: input.id || `${sourceType}:${sourceId}`,
     occurredAt: input.occurredAt || new Date().toISOString(),
-    departmentKey: String(input.departmentKey || "unknown").trim() || "unknown",
+    departmentKey: normalizeDepartmentKey(input.departmentKey),
     sourceType,
     sourceId,
     paymentMethod: normalizeLedgerPaymentMethod(

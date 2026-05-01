@@ -401,6 +401,7 @@ export default function AccountingWorkbenchPage() {
   }, [shifts, user]);
 
   const rows = useMemo<AccountingRow[]>(() => {
+    // Compatibility: Accounting Workbench still composes rows from old stores until Phase 6C.
     void traceVersion;
     void bookingVersion;
     const directSales: AccountingRow[] = (salesRecords || [])

@@ -460,6 +460,10 @@ function syncBookingLedgerEntries(booking: BookingRecord) {
   );
 }
 
+function removeBookingLedgerEntries(id: string) {
+  replaceLedgerEntries((entry) => bookingIdFromLedgerEntry(entry) === id, []);
+}
+
 export function migrateBookingsToLedger(bookings: BookingRecord[] = loadBookings()) {
   const entries = bookings.flatMap((booking) => ledgerEntriesForBooking(booking));
   const bookingIds = new Set(bookings.map((booking) => booking.id));
@@ -485,6 +489,7 @@ export function loadBookings(): BookingRecord[] {
 }
 
 export function saveBookings(list: BookingRecord[]) {
+  // Legacy booking storage remains for front desk screens; ledger rows mirror financial effects.
   localStorage.setItem(BOOKINGS_KEY, JSON.stringify(list));
   try {
     window.dispatchEvent(new CustomEvent(BOOKINGS_CHANGED_EVENT));
@@ -647,6 +652,7 @@ export function deleteBooking(id: string) {
   const list = getAllBookings();
   const next = list.filter((item) => item.id !== id);
   saveBookings(next);
+  removeBookingLedgerEntries(id);
 }
 
 export function getBookingById(id: string) {
