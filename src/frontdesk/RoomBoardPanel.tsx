@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import {
+  FINANCIAL_LEDGER_CHANGED_EVENT,
+  loadLedgerEntries,
+  type CanonicalLedgerEntry,
+} from "../finance/financialLedger";
+import { generateFrontDeskInsights } from "../finance/frontDeskInsights";
+import {
   BOOKINGS_CHANGED_EVENT,
   getAllBookings,
   normalizeRoomStatusForBookingStatus,
@@ -35,6 +41,13 @@ type RoomCard = {
   balance?: number;
 };
 
+type RoomFinancialInsight = {
+  revenue: number;
+  paid: number;
+  balance: number;
+  paymentCount: number;
+};
+
 const DEFAULT_ROOMS: Array<{ roomNo: string; roomType: string }> = [
   { roomNo: "101", roomType: "Deluxe" },
   { roomNo: "102", roomType: "Deluxe" },
@@ -66,6 +79,13 @@ function formatDateTime(value?: number) {
 
 function money(n?: number) {
   return Number.isFinite(Number(n)) ? Number(n).toFixed(2) : "0.00";
+}
+
+function sumLedgerAmount(
+  entries: CanonicalLedgerEntry[],
+  field: "revenueAmount" | "collectionAmount"
+) {
+  return entries.reduce((sum, entry) => sum + (Number(entry[field]) || 0), 0);
 }
 
 function normalizeStatus(value: string): RoomBoardStatus {
@@ -172,6 +192,7 @@ function buildRoomBoard(bookings: BookingRecord[]): RoomCard[] {
 
 export default function RoomBoardPanel() {
   const [version, setVersion] = useState(0);
+  const [ledgerVersion, setLedgerVersion] = useState(0);
   const [selectedRoomNo, setSelectedRoomNo] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | RoomBoardStatus>("all");
   const [msg, setMsg] = useState<string | null>(null);
@@ -181,10 +202,39 @@ export default function RoomBoardPanel() {
     return getAllBookings();
   }, [version]);
 
+  const ledgerEntries = useMemo(() => {
+    void ledgerVersion;
+    return loadLedgerEntries();
+  }, [ledgerVersion]);
+
+  const frontDeskInsights = useMemo(
+    () => generateFrontDeskInsights(ledgerEntries),
+    [ledgerEntries]
+  );
+
+  const totalUnpaidBalance = useMemo(
+    () =>
+      frontDeskInsights.unpaidBookings.reduce(
+        (sum, booking) => sum + booking.outstanding,
+        0
+      ),
+    [frontDeskInsights]
+  );
+
   useEffect(() => {
     const refreshBookings = () => setVersion((v) => v + 1);
     window.addEventListener(BOOKINGS_CHANGED_EVENT, refreshBookings);
     return () => window.removeEventListener(BOOKINGS_CHANGED_EVENT, refreshBookings);
+  }, []);
+
+  useEffect(() => {
+    const refreshLedger = () => setLedgerVersion((v) => v + 1);
+    window.addEventListener(FINANCIAL_LEDGER_CHANGED_EVENT, refreshLedger);
+    window.addEventListener("storage", refreshLedger);
+    return () => {
+      window.removeEventListener(FINANCIAL_LEDGER_CHANGED_EVENT, refreshLedger);
+      window.removeEventListener("storage", refreshLedger);
+    };
   }, []);
 
   const rooms = useMemo(() => buildRoomBoard(bookings), [bookings]);
@@ -209,6 +259,28 @@ export default function RoomBoardPanel() {
       (activity) => activity.type === "charge" || activity.type === "payment"
     );
   }, [selectedBooking]);
+
+  const selectedRoomInsight = useMemo<RoomFinancialInsight | null>(() => {
+    if (!selectedRoom) return null;
+    const roomEntries = ledgerEntries.filter((entry) => {
+      const sameRoom = String(entry.roomNo || "").trim() === selectedRoom.roomNo;
+      const sameBooking =
+        selectedRoom.bookingId && entry.bookingId === selectedRoom.bookingId;
+      return sameRoom || sameBooking;
+    });
+
+    if (roomEntries.length === 0) return null;
+
+    const revenue = sumLedgerAmount(roomEntries, "revenueAmount");
+    const paid = sumLedgerAmount(roomEntries, "collectionAmount");
+
+    return {
+      revenue,
+      paid,
+      balance: revenue - paid,
+      paymentCount: roomEntries.filter((entry) => entry.collectionAmount > 0).length,
+    };
+  }, [ledgerEntries, selectedRoom]);
 
   const stats = useMemo(() => {
     return {
@@ -395,6 +467,47 @@ export default function RoomBoardPanel() {
         </button>
       </div>
 
+      <div style={styles.insightsCard}>
+        <div style={styles.sectionTitle}>Front Desk Insights</div>
+        <div style={styles.insightGrid}>
+          <div style={styles.insightItem}>
+            <div style={styles.statLabel}>Unpaid bookings</div>
+            <div style={styles.statValue}>{frontDeskInsights.unpaidBookings.length}</div>
+          </div>
+          <div style={styles.insightItem}>
+            <div style={styles.statLabel}>Total unpaid balance</div>
+            <div style={styles.statValue}>{money(totalUnpaidBalance)}</div>
+          </div>
+          <div style={styles.insightItem}>
+            <div style={styles.statLabel}>Top revenue room</div>
+            <div style={styles.statValue}>
+              {frontDeskInsights.topRooms[0]?.roomNo || "-"}
+            </div>
+            <div style={styles.insightMeta}>
+              {frontDeskInsights.topRooms[0]
+                ? money(frontDeskInsights.topRooms[0].revenue)
+                : "No room revenue"}
+            </div>
+          </div>
+          <div style={styles.insightItem}>
+            <div style={styles.statLabel}>Partial payments</div>
+            <div style={styles.statValue}>{frontDeskInsights.partialPayments.length}</div>
+          </div>
+        </div>
+
+        {frontDeskInsights.alerts.length > 0 ? (
+          <div style={styles.alertList}>
+            {frontDeskInsights.alerts.slice(0, 5).map((alert) => (
+              <div key={alert.id} style={styles.alertItem}>
+                {alert.message}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={styles.emptyState}>No front desk financial alerts right now.</div>
+        )}
+      </div>
+
       <div style={styles.layout}>
         <div style={styles.boardCard}>
           <div style={styles.sectionTitle}>Room Board</div>
@@ -494,6 +607,30 @@ export default function RoomBoardPanel() {
                 </div>
               </div>
 
+              {selectedRoomInsight ? (
+                <div style={styles.activityBlock}>
+                  <div style={styles.activityTitle}>Room Financial Insight</div>
+                  <div style={styles.detailRow}>
+                    <span style={styles.detailLabel}>Booking Revenue</span>
+                    <span style={styles.detailValue}>{money(selectedRoomInsight.revenue)}</span>
+                  </div>
+                  <div style={styles.detailRow}>
+                    <span style={styles.detailLabel}>Amount Paid</span>
+                    <span style={styles.detailValue}>{money(selectedRoomInsight.paid)}</span>
+                  </div>
+                  <div style={styles.detailRow}>
+                    <span style={styles.detailLabel}>Balance</span>
+                    <span style={styles.detailValue}>{money(selectedRoomInsight.balance)}</span>
+                  </div>
+                  <div style={styles.detailRow}>
+                    <span style={styles.detailLabel}>Payment Activity</span>
+                    <span style={styles.detailValue}>
+                      {selectedRoomInsight.paymentCount} payment(s)
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+
               {selectedFolioActivity.length > 0 ? (
                 <div style={styles.activityBlock}>
                   <div style={styles.activityTitle}>Booking Activity</div>
@@ -590,6 +727,42 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 24,
     fontWeight: 900,
     color: "#0b2a3a",
+  },
+  insightsCard: {
+    padding: 14,
+    borderRadius: 8,
+    background: "#ffffff",
+    border: "1px solid rgba(11,42,58,0.10)",
+  },
+  insightGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+    gap: 10,
+  },
+  insightItem: {
+    padding: "12px 14px",
+    borderRadius: 8,
+    background: "rgba(248,250,252,0.92)",
+    border: "1px solid rgba(11,42,58,0.08)",
+  },
+  insightMeta: {
+    marginTop: 4,
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: 800,
+  },
+  alertList: {
+    display: "grid",
+    gap: 8,
+    marginTop: 12,
+  },
+  alertItem: {
+    padding: 10,
+    borderRadius: 8,
+    background: "rgba(245,158,11,0.10)",
+    border: "1px solid rgba(245,158,11,0.22)",
+    color: "#78350f",
+    fontWeight: 800,
   },
   filterRow: {
     display: "flex",
