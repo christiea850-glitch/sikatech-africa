@@ -148,13 +148,14 @@ export async function getRoomFolio(shiftId: string, roomNo: string) {
    SHIFT CLOSING
 ===================================================== */
 
-export async function submitClosing(_shiftId: string, note?: string) {
+export async function submitClosing(shiftId: string, note?: string) {
   const businessId = Number(localStorage.getItem("dev_business_id") || "1");
 
-  return request<{ ok: true; id?: number }>(`/shift-closing`, {
+  return request<{ ok: true; id?: number; shift?: Shift }>(`/shift-closing`, {
     method: "POST",
     body: JSON.stringify({
       businessId,
+      shiftId,
       notes: note ?? "",
       cashExpected: 0,
       cashCounted: 0,

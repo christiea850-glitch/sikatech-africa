@@ -123,6 +123,12 @@ function statusLabel(status: string) {
   switch (status) {
     case "":
       return "All";
+    case "pending":
+      return "Pending";
+    case "reviewed":
+      return "Reviewed";
+    case "approved":
+      return "Approved";
     case "submitted":
       return "Submitted";
     case "auto_submitted":
@@ -142,7 +148,9 @@ function statusLabel(status: string) {
 
 function badgeStyle(status: string): React.CSSProperties {
   switch (status) {
+    case "pending":
     case "submitted":
+    case "auto_submitted":
       return {
         padding: "6px 10px",
         borderRadius: 999,
@@ -150,7 +158,9 @@ function badgeStyle(status: string): React.CSSProperties {
         background: "rgba(245, 158, 11, 0.18)",
         display: "inline-block",
       };
+    case "reviewed":
     case "accounting_reviewed":
+    case "approved":
     case "accounting_approved":
       return {
         padding: "6px 10px",
@@ -270,7 +280,9 @@ export default function CashDeskClosingsPage() {
         return;
       }
 
-      setRows(mergeClosingRows(Array.isArray(data?.rows) ? data.rows : [], localRows, status));
+      const apiRows = Array.isArray(data?.rows) ? data.rows : [];
+      apiRows.forEach((row: ClosingRow) => mirrorClosingToLocal(row));
+      setRows(mergeClosingRows([], loadShiftClosings(), status));
     } catch (e: any) {
       const localRows = loadShiftClosings();
       setRows(mergeClosingRows([], localRows, status));
@@ -436,11 +448,9 @@ export default function CashDeskClosingsPage() {
             style={{ padding: "10px 12px", borderRadius: 10, fontWeight: 800 }}
           >
             <option value="">All</option>
-            <option value="submitted">Submitted</option>
-            <option value="auto_submitted">Auto Submitted</option>
-            <option value="accounting_reviewed">Accounting Reviewed</option>
-            <option value="accounting_approved">Accounting Approved</option>
-            <option value="manager_approved">Manager Approved</option>
+            <option value="pending">Pending</option>
+            <option value="reviewed">Reviewed</option>
+            <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
           </select>
 
@@ -486,6 +496,7 @@ export default function CashDeskClosingsPage() {
                 <th style={th}>Cash Counted</th>
                 <th style={th}>Card</th>
                 <th style={th}>MoMo</th>
+                <th style={th}>Transfer</th>
                 <th style={th}>Expenses</th>
                 <th style={th}>Notes</th>
                 <th style={th}>Accounting</th>
@@ -500,16 +511,14 @@ export default function CashDeskClosingsPage() {
               {rows.map((r) => {
                 const canDoAccountingReview =
                   canAccountingReview(role) &&
-                  (r.status === "submitted" ||
-                    r.status === "auto_submitted" ||
-                    r.status === "accounting_reviewed");
+                  (r.status === "pending" || r.status === "reviewed");
 
                 const canDoManagerApprove =
                   canManagerApprove(role) && r.status === "accounting_reviewed";
 
                 const canDoReject =
                   canReject(role) &&
-                  (r.status === "submitted" || r.status === "accounting_reviewed");
+                  (r.status === "pending" || r.status === "reviewed");
 
                 const isBusy = busyId === r.id;
 
@@ -529,6 +538,7 @@ export default function CashDeskClosingsPage() {
                     <td style={td}>{fmtMoney(r.cash_counted)}</td>
                     <td style={td}>{fmtMoney(r.card_total)}</td>
                     <td style={td}>{fmtMoney(r.momo_total)}</td>
+                    <td style={td}>{fmtMoney(r.transfer_total)}</td>
                     <td style={td}>{fmtMoney(r.expenses_total)}</td>
                     <td style={td}>{r.notes || "—"}</td>
 

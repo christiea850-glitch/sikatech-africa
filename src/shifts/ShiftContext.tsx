@@ -18,6 +18,7 @@ import {
   type Shift,
 } from "./shiftsApi";
 import { recordShiftSubmission } from "../lib/shiftTrace";
+import { syncShiftClosingsFromShifts } from "./shiftClosingStore";
 
 type ShiftCtx = {
   shifts: Shift[];
@@ -101,7 +102,14 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      setShifts(Array.isArray(res.shifts) ? res.shifts : []);
+      const nextShifts = Array.isArray(res.shifts) ? res.shifts : [];
+      syncShiftClosingsFromShifts(nextShifts as any[], {
+        businessId: (user as any)?.businessId,
+        branchId: (user as any)?.branchId,
+        departmentKey: dept,
+        submittedBy: (user as any)?.employeeId || (user as any)?.username || user?.role,
+      });
+      setShifts(nextShifts);
     } catch (e: any) {
       setShifts([]);
       setError(e?.message ?? "Failed to load shifts");
@@ -145,6 +153,7 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
       if (!res.ok) return setError(res.error || "Failed to submit closing");
       const shift = shifts.find((item) => String(item.id) === id) || res.shift;
       recordShiftSubmission({
+        closingId: res.closingId,
         shiftId: id,
         status: "submitted",
         submittedAt: new Date().toISOString(),

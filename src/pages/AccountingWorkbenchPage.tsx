@@ -12,6 +12,7 @@ import {
   loadShiftClosings,
   reviewShiftClosing,
   SHIFT_CLOSINGS_CHANGED_EVENT,
+  syncShiftClosingsFromShifts,
   type ShiftClosingRecord,
 } from "../shifts/shiftClosingStore";
 import {
@@ -154,7 +155,8 @@ function closingStatusLabel(value?: string) {
 }
 
 function shiftStatusFromClosing(status: string): ShiftTraceStatus {
-  if (status === "submitted" || status === "auto_submitted") return status;
+  if (status === "auto_submitted") return "auto_submitted";
+  if (status === "pending") return "submitted";
   return "reviewed";
 }
 
@@ -310,6 +312,15 @@ export default function AccountingWorkbenchPage() {
     return () => window.removeEventListener(SHIFT_TRACE_CHANGED_EVENT, refreshTrace);
   }, []);
 
+  useEffect(() => {
+    const changed = syncShiftClosingsFromShifts(shifts as any[], {
+      businessId: (user as any)?.businessId,
+      branchId: (user as any)?.branchId,
+      submittedBy: (user as any)?.employeeId || (user as any)?.username || user?.role,
+    });
+    if (changed) setClosingVersion((v) => v + 1);
+  }, [shifts, user]);
+
   const rows = useMemo<AccountingRow[]>(() => {
     void traceVersion;
     void bookingVersion;
@@ -432,7 +443,7 @@ export default function AccountingWorkbenchPage() {
     const closingRows: AccountingRow[] = loadShiftClosings().map((closing) => {
       const submittedAt =
         closing.submitted_at || closing.created_at || closing.updated_at || new Date().toISOString();
-      const shiftStatus = shiftStatusFromClosing(String(closing.status || "submitted"));
+      const shiftStatus = closing.shift_status || shiftStatusFromClosing(String(closing.status || "pending"));
       const cashExpected = Number(closing.cash_expected) || 0;
       const cashCounted = Number(closing.cash_counted) || 0;
       const cardTotal = Number(closing.card_total) || 0;
@@ -1015,7 +1026,7 @@ export default function AccountingWorkbenchPage() {
                       <Td>{money(Number(closing.transfer_total) || 0)}</Td>
                       <Td>{money(Number(closing.expenses_total) || 0)}</Td>
                       <Td>
-                        <span style={closing.status === "rejected" ? styles.badgeDanger : closing.status === "accounting_approved" ? styles.badgeGood : styles.badgeWarn}>
+                        <span style={closing.status === "rejected" ? styles.badgeDanger : closing.status === "approved" ? styles.badgeGood : styles.badgeWarn}>
                           {closingStatusLabel(closing.status)}
                         </span>
                       </Td>

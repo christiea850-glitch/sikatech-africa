@@ -1,6 +1,8 @@
 import { loadTransactions } from "../sales/salesStorage";
 
 export type ShiftClosingAccountingStatus = "pending" | "approved" | "rejected";
+export type ShiftClosingStatus = "pending" | "reviewed" | "approved" | "rejected";
+type StoredShiftStatus = "open" | "unclosed" | "submitted" | "reviewed" | "auto_submitted";
 
 export type ShiftClosingRecord = {
   id: string | number;
@@ -11,14 +13,8 @@ export type ShiftClosingRecord = {
   submitted_by_user_id: string | number | null;
   submitted_at: string | null;
   submission_mode?: "manual" | "automatic";
-  status:
-    | "submitted"
-    | "auto_submitted"
-    | "accounting_reviewed"
-    | "accounting_approved"
-    | "manager_approved"
-    | "rejected"
-    | string;
+  status: ShiftClosingStatus | string;
+  shift_status?: StoredShiftStatus;
   cash_expected: number;
   cash_counted: number;
   card_total: number;
@@ -60,6 +56,7 @@ export type UpsertShiftClosingInput = ClosingFinancialInput & {
   submittedAt?: string | null;
   submissionMode?: "manual" | "automatic";
   status?: ShiftClosingRecord["status"];
+  shiftStatus?: StoredShiftStatus;
   notes?: string | null;
 };
 
@@ -211,21 +208,48 @@ function resolveBusinessId(value: unknown) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
 }
 
-function closingStatusFromTrace(status: unknown): ShiftClosingRecord["status"] {
+function normalizeClosingStatus(status: unknown): ShiftClosingStatus {
   const normalized = String(status ?? "").trim().toLowerCase();
-  if (normalized === "auto_submitted") return "auto_submitted";
-  if (normalized === "reviewed") return "accounting_reviewed";
+  if (normalized === "approved" || normalized === "accounting_approved" || normalized === "manager_approved" || normalized === "closed") {
+    return "approved";
+  }
+  if (normalized === "reviewed" || normalized === "accounting_reviewed") return "reviewed";
   if (normalized === "rejected") return "rejected";
-  return "submitted";
+  return "pending";
+}
+
+function shiftStatusFromClosingSignal(status: unknown): StoredShiftStatus {
+  const normalized = String(status ?? "").trim().toLowerCase();
+  if (normalized === "open") return "open";
+  if (normalized === "auto_submitted" || normalized === "auto-submitted") return "auto_submitted";
+  if (
+    normalized === "reviewed" ||
+    normalized === "accounting_reviewed" ||
+    normalized === "accounting_approved" ||
+    normalized === "approved" ||
+    normalized === "manager_approved" ||
+    normalized === "closed"
+  ) {
+    return "reviewed";
+  }
+  if (
+    normalized === "submitted" ||
+    normalized === "closing_submitted" ||
+    normalized === "pending" ||
+    normalized === "pending_close" ||
+    normalized === "pending_closing"
+  ) {
+    return "submitted";
+  }
+  return "unclosed";
 }
 
 function shouldPreserveStatus(existing: ShiftClosingRecord, nextStatus: ShiftClosingRecord["status"]) {
-  const finalStatuses = new Set(["accounting_approved", "manager_approved", "rejected"]);
+  const finalStatuses = new Set(["approved", "rejected"]);
+  const normalizedNext = normalizeClosingStatus(nextStatus);
   return (
-    finalStatuses.has(String(existing.status)) &&
-    (nextStatus === "submitted" ||
-      nextStatus === "auto_submitted" ||
-      nextStatus === "accounting_reviewed")
+    finalStatuses.has(normalizeClosingStatus(existing.status)) &&
+    (normalizedNext === "pending" || normalizedNext === "reviewed")
   );
 }
 
@@ -240,9 +264,15 @@ function nextClosingId(input: UpsertShiftClosingInput) {
 }
 
 export function loadShiftClosings(status = ""): ShiftClosingRecord[] {
+  const normalizedStatus = normalizeClosingStatus(status);
   const rows = readJsonArray<ShiftClosingRecord>(STORAGE_KEY);
   return rows
-    .filter((row) => !status || row.status === status)
+    .map((row) => ({
+      ...row,
+      status: normalizeClosingStatus(row.status),
+      shift_status: row.shift_status || shiftStatusFromClosingSignal(row.status),
+    }))
+    .filter((row) => !status || normalizeClosingStatus(row.status) === normalizedStatus)
     .sort(
       (a, b) =>
         new Date(b.submitted_at || b.created_at || 0).getTime() -
@@ -266,10 +296,10 @@ export function upsertShiftClosingRecord(input: UpsertShiftClosingInput) {
   });
   const existing = existingIndex >= 0 ? rows[existingIndex] : undefined;
   const computed = computeShiftTotals(input.shiftId);
-  const requestedStatus = input.status || "submitted";
+  const requestedStatus = normalizeClosingStatus(input.status || "pending");
   const nextStatus =
     existing && shouldPreserveStatus(existing, requestedStatus)
-      ? existing.status
+      ? normalizeClosingStatus(existing.status)
       : requestedStatus;
 
   const next: ShiftClosingRecord = {
@@ -283,6 +313,8 @@ export function upsertShiftClosingRecord(input: UpsertShiftClosingInput) {
     submitted_at: input.submittedAt || existing?.submitted_at || now,
     submission_mode: input.submissionMode || existing?.submission_mode || "manual",
     status: nextStatus,
+    shift_status:
+      input.shiftStatus || existing?.shift_status || shiftStatusFromClosingSignal(input.status),
     cash_expected: roundMoney(
       input.cashExpected ?? existing?.cash_expected ?? computed.cashExpected
     ),
@@ -322,8 +354,11 @@ export function upsertShiftClosingRecord(input: UpsertShiftClosingInput) {
 }
 
 export function ensureShiftClosingRecord(input: UpsertShiftClosingInput) {
-  const status = closingStatusFromTrace(input.status);
-  return upsertShiftClosingRecord({ ...input, status });
+  return upsertShiftClosingRecord({
+    ...input,
+    status: normalizeClosingStatus(input.status),
+    shiftStatus: input.shiftStatus || shiftStatusFromClosingSignal(input.status),
+  });
 }
 
 export function reviewShiftClosing(input: ShiftClosingReviewInput): ShiftClosingRecord {
@@ -342,10 +377,14 @@ export function reviewShiftClosing(input: ShiftClosingReviewInput): ShiftClosing
     ...row,
     status:
       reviewStatus === "approved"
-        ? "accounting_approved"
+        ? "approved"
         : reviewStatus === "rejected"
         ? "rejected"
         : row.status,
+    shift_status:
+      reviewStatus === "approved" || reviewStatus === "rejected"
+        ? "reviewed"
+        : row.shift_status,
     accounting_review_status: reviewStatus,
     accounting_reviewed_by_user_id:
       input.reviewedBy ?? row.accounting_reviewed_by_user_id ?? null,
@@ -368,4 +407,46 @@ export function reviewShiftClosing(input: ShiftClosingReviewInput): ShiftClosing
 
   writeShiftClosings(nextRows);
   return updated;
+}
+
+export function syncShiftClosingsFromShifts(
+  shifts: Array<Record<string, any>>,
+  defaults: {
+    businessId?: string | number;
+    branchId?: string | null;
+    departmentKey?: string | null;
+    submittedBy?: string | number | null;
+  } = {}
+) {
+  let changed = false;
+
+  (shifts || []).forEach((shift) => {
+    const shiftId = String(shift?.id ?? "").trim();
+    if (!shiftId) return;
+
+    const shiftStatus = shiftStatusFromClosingSignal(shift?.status);
+    if (shiftStatus === "open" || shiftStatus === "unclosed") return;
+
+    const existing = loadShiftClosings().find(
+      (row) => String(row.shift_id ?? "").trim() === shiftId
+    );
+
+    if (existing) return;
+
+    upsertShiftClosingRecord({
+      shiftId,
+      businessId: shift?.businessId || defaults.businessId,
+      branchId: shift?.branchId || defaults.branchId,
+      departmentKey: shift?.departmentKey || defaults.departmentKey,
+      submittedAt: shift?.submittedAt || shift?.closedAt || new Date().toISOString(),
+      submittedBy: shift?.submittedBy || defaults.submittedBy || "system",
+      submissionMode: shiftStatus === "auto_submitted" ? "automatic" : "manual",
+      status: normalizeClosingStatus(shift?.status),
+      shiftStatus,
+      notes: shift?.notes || null,
+    });
+    changed = true;
+  });
+
+  return changed;
 }

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { listShifts, openShift, submitClosing, type Shift } from "../shifts/shiftsApi";
 import { useAuth } from "../auth/AuthContext";
 import { recordShiftSubmission } from "../lib/shiftTrace";
+import { syncShiftClosingsFromShifts } from "../shifts/shiftClosingStore";
 
 function fmt(ms?: number) {
   if (!ms) return "-";
@@ -37,7 +38,14 @@ export default function DepartmentShiftsPage() {
       return;
     }
 
-    setShifts(res.shifts ?? []);
+    const nextShifts = res.shifts ?? [];
+    syncShiftClosingsFromShifts(nextShifts as any[], {
+      businessId: (user as any)?.businessId,
+      branchId: (user as any)?.branchId,
+      departmentKey,
+      submittedBy: (user as any)?.employeeId || (user as any)?.username || (user as any)?.role,
+    });
+    setShifts(nextShifts);
     setLoading(false);
   }
 
@@ -79,6 +87,7 @@ export default function DepartmentShiftsPage() {
 
     const shift = shifts.find((item) => String(item.id) === String(shiftId)) || res.shift;
     recordShiftSubmission({
+      closingId: res.closingId,
       shiftId,
       status: "submitted",
       submittedAt: new Date().toISOString(),

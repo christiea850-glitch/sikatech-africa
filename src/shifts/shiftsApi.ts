@@ -22,7 +22,7 @@ export type ListShiftsResponse =
   | { ok: false; error: string };
 
 export type OneShiftResponse =
-  | { ok: true; shift: Shift }
+  | { ok: true; shift: Shift; closingId?: string | number }
   | { ok: false; error: string };
 
 function pickErr(res: any, fallback: string) {
@@ -56,9 +56,12 @@ export async function submitClosing(shiftId: string): Promise<OneShiftResponse> 
   const res = await apiSubmitClosing(id);
   if (!res.ok) return { ok: false, error: pickErr(res, "Failed to submit closing") };
 
-  const shift = (res.data as any)?.shift;
-  if (!shift) return { ok: false, error: "Server did not return shift" };
-  return { ok: true, shift };
+  const shift =
+    (res.data as any)?.shift || ({
+      id,
+      status: "closing_submitted",
+    } as Shift);
+  return { ok: true, shift, closingId: (res.data as any)?.id };
 }
 
 export async function accountingReview(
