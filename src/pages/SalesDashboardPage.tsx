@@ -35,7 +35,7 @@ import {
   type CanonicalLedgerEntry,
   type DepartmentIntelligenceClassification,
 } from "../finance/financialLedger";
-
+import { generateRecommendedActions } from "../finance/actionEngine";
 type Tx = any;
 type ExpenseRow = any;
 
@@ -912,6 +912,9 @@ export default function SalesDashboardPage() {
       }),
     [filteredLedgerEntries, departmentOptions]
   );
+  const recommendedActions = useMemo(() => {
+    return generateRecommendedActions(filteredLedgerEntries);
+  }, [filteredLedgerEntries]);
 
   const drilldownDepartmentKey =
     selectedDepartmentKey ||
@@ -1553,6 +1556,40 @@ export default function SalesDashboardPage() {
                     <div style={styles.alertMessage}>{alert.message}</div>
                     <div style={styles.alertAction}>{alert.recommendedAction}</div>
                   </button>
+                ))}
+              </div>
+            )}
+          </ChartCard>
+
+          <ChartCard title="Recommended Actions" helper="Suggested next steps">
+            {recommendedActions.length === 0 ? (
+              <div style={styles.emptyState}>No recommended actions at this time.</div>
+            ) : (
+              <div style={styles.alertsGrid}>
+                {recommendedActions.map((action) => (
+                  <div key={action.id} style={styles.actionCard}>
+                    <div style={styles.alertTitle}>
+                      {action.title}
+                      <span
+                        style={{
+                          ...styles.alertBadge,
+                          ...(action.severity === "high"
+                            ? styles.actionBadgeHigh
+                            : action.severity === "medium"
+                            ? styles.actionBadgeMedium
+                            : styles.actionBadgeLow),
+                        }}
+                      >
+                        {action.severity}
+                      </span>
+                    </div>
+                    <div style={styles.alertMessage}>{action.description}</div>
+                    {action.department ? (
+                      <div style={styles.alertAction}>
+                        Department: {getDepartmentLabel(action.department, departmentOptions)}
+                      </div>
+                    ) : null}
+                  </div>
                 ))}
               </div>
             )}
@@ -2836,6 +2873,12 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     font: "inherit",
   },
+  actionCard: {
+    borderRadius: 14,
+    padding: 14,
+    border: "1px solid #E5EAF3",
+    background: "#FFFFFF",
+  },
   alertDanger: {
     background: "#FEF2F2",
     border: "1px solid #FECACA",
@@ -2883,6 +2926,18 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#FFFFFF",
   },
   alertBadgeInfo: {
+    background: "#2563EB",
+    color: "#FFFFFF",
+  },
+  actionBadgeHigh: {
+    background: "#DC2626",
+    color: "#FFFFFF",
+  },
+  actionBadgeMedium: {
+    background: "#F59E0B",
+    color: "#111827",
+  },
+  actionBadgeLow: {
     background: "#2563EB",
     color: "#FFFFFF",
   },
