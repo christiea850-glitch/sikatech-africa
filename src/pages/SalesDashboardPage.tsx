@@ -51,6 +51,22 @@ type AlertTone = "danger" | "warning" | "success" | "info";
 type RangeFilter = "today" | "yesterday" | "week" | "month" | "all";
 type QuickRangeFilter = RangeFilter | "custom";
 type DateRange = { startDate: string; endDate: string };
+type DepartmentPerformanceRow = {
+  department: string;
+  transactions: number;
+  revenue: number;
+  collections: number;
+  receivables: number;
+  expenses: number;
+  net: number;
+};
+
+const DEPARTMENT_ANALYTICS_LEDGER_SOURCE_TYPES = new Set([
+  "room_booking_revenue",
+  "guest_payment_collection",
+  "direct_pos_sale",
+  "expense",
+]);
 
 function money(n: number) {
   return (Number.isFinite(n) ? n : 0).toFixed(2);
@@ -814,45 +830,27 @@ export default function SalesDashboardPage() {
   }, [filteredTransactions, ledgerTotals, paymentBreakdown]);
 
   const departmentPerformance = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        department: string;
-        transactions: number;
-        revenue: number;
-        expenses: number;
-        net: number;
-      }
-    >();
+    const map = new Map<string, DepartmentPerformanceRow>();
 
-    for (const t of filteredTransactions) {
-      const dept = getDepartmentValue(t);
+    for (const entry of filteredLedgerEntries) {
+      if (!DEPARTMENT_ANALYTICS_LEDGER_SOURCE_TYPES.has(entry.sourceType)) continue;
 
+      const dept = getLedgerDepartmentValue(entry);
       const current = map.get(dept) || {
         department: dept,
         transactions: 0,
         revenue: 0,
+        collections: 0,
+        receivables: 0,
         expenses: 0,
         net: 0,
       };
 
       current.transactions += 1;
-      current.revenue += getRevenueAmount(t);
-      map.set(dept, current);
-    }
-
-    for (const e of visibleExpenses) {
-      const dept = getExpenseDepartmentValue(e);
-
-      const current = map.get(dept) || {
-        department: dept,
-        transactions: 0,
-        revenue: 0,
-        expenses: 0,
-        net: 0,
-      };
-
-      current.expenses += Number(e?.amount) || 0;
+      current.revenue += Number(entry.revenueAmount) || 0;
+      current.collections += Number(entry.collectionAmount) || 0;
+      current.receivables += Number(entry.receivableAmount) || 0;
+      current.expenses += Number(entry.expenseAmount) || 0;
       map.set(dept, current);
     }
 
@@ -861,7 +859,7 @@ export default function SalesDashboardPage() {
     }
 
     return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue);
-  }, [filteredTransactions, visibleExpenses]);
+  }, [filteredLedgerEntries]);
 
   const expenseAnalytics = useMemo(() => {
     const byCategory = new Map<
@@ -942,7 +940,7 @@ export default function SalesDashboardPage() {
         topRevenue: null as any,
         topExpense: null as any,
         topProfit: null as any,
-        lowestProfit: null as any,
+        underperforming: null as any,
       };
     }
 
@@ -955,13 +953,20 @@ export default function SalesDashboardPage() {
     )[0];
 
     const topProfit = [...departmentPerformance].sort((a, b) => b.net - a.net)[0];
-    const lowestProfit = [...departmentPerformance].sort((a, b) => a.net - b.net)[0];
+    const underperforming = [...departmentPerformance].sort((a, b) => {
+      const aReceivablePressure = a.revenue > 0 ? a.receivables / a.revenue : 0;
+      const bReceivablePressure = b.revenue > 0 ? b.receivables / b.revenue : 0;
+      if (bReceivablePressure !== aReceivablePressure) {
+        return bReceivablePressure - aReceivablePressure;
+      }
+      return a.revenue - b.revenue;
+    })[0];
 
     return {
       topRevenue,
       topExpense,
       topProfit,
-      lowestProfit,
+      underperforming,
     };
   }, [departmentPerformance]);
 
@@ -981,19 +986,26 @@ export default function SalesDashboardPage() {
   const departmentLeaderboard = useMemo(() => {
     return departmentPerformance
       .map((row, index) => {
+        const isTopPerformer = departmentHighlights.topRevenue?.department === row.department;
+        const receivableRatio = row.revenue > 0 ? row.receivables / row.revenue : 0;
+        const collectionRatio = row.revenue > 0 ? row.collections / row.revenue : 1;
+        const needsAttention =
+          row.receivables > 0 && (receivableRatio >= 0.3 || collectionRatio < 0.7);
         let status = "Watch";
-        if (row.net > 0 && row.revenue > row.expenses * 1.3) status = "Strong";
-        else if (row.net < 0) status = "Loss";
+        if (isTopPerformer) status = "Top Performer";
+        else if (needsAttention) status = "Needs Attention";
 
         return {
           ...row,
           rank: index + 1,
           marginPct: row.revenue > 0 ? (row.net / row.revenue) * 100 : 0,
+          collectionPct: row.revenue > 0 ? (row.collections / row.revenue) * 100 : 0,
+          receivablePct: row.revenue > 0 ? (row.receivables / row.revenue) * 100 : 0,
           status,
         };
       })
-      .sort((a, b) => b.net - a.net);
-  }, [departmentPerformance]);
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [departmentPerformance, departmentHighlights.topRevenue]);
 
   const recentActivity = useMemo(() => {
     const latestTransactions = filteredTransactions.slice(0, 5).map((t: Tx) => ({
@@ -1329,6 +1341,8 @@ export default function SalesDashboardPage() {
     return departmentPerformance.map((row) => ({
       name: getDepartmentLabel(row.department, departmentOptions),
       revenue: row.revenue,
+      collections: row.collections,
+      receivables: row.receivables,
       expenses: row.expenses,
       net: row.net,
     }));
@@ -1372,7 +1386,7 @@ export default function SalesDashboardPage() {
 
   const exportSummary = useMemo(() => {
     const topDept = departmentLeaderboard[0];
-    const lossDept = [...departmentLeaderboard].sort((a, b) => a.net - b.net)[0];
+    const underperformingDept = departmentHighlights.underperforming;
     const peakHour = [...hourlySalesTrend].sort((a, b) => b.sales - a.sales)[0];
 
     return {
@@ -1410,19 +1424,29 @@ export default function SalesDashboardPage() {
             name: getDepartmentLabel(topDept.department, departmentOptions),
             net: topDept.net,
             revenue: topDept.revenue,
+            collections: topDept.collections,
+            receivables: topDept.receivables,
             expenses: topDept.expenses,
             marginPct: topDept.marginPct,
             status: topDept.status,
           }
         : null,
-      weakestDepartment: lossDept
+      weakestDepartment: underperformingDept
         ? {
-            name: getDepartmentLabel(lossDept.department, departmentOptions),
-            net: lossDept.net,
-            revenue: lossDept.revenue,
-            expenses: lossDept.expenses,
-            marginPct: lossDept.marginPct,
-            status: lossDept.status,
+            name: getDepartmentLabel(underperformingDept.department, departmentOptions),
+            net: underperformingDept.net,
+            revenue: underperformingDept.revenue,
+            collections: underperformingDept.collections,
+            receivables: underperformingDept.receivables,
+            expenses: underperformingDept.expenses,
+            marginPct:
+              underperformingDept.revenue > 0
+                ? (underperformingDept.net / underperformingDept.revenue) * 100
+                : 0,
+            status:
+              departmentLeaderboard.find(
+                (row) => row.department === underperformingDept.department
+              )?.status || "Needs Attention",
           }
         : null,
       peakHour:
@@ -1442,6 +1466,8 @@ export default function SalesDashboardPage() {
         rank: row.rank,
         department: getDepartmentLabel(row.department, departmentOptions),
         revenue: row.revenue,
+        collections: row.collections,
+        receivables: row.receivables,
         expenses: row.expenses,
         net: row.net,
         transactions: row.transactions,
@@ -1458,6 +1484,7 @@ export default function SalesDashboardPage() {
     expenseAnalytics,
     todayVsYesterday,
     departmentLeaderboard,
+    departmentHighlights,
     hourlySalesTrend,
     smartAlerts,
   ]);
@@ -1533,7 +1560,11 @@ export default function SalesDashboardPage() {
       lines.push(
         `${exportSummary.topDepartment.name} | Net: ${money(
           exportSummary.topDepartment.net
-        )} | Revenue: ${money(exportSummary.topDepartment.revenue)} | Expenses: ${money(
+        )} | Revenue: ${money(exportSummary.topDepartment.revenue)} | Collections: ${money(
+          exportSummary.topDepartment.collections
+        )} | Receivables: ${money(
+          exportSummary.topDepartment.receivables
+        )} | Expenses: ${money(
           exportSummary.topDepartment.expenses
         )} | Margin: ${exportSummary.topDepartment.marginPct.toFixed(1)}%`
       );
@@ -1547,6 +1578,10 @@ export default function SalesDashboardPage() {
           exportSummary.weakestDepartment.net
         )} | Revenue: ${money(
           exportSummary.weakestDepartment.revenue
+        )} | Collections: ${money(
+          exportSummary.weakestDepartment.collections
+        )} | Receivables: ${money(
+          exportSummary.weakestDepartment.receivables
         )} | Expenses: ${money(
           exportSummary.weakestDepartment.expenses
         )} | Margin: ${exportSummary.weakestDepartment.marginPct.toFixed(1)}%`
@@ -1580,7 +1615,9 @@ export default function SalesDashboardPage() {
     } else {
       exportSummary.departmentLeaderboard.forEach((row) => {
         lines.push(
-          `#${row.rank} ${row.department} | Revenue: ${money(row.revenue)} | Expenses: ${money(
+          `#${row.rank} ${row.department} | Revenue: ${money(row.revenue)} | Collections: ${money(
+            row.collections
+          )} | Receivables: ${money(row.receivables)} | Expenses: ${money(
             row.expenses
           )} | Net: ${money(row.net)} | Tx: ${row.transactions} | Margin: ${row.marginPct.toFixed(
             1
@@ -1990,7 +2027,7 @@ export default function SalesDashboardPage() {
             )}
           </ChartCard>
 
-          <ChartCard title="Department Leaderboard" helper="Top performing departments by net profit">
+          <ChartCard title="Department Leaderboard" helper="Top performing departments by revenue">
             {departmentLeaderboard.length === 0 ? (
               <div style={styles.emptyState}>No department data available yet.</div>
             ) : (
@@ -2022,9 +2059,9 @@ export default function SalesDashboardPage() {
                         <div
                           style={{
                             ...styles.leaderboardStatus,
-                            ...(row.status === "Strong"
+                            ...(row.status === "Top Performer"
                               ? styles.leaderboardStatusStrong
-                              : row.status === "Loss"
+                              : row.status === "Needs Attention"
                               ? styles.leaderboardStatusLoss
                               : styles.leaderboardStatusWatch),
                           }}
@@ -2037,6 +2074,7 @@ export default function SalesDashboardPage() {
                     <div style={styles.leaderboardBottom}>
                       <span>Transactions: {row.transactions}</span>
                       <span>Margin: {row.marginPct.toFixed(1)}%</span>
+                      <span>Collections: {row.collectionPct.toFixed(1)}%</span>
                     </div>
                   </div>
                 ))}
@@ -2194,16 +2232,16 @@ export default function SalesDashboardPage() {
               </div>
 
               <div style={styles.insightCard}>
-                <div style={styles.insightLabel}>Lowest Net Profit</div>
+                <div style={styles.insightLabel}>Needs Attention</div>
                 <div style={styles.insightValue}>
-                  {departmentHighlights.lowestProfit
-                    ? money(departmentHighlights.lowestProfit.net)
+                  {departmentHighlights.underperforming
+                    ? money(departmentHighlights.underperforming.receivables)
                     : "0.00"}
                 </div>
                 <div style={styles.insightSub}>
-                  {departmentHighlights.lowestProfit
+                  {departmentHighlights.underperforming
                     ? getDepartmentLabel(
-                        departmentHighlights.lowestProfit.department,
+                        departmentHighlights.underperforming.department,
                         departmentOptions
                       )
                     : "No data"}
@@ -2430,7 +2468,7 @@ export default function SalesDashboardPage() {
             )}
           </ChartCard>
 
-          <ChartCard title="Department Leaderboard" helper="Ranked by net profit">
+          <ChartCard title="Department Leaderboard" helper="Ranked by revenue">
             {departmentLeaderboard.length === 0 ? (
               <div style={styles.emptyState}>No department data available yet.</div>
             ) : (
@@ -2462,9 +2500,9 @@ export default function SalesDashboardPage() {
                         <div
                           style={{
                             ...styles.leaderboardStatus,
-                            ...(row.status === "Strong"
+                            ...(row.status === "Top Performer"
                               ? styles.leaderboardStatusStrong
-                              : row.status === "Loss"
+                              : row.status === "Needs Attention"
                               ? styles.leaderboardStatusLoss
                               : styles.leaderboardStatusWatch),
                           }}
@@ -2477,6 +2515,7 @@ export default function SalesDashboardPage() {
                     <div style={styles.leaderboardBottom}>
                       <span>Transactions: {row.transactions}</span>
                       <span>Margin: {row.marginPct.toFixed(1)}%</span>
+                      <span>Collections: {row.collectionPct.toFixed(1)}%</span>
                     </div>
                   </div>
                 ))}
@@ -2494,6 +2533,8 @@ export default function SalesDashboardPage() {
                     <th style={styles.thLeft}>Department</th>
                     <th style={styles.thRight}>Transactions</th>
                     <th style={styles.thRight}>Revenue</th>
+                    <th style={styles.thRight}>Collections</th>
+                    <th style={styles.thRight}>Receivables</th>
                     <th style={styles.thRight}>Expenses</th>
                     <th style={styles.thRight}>Net</th>
                   </tr>
@@ -2521,6 +2562,16 @@ export default function SalesDashboardPage() {
                         </td>
                         <td style={styles.tdRight}>{row.transactions}</td>
                         <td style={styles.tdRight}>{money(row.revenue)}</td>
+                        <td style={styles.tdRight}>{money(row.collections)}</td>
+                        <td
+                          style={{
+                            ...styles.tdRight,
+                            color: row.receivables > 0 ? "#B45309" : "#0F172A",
+                            fontWeight: row.receivables > 0 ? 800 : 700,
+                          }}
+                        >
+                          {money(row.receivables)}
+                        </td>
                         <td style={styles.tdRight}>{money(row.expenses)}</td>
                         <td
                           style={{
