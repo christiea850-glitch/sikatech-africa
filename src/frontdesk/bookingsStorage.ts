@@ -22,6 +22,10 @@ export type BookingSource =
   | "agent";
 
 export type FolioPaymentMethod = "cash" | "momo" | "card" | "transfer";
+export type BookingFolioTransactionSource =
+  | "guest_payment"
+  | "room_folio_charge"
+  | "room_folio_settlement";
 
 export type BookingRecord = {
   id: string;
@@ -68,6 +72,11 @@ export type BookingFolioActivity = {
   title: string;
   amount: number;
   createdAt: number;
+  bookingId?: string;
+  bookingCode?: string;
+  roomNo?: string;
+  customerName?: string;
+  transactionSource?: BookingFolioTransactionSource;
   transactionId?: string;
   source?: string;
   paymentMethod?: FolioPaymentMethod;
@@ -172,6 +181,10 @@ export function createBooking(input: {
   const amountPaid = roundMoney(clamp(safeNumber(input.amountPaid, 0), 0, totalAmount));
   const balance = roundMoney(Math.max(0, totalAmount - amountPaid));
   const initialPaymentMethod = input.initialPaymentMethod || "cash";
+  const bookingId = uid("booking");
+  const bookingCode = generateBookingCode();
+  const guestName = String(input.guestName || "").trim();
+  const roomNo = String(input.roomNo || "").trim();
   const initialPayment =
     amountPaid > 0
       ? ({
@@ -180,6 +193,11 @@ export function createBooking(input: {
           title: `Initial payment - ${initialPaymentMethod}`,
           amount: amountPaid,
           createdAt: now,
+          bookingId,
+          bookingCode,
+          roomNo,
+          customerName: guestName,
+          transactionSource: "guest_payment",
           source: "front-desk",
           paymentMethod: initialPaymentMethod,
           note: "Initial booking payment",
@@ -192,13 +210,13 @@ export function createBooking(input: {
       : null;
 
   const booking: BookingRecord = {
-    id: uid("booking"),
-    bookingCode: generateBookingCode(),
-    guestName: String(input.guestName || "").trim(),
+    id: bookingId,
+    bookingCode,
+    guestName,
     guestPhone: String(input.guestPhone || "").trim() || undefined,
     guestEmail: String(input.guestEmail || "").trim() || undefined,
 
-    roomNo: String(input.roomNo || "").trim(),
+    roomNo,
     roomType: String(input.roomType || "").trim() || "Standard",
 
     checkInDate: input.checkInDate,
@@ -424,12 +442,21 @@ export function postRoomChargeToBooking(
   const next = list.map((item) => {
     if (item.id !== id) return item;
 
+    if (item.bookingStatus !== "checked_in" || item.roomStatus !== "occupied") {
+      throw new Error("Room charges can only be posted to an occupied booking.");
+    }
+
     const activity: BookingFolioActivity = {
       id: uid("folio"),
       type: "charge",
       title: String(input.title || "Room charge").trim(),
       amount,
       createdAt: Date.now(),
+      bookingId: item.id,
+      bookingCode: item.bookingCode,
+      roomNo: item.roomNo,
+      customerName: item.guestName,
+      transactionSource: "room_folio_charge",
       transactionId: input.transactionId,
       source: input.source,
       note: String(input.note || "").trim() || undefined,
@@ -467,6 +494,7 @@ export function recordPaymentToBooking(
   input: {
     amount: number;
     paymentMethod: FolioPaymentMethod;
+    transactionSource?: BookingFolioTransactionSource;
     source?: string;
     note?: string;
     shiftId?: string;
@@ -514,12 +542,22 @@ export function recordPaymentToBooking(
     const amountPaid = balance === 0 ? totalAmount : nextAmountPaid;
     const paymentMethod = input.paymentMethod;
 
+    const hasFolioCharges = (item.folioActivity || []).some(
+      (activity) => activity.type === "charge"
+    );
     const activity: BookingFolioActivity = {
       id: uid("payment"),
       type: "payment",
       title: `Payment - ${paymentMethod}`,
       amount: appliedAmount,
       createdAt: Date.now(),
+      bookingId: item.id,
+      bookingCode: item.bookingCode,
+      roomNo: item.roomNo,
+      customerName: item.guestName,
+      transactionSource:
+        input.transactionSource ||
+        (hasFolioCharges ? "room_folio_settlement" : "guest_payment"),
       source: input.source,
       paymentMethod,
       note: String(input.note || "").trim() || undefined,

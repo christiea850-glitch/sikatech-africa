@@ -5,6 +5,11 @@ import { useShift } from "../shifts/ShiftContext";
 import { submitShiftClosing } from "../api/shiftClosingApi";
 import { useSales, type PaymentMethod } from "./SalesContext";
 import { recordShiftSubmission } from "../lib/shiftTrace";
+import {
+  getAllBookings,
+  postRoomChargeToBooking,
+  type BookingRecord,
+} from "../frontdesk/bookingsStorage";
 
 type ItemRow = {
   id: string;
@@ -16,6 +21,10 @@ type ItemRow = {
 
 function uid() {
   return Math.random().toString(36).slice(2, 10);
+}
+
+function transactionUid() {
+  return `sale_tx_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
 }
 
 function money(n: number) {
@@ -45,6 +54,9 @@ function toPaymentMethod(value: string): PaymentMethod {
       return "bank_transfer";
     case "bank_transfer":
       return "bank_transfer";
+    case "room folio":
+    case "room_folio":
+      return "room_folio";
     case "credit":
       return "credit";
     default:
@@ -61,6 +73,23 @@ function formatDepartmentLabel(value: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function findPostableRoomBooking(roomNo: string): BookingRecord | null {
+  const target = String(roomNo || "").trim().toLowerCase();
+  if (!target) return null;
+
+  return (
+    getAllBookings()
+      .filter((booking) => String(booking.roomNo || "").trim().toLowerCase() === target)
+      .filter(
+        (booking) =>
+          booking.bookingStatus === "checked_in" &&
+          booking.roomStatus === "occupied"
+      )
+      .sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0))[0] ||
+    null
+  );
 }
 
 export default function SalesEntryPanel() {
@@ -151,20 +180,20 @@ export default function SalesEntryPanel() {
   }, [items]);
 
   const cashExpected = useMemo(() => {
-    return paymentMethod === "Cash" ? subtotal : 0;
-  }, [paymentMethod, subtotal]);
+    return !postToRoom && paymentMethod === "Cash" ? subtotal : 0;
+  }, [paymentMethod, postToRoom, subtotal]);
 
   const cashCounted = useMemo(() => {
-    return paymentMethod === "Cash" ? subtotal : 0;
-  }, [paymentMethod, subtotal]);
+    return !postToRoom && paymentMethod === "Cash" ? subtotal : 0;
+  }, [paymentMethod, postToRoom, subtotal]);
 
   const cardTotal = useMemo(() => {
-    return paymentMethod === "Card" ? subtotal : 0;
-  }, [paymentMethod, subtotal]);
+    return !postToRoom && paymentMethod === "Card" ? subtotal : 0;
+  }, [paymentMethod, postToRoom, subtotal]);
 
   const momoTotal = useMemo(() => {
-    return paymentMethod === "MoMo" ? subtotal : 0;
-  }, [paymentMethod, subtotal]);
+    return !postToRoom && paymentMethod === "MoMo" ? subtotal : 0;
+  }, [paymentMethod, postToRoom, subtotal]);
 
   const expensesTotal = 0;
 
@@ -306,6 +335,18 @@ export default function SalesEntryPanel() {
       return;
     }
 
+    if (postToRoom && !roomNo.trim()) {
+      setMsg("Enter a room number before posting a charge to room.");
+      return;
+    }
+
+    const roomBooking = postToRoom ? findPostableRoomBooking(roomNo) : null;
+
+    if (postToRoom && !roomBooking) {
+      setMsg("Room posting requires an occupied room with a checked-in booking.");
+      return;
+    }
+
     setBusy(true);
     setMsg(null);
 
@@ -314,6 +355,18 @@ export default function SalesEntryPanel() {
       const staffName =
         String((user as any)?.name || (user as any)?.fullName || "").trim() ||
         undefined;
+      const transactionId = transactionUid();
+      const transactionItems = validItems.map((item) => ({
+        name: item.name.trim(),
+        qty: Number(item.qty),
+        unitPrice: Number(item.unitPrice),
+        discount: Number(item.discount || 0),
+        total: Math.max(
+          0,
+          Number(item.qty) * Number(item.unitPrice) - Number(item.discount || 0)
+        ),
+      }));
+      const effectivePaymentMethod = postToRoom ? "Room Folio" : paymentMethod;
 
       validItems.forEach((item) => {
         addSale({
@@ -322,15 +375,35 @@ export default function SalesEntryPanel() {
           qty: Number(item.qty),
           unitPrice: Number(item.unitPrice),
           discount: Number(item.discount || 0),
-          paymentMethod: toPaymentMethod(paymentMethod),
-          customerName: customerName.trim() || undefined,
+          paymentMethod: toPaymentMethod(effectivePaymentMethod),
+          customerName:
+            customerName.trim() || (postToRoom ? roomBooking?.guestName : undefined),
           customerPhone: customerPhone.trim() || undefined,
           staffId,
           staffName,
+          transactionId,
+          bookingId: postToRoom ? roomBooking?.id : undefined,
+          bookingCode: postToRoom ? roomBooking?.bookingCode : undefined,
+          roomNo: postToRoom ? roomNo.trim() : undefined,
+          transactionSource: postToRoom ? "room_folio_charge" : "direct_pos_sale",
+          paymentMode: postToRoom ? "post_to_room" : "pay_now",
           shiftId: activeShift?.id ? String(activeShift.id) : undefined,
           shiftStatus: activeShift?.id ? "open" : "unclosed",
         });
       });
+
+      if (postToRoom && roomBooking) {
+        postRoomChargeToBooking(roomBooking.id, {
+          transactionId,
+          title: transactionType || "Room folio charge",
+          amount: subtotal,
+          source: deptKey,
+          note: note.trim() || undefined,
+          shiftId: activeShift?.id ? String(activeShift.id) : undefined,
+          shiftStatus: activeShift?.id ? "open" : "unclosed",
+          items: transactionItems,
+        });
+      }
 
       const itemCount = validItems.length;
       const extraNotes: string[] = [];
@@ -500,7 +573,11 @@ export default function SalesEntryPanel() {
             name="postToRoom"
             type="checkbox"
             checked={postToRoom}
-            onChange={(e) => setPostToRoom(e.target.checked)}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setPostToRoom(checked);
+              setPaymentMethod(checked ? "Room Folio" : "Cash");
+            }}
             disabled={isReadOnly}
           />
           <label htmlFor="postToRoom" style={styles.labelInline}>
@@ -521,7 +598,7 @@ export default function SalesEntryPanel() {
               id="roomNo"
               name="roomNo"
               style={styles.input}
-              placeholder="Optional"
+              placeholder={postToRoom ? "Required" : "Optional"}
               value={roomNo}
               onChange={(e) => setRoomNo(e.target.value)}
               disabled={isReadOnly || !postToRoom}
@@ -703,8 +780,9 @@ export default function SalesEntryPanel() {
               style={styles.input}
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value)}
-              disabled={isReadOnly}
+              disabled={isReadOnly || postToRoom}
             >
+              {postToRoom ? <option>Room Folio</option> : null}
               <option>Cash</option>
               <option>Card</option>
               <option>MoMo</option>

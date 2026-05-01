@@ -66,8 +66,11 @@ type AccountingRow = {
   collection: number;
   roomFolioReceivable: number;
   guestPayment: number;
+  bookingId?: string;
   bookingCode?: string;
   roomNo?: string;
+  customerName?: string;
+  transactionSource?: string;
   paymentState?: PaymentState;
   transactionTime: string;
   shiftId?: string;
@@ -416,6 +419,8 @@ export default function AccountingWorkbenchPage() {
           paymentMethod: sale.paymentMethod || "other",
           staff: sale.staffName || sale.staffId || "unknown",
           description: sale.productName || "Sale",
+          customerName: sale.customerName,
+          transactionSource: (sale as any).transactionSource || "direct_pos_sale",
           revenue: Number(sale.total) || 0,
           expense: 0,
           collection: Number(sale.total) || 0,
@@ -460,8 +465,11 @@ export default function AccountingWorkbenchPage() {
           collection: 0,
           roomFolioReceivable: 0,
           guestPayment: 0,
+          bookingId: booking.id,
           bookingCode: booking.bookingCode,
           roomNo: booking.roomNo,
+          customerName: booking.guestName,
+          transactionSource: "room_booking",
           paymentState: normalizePaymentState(booking.paymentStatus) || "unpaid",
           transactionTime: bookingDate,
           shiftId: trace.shiftId,
@@ -503,8 +511,13 @@ export default function AccountingWorkbenchPage() {
             collection: isPayment ? amount : 0,
             roomFolioReceivable: isPayment ? 0 : amount,
             guestPayment: isPayment ? amount : 0,
-            bookingCode: booking.bookingCode,
-            roomNo: booking.roomNo,
+            bookingId: activity.bookingId || booking.id,
+            bookingCode: activity.bookingCode || booking.bookingCode,
+            roomNo: activity.roomNo || booking.roomNo,
+            customerName: activity.customerName || booking.guestName,
+            transactionSource:
+              activity.transactionSource ||
+              (isPayment ? "guest_payment" : "room_folio_charge"),
             paymentState: isPayment ? "paid" : normalizePaymentState(booking.paymentStatus) || "unpaid",
             transactionTime: activityDate,
             shiftId: trace.shiftId,
@@ -1450,6 +1463,9 @@ export default function AccountingWorkbenchPage() {
                     <div style={styles.detailLabel}>Payment Status</div>
                     <div style={styles.detailValue}>{selectedRecord.paymentState ? <PaymentBadge state={selectedRecord.paymentState} /> : "-"}</div>
                   </div>
+                  <DetailItem label="Transaction Source" value={selectedRecord.transactionSource || "-"} />
+                  <DetailItem label="Customer" value={selectedRecord.customerName || "-"} />
+                  <DetailItem label="Booking ID" value={selectedRecord.bookingId || "-"} />
                   <DetailItem label="Booking Code" value={selectedRecord.bookingCode || "-"} />
                   <DetailItem label="Room Number" value={selectedRecord.roomNo || "-"} />
                 </div>

@@ -175,9 +175,8 @@ function findPostableRoomBooking(roomNo: string): BookingRecord | null {
       .filter((booking) => String(booking.roomNo || "").trim().toLowerCase() === target)
       .filter(
         (booking) =>
-          (booking.bookingStatus === "checked_in" ||
-            booking.bookingStatus === "reserved") &&
-          (booking.roomStatus === "occupied" || booking.roomStatus === "reserved")
+          booking.bookingStatus === "checked_in" &&
+          booking.roomStatus === "occupied"
       )
       .sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0))[0] ||
     null
@@ -469,7 +468,7 @@ export default function FrontDeskEntry() {
     const roomBooking = postToRoom ? findPostableRoomBooking(roomNo) : null;
 
     if (postToRoom && !roomBooking) {
-      setMsg("Room posting requires an occupied or reserved room with an active booking.");
+      setMsg("Room posting requires an occupied room with a checked-in booking.");
       return;
     }
 
@@ -517,6 +516,7 @@ export default function FrontDeskEntry() {
           bookingId: roomBooking?.id,
           bookingCode: roomBooking?.bookingCode,
           roomNo: postToRoom ? roomNo.trim() : undefined,
+          transactionSource: postToRoom ? "room_folio_charge" : "direct_pos_sale",
           paymentMode: postToRoom ? "post_to_room" : "pay_now",
           shiftId: activeShift?.id ? String(activeShift.id) : undefined,
           shiftStatus: activeShift?.id ? "open" : "unclosed",
@@ -553,6 +553,7 @@ export default function FrontDeskEntry() {
         bookingId: roomBooking?.id,
         bookingCode: roomBooking?.bookingCode,
         roomNo: postToRoom ? roomNo.trim() : undefined,
+        transactionSource: postToRoom ? "room_folio_charge" : "direct_pos_sale",
         customerName:
           customerName.trim() || (postToRoom ? roomBooking?.guestName : undefined),
         customerPhone: customerPhone.trim() || undefined,

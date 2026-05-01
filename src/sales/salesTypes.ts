@@ -5,6 +5,7 @@ export type CustomerType = "GUEST" | "WALKIN";
 export type OrderType = "DINE_IN" | "TAKEAWAY" | "ROOM_SERVICE";
 export type PaymentMode = "PAY_NOW" | "POST_TO_ROOM";
 export type PayMethod = "CASH" | "MOMO" | "CARD" | "TRANSFER";
+export type TransactionSource = "direct_pos_sale" | "room_folio_charge";
 
 export type LineItem = {
   id: string;
@@ -30,6 +31,7 @@ export type Transaction = {
   bookingId?: string;
   bookingCode?: string;
   roomNo?: string;
+  transactionSource?: TransactionSource;
 
   customerName?: string;
   customerPhone?: string;

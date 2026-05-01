@@ -35,6 +35,7 @@ export type SaleRecord = {
   bookingId?: string;
   bookingCode?: string;
   roomNo?: string;
+  transactionSource?: "direct_pos_sale" | "room_folio_charge";
   paymentMode?: "pay_now" | "post_to_room";
   shiftId?: string;
   shiftStatus?: string;
@@ -61,6 +62,7 @@ export type AddSaleInput = {
   bookingId?: string;
   bookingCode?: string;
   roomNo?: string;
+  transactionSource?: "direct_pos_sale" | "room_folio_charge";
   paymentMode?: "pay_now" | "post_to_room";
   shiftId?: string;
   shiftStatus?: string;
@@ -84,12 +86,30 @@ function uid() {
   return Math.random().toString(36).slice(2, 10) + "-" + Date.now().toString(36);
 }
 
+function isRoomFolioSale(record: Partial<SaleRecord | AddSaleInput>) {
+  return record.paymentMode === "post_to_room" || record.paymentMethod === "room_folio";
+}
+
+function normalizeSaleRecord(record: SaleRecord): SaleRecord {
+  const roomFolio = isRoomFolioSale(record);
+
+  return {
+    ...record,
+    bookingId: roomFolio ? record.bookingId?.trim() || undefined : undefined,
+    bookingCode: roomFolio ? record.bookingCode?.trim() || undefined : undefined,
+    roomNo: roomFolio ? record.roomNo?.trim() || undefined : undefined,
+    transactionSource:
+      record.transactionSource || (roomFolio ? "room_folio_charge" : "direct_pos_sale"),
+    paymentMode: roomFolio ? "post_to_room" : "pay_now",
+  };
+}
+
 function load(): SaleRecord[] {
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as SaleRecord[]) : [];
+    return Array.isArray(parsed) ? (parsed as SaleRecord[]).map(normalizeSaleRecord) : [];
   } catch {
     return [];
   }
@@ -118,6 +138,9 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
 
       const subtotal = safeQty * safeUnitPrice;
       const total = Math.max(0, subtotal - safeDiscount);
+      const isRoomFolio = isRoomFolioSale(input);
+      const transactionSource =
+        input.transactionSource || (isRoomFolio ? "room_folio_charge" : "direct_pos_sale");
 
       const next: SaleRecord = {
         id: uid(),
@@ -135,10 +158,11 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         subtotal,
         total,
         transactionId: input.transactionId?.trim() || undefined,
-        bookingId: input.bookingId?.trim() || undefined,
-        bookingCode: input.bookingCode?.trim() || undefined,
-        roomNo: input.roomNo?.trim() || undefined,
-        paymentMode: input.paymentMode,
+        bookingId: isRoomFolio ? input.bookingId?.trim() || undefined : undefined,
+        bookingCode: isRoomFolio ? input.bookingCode?.trim() || undefined : undefined,
+        roomNo: isRoomFolio ? input.roomNo?.trim() || undefined : undefined,
+        transactionSource,
+        paymentMode: isRoomFolio ? "post_to_room" : "pay_now",
         shiftId: input.shiftId?.trim() || undefined,
         shiftStatus: input.shiftStatus?.trim() || undefined,
         submittedAt: input.submittedAt?.trim() || undefined,

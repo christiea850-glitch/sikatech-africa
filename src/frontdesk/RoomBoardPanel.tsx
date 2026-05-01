@@ -6,6 +6,7 @@ import {
   normalizeRoomStatusForBookingStatus,
   roomStatusColor,
   updateBooking,
+  type BookingFolioActivity,
   type BookingRecord,
   type BookingStatus,
   type RoomStatus,
@@ -54,6 +55,13 @@ function formatDate(value?: string) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleDateString();
+}
+
+function formatDateTime(value?: number) {
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleString();
 }
 
 function money(n?: number) {
@@ -190,6 +198,17 @@ export default function RoomBoardPanel() {
     if (!selectedRoomNo) return null;
     return filteredRooms.find((room) => room.roomNo === selectedRoomNo) || null;
   }, [filteredRooms, selectedRoomNo]);
+
+  const selectedBooking = useMemo(() => {
+    if (!selectedRoom?.bookingId) return null;
+    return bookings.find((booking) => booking.id === selectedRoom.bookingId) || null;
+  }, [bookings, selectedRoom]);
+
+  const selectedFolioActivity = useMemo<BookingFolioActivity[]>(() => {
+    return (selectedBooking?.folioActivity || []).filter(
+      (activity) => activity.type === "charge" || activity.type === "payment"
+    );
+  }, [selectedBooking]);
 
   const stats = useMemo(() => {
     return {
@@ -475,6 +494,25 @@ export default function RoomBoardPanel() {
                 </div>
               </div>
 
+              {selectedFolioActivity.length > 0 ? (
+                <div style={styles.activityBlock}>
+                  <div style={styles.activityTitle}>Booking Activity</div>
+                  {selectedFolioActivity.map((activity) => (
+                    <div key={activity.id} style={styles.activityItem}>
+                      <div style={styles.activityTop}>
+                        <span>{activity.title}</span>
+                        <b>{money(activity.amount)}</b>
+                      </div>
+                      <div style={styles.activityMeta}>
+                        {formatDateTime(activity.createdAt)}
+                        {activity.paymentMethod ? ` - ${activity.paymentMethod}` : ""}
+                        {activity.transactionSource ? ` - ${activity.transactionSource}` : ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
               <div style={styles.actionGroup}>
                 <button type="button" style={styles.primaryBtn} onClick={handleCheckIn}>
                   Check In
@@ -670,6 +708,34 @@ const styles: Record<string, CSSProperties> = {
     color: "#0b2a3a",
     fontWeight: 900,
     textAlign: "right",
+  },
+  activityBlock: {
+    display: "grid",
+    gap: 8,
+    marginBottom: 18,
+  },
+  activityTitle: {
+    color: "#0b2a3a",
+    fontWeight: 900,
+  },
+  activityItem: {
+    padding: 10,
+    borderRadius: 8,
+    background: "rgba(248,250,252,0.92)",
+    border: "1px solid rgba(11,42,58,0.08)",
+  },
+  activityTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 10,
+    color: "#0b2a3a",
+    fontWeight: 900,
+  },
+  activityMeta: {
+    marginTop: 4,
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: 800,
   },
   actionGroup: {
     display: "flex",
