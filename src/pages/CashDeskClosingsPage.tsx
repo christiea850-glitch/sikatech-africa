@@ -42,7 +42,7 @@ type ClosingRow = {
   accounting_reviewed_by_user_id?: number | string | null;
   accounting_reviewed_at?: string | null;
   accounting_note?: string | null;
-  accounting_review_status?: "pending" | "approved" | "rejected";
+  accounting_review_status?: "pending" | "reviewed" | "approved" | "rejected" | "reconciled";
 
   manager_approved_by_user_id?: number | string | null;
   manager_approved_at?: string | null;

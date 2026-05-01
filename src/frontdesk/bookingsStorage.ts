@@ -153,6 +153,12 @@ export function createBooking(input: {
   roomStatus?: RoomStatus;
   totalAmount?: number;
   amountPaid?: number;
+  initialPaymentMethod?: FolioPaymentMethod;
+  shiftId?: string;
+  shiftStatus?: string;
+  submittedAt?: string;
+  submittedBy?: string;
+  submissionMode?: "manual" | "automatic";
   notes?: string;
   createdBy?: {
     employeeId?: string;
@@ -163,8 +169,27 @@ export function createBooking(input: {
 
   const nights = computeNights(input.checkInDate, input.checkOutDate);
   const totalAmount = Math.max(0, safeNumber(input.totalAmount, 0));
-  const amountPaid = clamp(safeNumber(input.amountPaid, 0), 0, totalAmount);
-  const balance = Math.max(0, totalAmount - amountPaid);
+  const amountPaid = roundMoney(clamp(safeNumber(input.amountPaid, 0), 0, totalAmount));
+  const balance = roundMoney(Math.max(0, totalAmount - amountPaid));
+  const initialPaymentMethod = input.initialPaymentMethod || "cash";
+  const initialPayment =
+    amountPaid > 0
+      ? ({
+          id: uid("payment"),
+          type: "payment",
+          title: `Initial payment - ${initialPaymentMethod}`,
+          amount: amountPaid,
+          createdAt: now,
+          source: "front-desk",
+          paymentMethod: initialPaymentMethod,
+          note: "Initial booking payment",
+          shiftId: input.shiftId,
+          shiftStatus: input.shiftStatus,
+          submittedAt: input.submittedAt,
+          submittedBy: input.submittedBy,
+          submissionMode: input.submissionMode,
+        } satisfies BookingFolioActivity)
+      : null;
 
   const booking: BookingRecord = {
     id: uid("booking"),
@@ -196,6 +221,7 @@ export function createBooking(input: {
     balance,
 
     notes: String(input.notes || "").trim() || undefined,
+    folioActivity: initialPayment ? [initialPayment] : undefined,
 
     createdAt: now,
     updatedAt: now,

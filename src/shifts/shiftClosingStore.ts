@@ -1,6 +1,11 @@
 import { loadTransactions } from "../sales/salesStorage";
 
-export type ShiftClosingAccountingStatus = "pending" | "approved" | "rejected";
+export type ShiftClosingAccountingStatus =
+  | "pending"
+  | "reviewed"
+  | "approved"
+  | "rejected"
+  | "reconciled";
 export type ShiftClosingStatus = "pending" | "reviewed" | "approved" | "rejected";
 type StoredShiftStatus = "open" | "unclosed" | "submitted" | "reviewed" | "auto_submitted";
 
@@ -86,6 +91,10 @@ function safeNumber(value: unknown) {
 
 function roundMoney(value: number) {
   return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
+}
+
+function cleanMoney(value: unknown) {
+  return roundMoney(Math.max(0, safeNumber(value)));
 }
 
 function readJsonArray<T>(key: string): T[] {
@@ -210,7 +219,13 @@ function resolveBusinessId(value: unknown) {
 
 function normalizeClosingStatus(status: unknown): ShiftClosingStatus {
   const normalized = String(status ?? "").trim().toLowerCase();
-  if (normalized === "approved" || normalized === "accounting_approved" || normalized === "manager_approved" || normalized === "closed") {
+  if (
+    normalized === "approved" ||
+    normalized === "accounting_approved" ||
+    normalized === "manager_approved" ||
+    normalized === "reconciled" ||
+    normalized === "closed"
+  ) {
     return "approved";
   }
   if (normalized === "reviewed" || normalized === "accounting_reviewed") return "reviewed";
@@ -261,6 +276,25 @@ function nextClosingId(input: UpsertShiftClosingInput) {
   if (shiftId) return `shift:${shiftId}`;
 
   return `closing:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function resolveClosingTotal(
+  inputValue: number | undefined,
+  existingValue: number | undefined,
+  computedValue: number
+) {
+  const computed = cleanMoney(computedValue);
+  const explicit =
+    inputValue === undefined || inputValue === null ? undefined : cleanMoney(inputValue);
+  const existing =
+    existingValue === undefined || existingValue === null
+      ? undefined
+      : cleanMoney(existingValue);
+
+  if (computed > 0 && (explicit === undefined || explicit === 0)) return computed;
+  if (explicit !== undefined) return explicit;
+  if (existing !== undefined) return existing;
+  return computed;
 }
 
 export function loadShiftClosings(status = ""): ShiftClosingRecord[] {
@@ -315,19 +349,27 @@ export function upsertShiftClosingRecord(input: UpsertShiftClosingInput) {
     status: nextStatus,
     shift_status:
       input.shiftStatus || existing?.shift_status || shiftStatusFromClosingSignal(input.status),
-    cash_expected: roundMoney(
-      input.cashExpected ?? existing?.cash_expected ?? computed.cashExpected
+    cash_expected: resolveClosingTotal(
+      input.cashExpected,
+      existing?.cash_expected,
+      computed.cashExpected
     ),
-    cash_counted: roundMoney(
-      input.cashCounted ?? existing?.cash_counted ?? computed.cashCounted
+    cash_counted: resolveClosingTotal(
+      input.cashCounted,
+      existing?.cash_counted,
+      computed.cashCounted
     ),
-    card_total: roundMoney(input.cardTotal ?? existing?.card_total ?? computed.cardTotal),
-    momo_total: roundMoney(input.momoTotal ?? existing?.momo_total ?? computed.momoTotal),
-    transfer_total: roundMoney(
-      input.transferTotal ?? existing?.transfer_total ?? computed.transferTotal
+    card_total: resolveClosingTotal(input.cardTotal, existing?.card_total, computed.cardTotal),
+    momo_total: resolveClosingTotal(input.momoTotal, existing?.momo_total, computed.momoTotal),
+    transfer_total: resolveClosingTotal(
+      input.transferTotal,
+      existing?.transfer_total,
+      computed.transferTotal
     ),
-    expenses_total: roundMoney(
-      input.expensesTotal ?? existing?.expenses_total ?? computed.expensesTotal
+    expenses_total: resolveClosingTotal(
+      input.expensesTotal,
+      existing?.expenses_total,
+      computed.expensesTotal
     ),
     notes: input.notes ?? existing?.notes ?? null,
     accounting_review_status: existing?.accounting_review_status ?? "pending",
@@ -373,16 +415,27 @@ export function reviewShiftClosing(input: ShiftClosingReviewInput): ShiftClosing
 
   const row = rows[index];
   const reviewStatus = input.reviewStatus ?? row.accounting_review_status ?? "pending";
+  const currentStatus = normalizeClosingStatus(row.status);
+  const isAccepted = reviewStatus === "approved" || reviewStatus === "reconciled";
+  const isReviewed =
+    reviewStatus === "reviewed" ||
+    reviewStatus === "approved" ||
+    reviewStatus === "rejected" ||
+    reviewStatus === "reconciled";
   const updated: ShiftClosingRecord = {
     ...row,
     status:
-      reviewStatus === "approved"
+      isAccepted
         ? "approved"
         : reviewStatus === "rejected"
         ? "rejected"
+        : reviewStatus === "reviewed"
+        ? currentStatus === "approved" || currentStatus === "rejected"
+          ? currentStatus
+          : "reviewed"
         : row.status,
     shift_status:
-      reviewStatus === "approved" || reviewStatus === "rejected"
+      isReviewed
         ? "reviewed"
         : row.shift_status,
     accounting_review_status: reviewStatus,

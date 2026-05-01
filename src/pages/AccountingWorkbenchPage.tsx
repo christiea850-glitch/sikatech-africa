@@ -37,7 +37,7 @@ type SourceType =
 type GroupBy = "department" | "paymentMethod" | "staff" | "date" | "source";
 type DetailTab = "overview" | "transaction" | "shift" | "review";
 type WorkbenchTab = "overview" | "unclosed" | "closings" | "records" | "review";
-type ClosingReviewAction = "approved" | "rejected";
+type ClosingReviewAction = "reviewed" | "approved" | "rejected" | "reconciled";
 type PaymentState = "unpaid" | "partial" | "paid";
 type UnclosedShiftPriority = "high" | "medium" | "low";
 type UnclosedShiftAction = "review" | "reconcile" | "close";
@@ -165,6 +165,63 @@ function shiftStatusFromClosing(status: string): ShiftTraceStatus {
   return "reviewed";
 }
 
+function closingPaymentBreakdown(closing: ShiftClosingRecord) {
+  const rows = [
+    {
+      label: "Cash",
+      expected: Number(closing.cash_expected) || 0,
+      counted: Number(closing.cash_counted) || 0,
+    },
+    {
+      label: "MoMo",
+      expected: Number(closing.momo_total) || 0,
+      counted: Number(closing.momo_total) || 0,
+    },
+    {
+      label: "Card",
+      expected: Number(closing.card_total) || 0,
+      counted: Number(closing.card_total) || 0,
+    },
+    {
+      label: "Transfer",
+      expected: Number(closing.transfer_total) || 0,
+      counted: Number(closing.transfer_total) || 0,
+    },
+  ];
+
+  return rows
+    .map((row) => ({
+      ...row,
+      difference: row.counted - row.expected,
+    }))
+    .filter((row) => row.expected > 0 || row.counted > 0);
+}
+
+function closingExpectedTotal(closing: ShiftClosingRecord) {
+  return closingPaymentBreakdown(closing).reduce((sum, row) => sum + row.expected, 0);
+}
+
+function closingCountedTotal(closing: ShiftClosingRecord) {
+  return closingPaymentBreakdown(closing).reduce((sum, row) => sum + row.counted, 0);
+}
+
+function closingDifference(closing: ShiftClosingRecord) {
+  return closingCountedTotal(closing) - closingExpectedTotal(closing);
+}
+
+function closingPaymentSummary(closing: ShiftClosingRecord) {
+  const methods = closingPaymentBreakdown(closing);
+  if (methods.length === 0) return "No collections";
+  return methods.map((method) => `${method.label} ${money(method.counted)}`).join(" | ");
+}
+
+function closingReviewBadgeStyle(status: string) {
+  if (status === "approved" || status === "reconciled") return styles.badgeGood;
+  if (status === "rejected") return styles.badgeDanger;
+  if (status === "reviewed") return styles.badgeWarn;
+  return styles.badgeMuted;
+}
+
 function downloadText(filename: string, content: string, type: string) {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -273,6 +330,7 @@ export default function AccountingWorkbenchPage() {
   const [closingNoteDrafts, setClosingNoteDrafts] = useState<Record<string, string>>({});
   const [statementGeneratedAt, setStatementGeneratedAt] = useState(() => new Date());
   const [selectedRecord, setSelectedRecord] = useState<AccountingRow | null>(null);
+  const [selectedClosing, setSelectedClosing] = useState<ShiftClosingRecord | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("overview");
   const [activeTab, setActiveTab] = useState<WorkbenchTab>("overview");
   const [hoveredRecordId, setHoveredRecordId] = useState<string | null>(null);
@@ -709,6 +767,13 @@ export default function AccountingWorkbenchPage() {
     return closingRecords.filter((closing) => ids.has(String(closing.id)));
   }, [closingRecords, filtered]);
 
+  useEffect(() => {
+    if (!selectedClosing) return;
+    if (!filteredClosingRecords.some((closing) => String(closing.id) === String(selectedClosing.id))) {
+      setSelectedClosing(null);
+    }
+  }, [filteredClosingRecords, selectedClosing]);
+
   function updateDateRange(patch: Partial<typeof dateRange>) {
     setDateRange((prev) => saveAccountingDateRange({ ...prev, ...patch }));
   }
@@ -750,7 +815,7 @@ export default function AccountingWorkbenchPage() {
       reviewedBy,
     });
 
-    if (action === "approved" && updated.shift_id) {
+    if (action && updated.shift_id) {
       recordShiftSubmission({
         shiftId: updated.shift_id,
         status: "reviewed",
@@ -761,6 +826,9 @@ export default function AccountingWorkbenchPage() {
       });
     }
 
+    setSelectedClosing((current) =>
+      current && String(current.id) === String(updated.id) ? updated : current
+    );
     setClosingVersion((v) => v + 1);
   }
 
@@ -841,6 +909,10 @@ export default function AccountingWorkbenchPage() {
     setDetailTab("overview");
   }
 
+  function openClosingDetails(closing: ShiftClosingRecord) {
+    setSelectedClosing(closing);
+  }
+
   function handleUnclosedShiftAction(alert: UnclosedShiftAlert, action: UnclosedShiftAction) {
     const status: ShiftTraceStatus = action === "close" ? "submitted" : "reviewed";
     if (alert.shiftId) {
@@ -869,6 +941,24 @@ export default function AccountingWorkbenchPage() {
   const departmentFilterLabel = department === "all" ? "All departments" : department;
   const generatedAtLabel = formatDateTime(statementGeneratedAt);
   const groupByLabel = groupBy === "paymentMethod" ? "Payment Method" : groupBy.charAt(0).toUpperCase() + groupBy.slice(1);
+  const selectedClosingNote = selectedClosing
+    ? closingNoteDrafts[String(selectedClosing.id)] ??
+      selectedClosing.accounting_note ??
+      selectedClosing.notes ??
+      ""
+    : "";
+  const selectedClosingPayments = selectedClosing
+    ? closingPaymentBreakdown(selectedClosing)
+    : [];
+  const selectedClosingExpected = selectedClosing
+    ? closingExpectedTotal(selectedClosing)
+    : 0;
+  const selectedClosingCounted = selectedClosing
+    ? closingCountedTotal(selectedClosing)
+    : 0;
+  const selectedClosingDifference = selectedClosing
+    ? closingDifference(selectedClosing)
+    : 0;
 
   if (!allowed) {
     return <div style={styles.notice}>Accounting Workbench is available to accounting, manager, admin, and auditor users only.</div>;
@@ -1023,11 +1113,10 @@ export default function AccountingWorkbenchPage() {
                   <Th>Submitted</Th>
                   <Th>Shift</Th>
                   <Th>Dept</Th>
-                  <Th>Cash Expected</Th>
-                  <Th>Cash Counted</Th>
-                  <Th>Card</Th>
-                  <Th>MoMo</Th>
-                  <Th>Transfer</Th>
+                  <Th>Payment Summary</Th>
+                  <Th>Expected Total</Th>
+                  <Th>Counted Total</Th>
+                  <Th>Difference</Th>
                   <Th>Expenses</Th>
                   <Th>Status</Th>
                   <Th>Accounting</Th>
@@ -1038,6 +1127,8 @@ export default function AccountingWorkbenchPage() {
               <tbody>
                 {filteredClosingRecords.map((closing) => {
                   const reviewStatus = closing.accounting_review_status || "pending";
+                  const rowId = `closing:${String(closing.id)}`;
+                  const difference = closingDifference(closing);
                   const noteValue =
                     closingNoteDrafts[String(closing.id)] ??
                     closing.accounting_note ??
@@ -1045,15 +1136,31 @@ export default function AccountingWorkbenchPage() {
                     "";
 
                   return (
-                    <tr key={String(closing.id)}>
+                    <tr
+                      key={String(closing.id)}
+                      style={{
+                        ...styles.clickableRow,
+                        ...(hoveredRecordId === rowId ? styles.clickableRowHover : {}),
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      onClick={() => openClosingDetails(closing)}
+                      onMouseEnter={() => setHoveredRecordId(rowId)}
+                      onMouseLeave={() => setHoveredRecordId(null)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openClosingDetails(closing);
+                        }
+                      }}
+                    >
                       <Td>{closing.submitted_at ? formatDateTime(new Date(closing.submitted_at)) : "-"}</Td>
                       <Td>{closing.shift_id ? String(closing.shift_id) : String(closing.id)}</Td>
                       <Td>{formatDepartmentLabel(closing.department_key || "front-desk")}</Td>
-                      <Td>{money(Number(closing.cash_expected) || 0)}</Td>
-                      <Td>{money(Number(closing.cash_counted) || 0)}</Td>
-                      <Td>{money(Number(closing.card_total) || 0)}</Td>
-                      <Td>{money(Number(closing.momo_total) || 0)}</Td>
-                      <Td>{money(Number(closing.transfer_total) || 0)}</Td>
+                      <Td>{closingPaymentSummary(closing)}</Td>
+                      <Td>{money(closingExpectedTotal(closing))}</Td>
+                      <Td>{money(closingCountedTotal(closing))}</Td>
+                      <Td>{money(difference)}</Td>
                       <Td>{money(Number(closing.expenses_total) || 0)}</Td>
                       <Td>
                         <span style={closing.status === "rejected" ? styles.badgeDanger : closing.status === "approved" ? styles.badgeGood : styles.badgeWarn}>
@@ -1061,7 +1168,7 @@ export default function AccountingWorkbenchPage() {
                         </span>
                       </Td>
                       <Td>
-                        <span style={reviewStatus === "approved" ? styles.badgeGood : reviewStatus === "rejected" ? styles.badgeDanger : styles.badgeMuted}>
+                        <span style={closingReviewBadgeStyle(reviewStatus)}>
                           {closingStatusLabel(reviewStatus)}
                         </span>
                         {closing.accounting_reviewed_at ? (
@@ -1080,16 +1187,24 @@ export default function AccountingWorkbenchPage() {
                               [String(closing.id)]: e.target.value,
                             }))
                           }
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => e.stopPropagation()}
                           placeholder="Accounting note"
                           disabled={!canEditReviewLayer}
                         />
                       </Td>
                       <Td>
                         {canEditReviewLayer ? (
-                          <div style={styles.rowActions}>
+                          <div
+                            style={styles.rowActions}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                          >
                             <button style={styles.smallBtn} onClick={() => updateClosingReview(closing)}>Save Note</button>
+                            <button style={styles.smallBtn} onClick={() => updateClosingReview(closing, "reviewed")}>Review</button>
                             <button style={styles.smallBtn} onClick={() => updateClosingReview(closing, "approved")}>Approve</button>
                             <button style={styles.warnBtn} onClick={() => updateClosingReview(closing, "rejected")}>Reject</button>
+                            <button style={styles.smallBtn} onClick={() => updateClosingReview(closing, "reconciled")}>Reconcile</button>
                           </div>
                         ) : (
                           <span style={styles.badgeMuted}>View only</span>
@@ -1199,6 +1314,109 @@ export default function AccountingWorkbenchPage() {
       </div>
       )}
       </div>
+
+      {selectedClosing && (
+        <div style={styles.drawerOverlay} onClick={() => setSelectedClosing(null)}>
+          <aside style={styles.drawer} onClick={(e) => e.stopPropagation()} aria-label="Cash desk closing details">
+            <div style={styles.drawerHeader}>
+              <div>
+                <h2 style={styles.detailTitle}>Cash Desk Closing Review</h2>
+                <div style={styles.detailSubtitle}>
+                  Shift {selectedClosing.shift_id ? String(selectedClosing.shift_id) : String(selectedClosing.id)}
+                </div>
+              </div>
+              <button style={styles.secondaryBtn} onClick={() => setSelectedClosing(null)}>Close</button>
+            </div>
+
+            <div style={styles.drawerBody}>
+              <div style={styles.detailGrid}>
+                <DetailItem label="Shift ID" value={selectedClosing.shift_id ? String(selectedClosing.shift_id) : "-"} />
+                <DetailItem label="Staff" value={selectedClosing.submitted_by_user_id ? String(selectedClosing.submitted_by_user_id) : "-"} />
+                <DetailItem label="Department" value={formatDepartmentLabel(selectedClosing.department_key || "front-desk")} />
+                <DetailItem label="Submitted Time" value={selectedClosing.submitted_at ? formatDateTime(new Date(selectedClosing.submitted_at)) : "-"} />
+                <DetailItem label="Closing Status" value={closingStatusLabel(selectedClosing.status)} />
+                <div style={styles.detailItem}>
+                  <div style={styles.detailLabel}>Accounting Status</div>
+                  <div style={styles.detailValue}>
+                    <span style={closingReviewBadgeStyle(selectedClosing.accounting_review_status || "pending")}>
+                      {closingStatusLabel(selectedClosing.accounting_review_status || "pending")}
+                    </span>
+                  </div>
+                </div>
+                <DetailItem label="Expected Total" value={money(selectedClosingExpected)} />
+                <DetailItem label="Counted Total" value={money(selectedClosingCounted)} />
+                <DetailItem label="Difference" value={money(selectedClosingDifference)} />
+                <DetailItem label="Expenses" value={money(Number(selectedClosing.expenses_total) || 0)} />
+                <DetailItem label="Submission Mode" value={selectedClosing.submission_mode || "-"} />
+                <DetailItem label="Reviewed By" value={selectedClosing.accounting_reviewed_by_user_id ? String(selectedClosing.accounting_reviewed_by_user_id) : "-"} />
+                <DetailItem label="Reviewed At" value={selectedClosing.accounting_reviewed_at ? formatDateTime(new Date(selectedClosing.accounting_reviewed_at)) : "-"} />
+              </div>
+
+              <div style={{ ...styles.panel, marginTop: 14 }}>
+                <h3 style={styles.sectionTitle}>Payment Breakdown</h3>
+                {selectedClosingPayments.length > 0 ? (
+                  <div style={styles.tableWrap}>
+                    <table style={styles.table}>
+                      <thead>
+                        <tr>
+                          <Th>Method</Th>
+                          <Th>Expected</Th>
+                          <Th>Counted</Th>
+                          <Th>Difference</Th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedClosingPayments.map((payment) => (
+                          <tr key={payment.label}>
+                            <Td>{payment.label}</Td>
+                            <Td>{money(payment.expected)}</Td>
+                            <Td>{money(payment.counted)}</Td>
+                            <Td>{money(payment.difference)}</Td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div style={styles.emptyState}>No payment methods were used on this closing.</div>
+                )}
+              </div>
+
+              <div style={{ ...styles.detailGrid, marginTop: 14 }}>
+                <label style={{ ...styles.field, ...styles.detailItemWide }}>
+                  <span style={styles.detailLabel}>Accounting Note</span>
+                  <input
+                    style={styles.noteInputFull}
+                    value={selectedClosingNote}
+                    onChange={(e) =>
+                      setClosingNoteDrafts((prev) => ({
+                        ...prev,
+                        [String(selectedClosing.id)]: e.target.value,
+                      }))
+                    }
+                    placeholder="Accounting note"
+                    disabled={!canEditReviewLayer}
+                  />
+                </label>
+                <DetailItem label="Original Notes" value={selectedClosing.notes || "-"} wide />
+                <div style={{ ...styles.rowActions, ...styles.detailItemWide }}>
+                  {canEditReviewLayer ? (
+                    <>
+                      <button style={styles.smallBtn} onClick={() => updateClosingReview(selectedClosing)}>Save Note</button>
+                      <button style={styles.smallBtn} onClick={() => updateClosingReview(selectedClosing, "reviewed")}>Review</button>
+                      <button style={styles.smallBtn} onClick={() => updateClosingReview(selectedClosing, "approved")}>Approve</button>
+                      <button style={styles.warnBtn} onClick={() => updateClosingReview(selectedClosing, "rejected")}>Reject</button>
+                      <button style={styles.smallBtn} onClick={() => updateClosingReview(selectedClosing, "reconciled")}>Mark Reconciled</button>
+                    </>
+                  ) : (
+                    <span style={styles.badgeMuted}>View only</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
 
       {selectedRecord && (
         <div style={styles.drawerOverlay} onClick={() => setSelectedRecord(null)}>

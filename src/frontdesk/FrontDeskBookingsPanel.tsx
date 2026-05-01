@@ -258,6 +258,8 @@ export default function FrontDeskBookingsPanel() {
       return;
     }
 
+    const submittedBy =
+      user?.employeeId || (user as any)?.username || (user as any)?.name || user?.role;
     const booking = createBooking({
       guestName: guestName.trim(),
       guestPhone: guestPhone.trim() || undefined,
@@ -274,8 +276,14 @@ export default function FrontDeskBookingsPanel() {
       roomStatus: normalizeRoomStatusForBookingStatus(bookingStatus, roomStatus),
       totalAmount,
       amountPaid,
+      initialPaymentMethod: "cash",
+      shiftId: activeShift?.id ? String(activeShift.id) : undefined,
+      shiftStatus: activeShift?.id ? "open" : "unclosed",
+      submittedAt: new Date().toISOString(),
+      submittedBy,
+      submissionMode: "manual",
       notes: notes.trim() || undefined,
-      createdBy: { employeeId: "frontdesk01", role: "staff" },
+      createdBy: { employeeId: String(submittedBy || "frontdesk01"), role: user?.role || "staff" },
     });
 
     setMsg(`Reservation created successfully: ${booking.bookingCode}`);
