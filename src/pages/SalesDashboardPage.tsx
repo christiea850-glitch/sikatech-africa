@@ -28,6 +28,12 @@ import {
   loadAccountingDateRange,
   saveAccountingDateRange,
 } from "../accounting/accountingDateRangeStorage";
+import {
+  FINANCIAL_LEDGER_CHANGED_EVENT,
+  loadLedgerEntries,
+  selectLedgerTotals,
+  type CanonicalLedgerEntry,
+} from "../finance/financialLedger";
 
 type Tx = any;
 type ExpenseRow = any;
@@ -286,6 +292,37 @@ function getSearchBlob(t: Tx) {
     .toLowerCase();
 }
 
+function getLedgerDepartmentValue(entry: CanonicalLedgerEntry) {
+  return normalizeDepartmentKey(entry.departmentKey || "unknown");
+}
+
+function getLedgerSearchBlob(entry: CanonicalLedgerEntry) {
+  return [
+    entry.id,
+    entry.sourceType,
+    entry.sourceId,
+    entry.departmentKey,
+    entry.shiftId,
+    entry.bookingId,
+    entry.bookingCode,
+    entry.roomNo,
+    entry.customerName,
+    entry.paymentMethod,
+    entry.status,
+    entry.createdBy?.employeeId,
+    entry.createdBy?.name,
+    entry.createdBy?.role,
+    entry.revenueAmount,
+    entry.collectionAmount,
+    entry.receivableAmount,
+    entry.expenseAmount,
+    getLedgerDepartmentValue(entry),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
 function getExpenseSearchBlob(e: ExpenseRow) {
   return [
     e?.id,
@@ -496,6 +533,7 @@ export default function SalesDashboardPage() {
   const [activeTab, setActiveTab] = useState<MainTab>("overview");
   const [bookingVersion, setBookingVersion] = useState(0);
   const [shiftTraceVersion, setShiftTraceVersion] = useState(0);
+  const [ledgerVersion, setLedgerVersion] = useState(0);
 
   useEffect(() => {
     const refreshBookings = () => setBookingVersion((v) => v + 1);
@@ -512,6 +550,18 @@ export default function SalesDashboardPage() {
       window.removeEventListener(SHIFT_CLOSINGS_CHANGED_EVENT, refreshShiftTrace);
     };
   }, []);
+
+  useEffect(() => {
+    const refreshLedger = () => setLedgerVersion((v) => v + 1);
+    window.addEventListener(FINANCIAL_LEDGER_CHANGED_EVENT, refreshLedger);
+    window.addEventListener("storage", refreshLedger);
+    return () => {
+      window.removeEventListener(FINANCIAL_LEDGER_CHANGED_EVENT, refreshLedger);
+      window.removeEventListener("storage", refreshLedger);
+    };
+  }, []);
+
+  const ledgerEntries = useMemo(() => loadLedgerEntries(), [ledgerVersion]);
 
   const rawTransactions = useMemo(() => {
     void bookingVersion;
@@ -625,7 +675,14 @@ export default function SalesDashboardPage() {
       label: formatDepartmentLabel(value),
     }));
 
-    const merged = [...fromConfig, ...txDepts, ...expenseDepts];
+    const ledgerDepts = Array.from(
+      new Set(ledgerEntries.map((entry) => getLedgerDepartmentValue(entry)).filter(Boolean))
+    ).map((value) => ({
+      value,
+      label: formatDepartmentLabel(value),
+    }));
+
+    const merged = [...fromConfig, ...txDepts, ...expenseDepts, ...ledgerDepts];
     const seen = new Set<string>();
 
     return merged.filter((item) => {
@@ -633,7 +690,7 @@ export default function SalesDashboardPage() {
       seen.add(item.value);
       return true;
     });
-  }, [departments, rawTransactions, expenseRecords]);
+  }, [departments, rawTransactions, expenseRecords, ledgerEntries]);
 
   const filteredTransactions = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -687,6 +744,32 @@ export default function SalesDashboardPage() {
       });
   }, [expenseRecords, dateRange, departmentFilter, selectedDeptRow, search]);
 
+  const filteredLedgerEntries = useMemo(() => {
+    const q = search.trim().toLowerCase();
+
+    return ledgerEntries
+      .filter((entry) =>
+        withinDateRange(entry.occurredAt, dateRange.startDate, dateRange.endDate)
+      )
+      .filter((entry) => {
+        if (departmentFilter === "all") return true;
+        return getLedgerDepartmentValue(entry) === departmentFilter;
+      })
+      .filter((entry) => {
+        if (!selectedDeptRow) return true;
+        return getLedgerDepartmentValue(entry) === selectedDeptRow;
+      })
+      .filter((entry) => {
+        if (!q) return true;
+        return getLedgerSearchBlob(entry).includes(q);
+      });
+  }, [ledgerEntries, dateRange, departmentFilter, selectedDeptRow, search]);
+
+  const ledgerTotals = useMemo(
+    () => selectLedgerTotals(filteredLedgerEntries),
+    [filteredLedgerEntries]
+  );
+
   const summary = useMemo(() => {
     let revenue = 0;
     let cash = 0;
@@ -707,23 +790,19 @@ export default function SalesDashboardPage() {
       else other += amount;
     }
 
-    const expenses = visibleExpenses.reduce(
-      (sum: number, e: ExpenseRow) => sum + (Number(e?.amount) || 0),
-      0
-    );
-
-    const netProfit = revenue - expenses;
     const revenueTransactionCount = filteredTransactions.filter(
       (t: Tx) => getRevenueAmount(t) > 0
     ).length;
     const averageSale = revenueTransactionCount > 0 ? revenue / revenueTransactionCount : 0;
     const collections = cash + momo + card + transfer + other;
+    const ledgerNetProfit = ledgerTotals.revenue - ledgerTotals.expenses;
 
     return {
-      revenue,
-      collections,
-      expenses,
-      netProfit,
+      revenue: ledgerTotals.revenue,
+      collections: ledgerTotals.collections,
+      receivables: ledgerTotals.receivables,
+      expenses: ledgerTotals.expenses,
+      netProfit: ledgerNetProfit,
       averageSale,
       transactions: filteredTransactions.length,
       cash,
@@ -731,8 +810,9 @@ export default function SalesDashboardPage() {
       card,
       transfer,
       other,
+      legacyCollections: collections,
     };
-  }, [filteredTransactions, visibleExpenses]);
+  }, [filteredTransactions, ledgerTotals]);
 
   const departmentPerformance = useMemo(() => {
     const map = new Map<
@@ -842,7 +922,7 @@ export default function SalesDashboardPage() {
   }, [visibleExpenses]);
 
   const paymentMix = useMemo(() => {
-    const total = summary.collections || 1;
+    const total = summary.legacyCollections || 1;
 
     return [
       { label: "Cash", value: summary.cash, percent: (summary.cash / total) * 100 },
@@ -1307,6 +1387,7 @@ export default function SalesDashboardPage() {
       kpis: {
         revenue: summary.revenue,
         collections: summary.collections,
+        receivables: summary.receivables,
         expenses: summary.expenses,
         netProfit: summary.netProfit,
         transactions: summary.transactions,
@@ -1414,6 +1495,7 @@ export default function SalesDashboardPage() {
     lines.push("KEY METRICS");
     lines.push(`Revenue: ${money(exportSummary.kpis.revenue)}`);
     lines.push(`Collections: ${money(exportSummary.kpis.collections)}`);
+    lines.push(`Receivables: ${money(exportSummary.kpis.receivables)}`);
     lines.push(`Expenses: ${money(exportSummary.kpis.expenses)}`);
     lines.push(`Net Profit: ${money(exportSummary.kpis.netProfit)}`);
     lines.push(`Transactions: ${exportSummary.kpis.transactions}`);
@@ -1641,6 +1723,14 @@ export default function SalesDashboardPage() {
             <span style={styles.printSummaryValue}>{money(summary.revenue)}</span>
           </div>
           <div style={styles.printSummaryItem}>
+            <span style={styles.printSummaryLabel}>Collections</span>
+            <span style={styles.printSummaryValue}>{money(summary.collections)}</span>
+          </div>
+          <div style={styles.printSummaryItem}>
+            <span style={styles.printSummaryLabel}>Receivables</span>
+            <span style={styles.printSummaryValue}>{money(summary.receivables)}</span>
+          </div>
+          <div style={styles.printSummaryItem}>
             <span style={styles.printSummaryLabel}>Expenses</span>
             <span style={styles.printSummaryValue}>{money(summary.expenses)}</span>
           </div>
@@ -1671,6 +1761,18 @@ export default function SalesDashboardPage() {
           value={money(summary.revenue)}
           note="All visible departments"
           accent="#D1A84B"
+        />
+        <MetricCard
+          title="Collections"
+          value={money(summary.collections)}
+          note="Ledger collections"
+          accent="#2563EB"
+        />
+        <MetricCard
+          title="Receivables"
+          value={money(summary.receivables)}
+          note="Ledger receivables"
+          accent="#F59E0B"
         />
         <MetricCard
           title="Expenses"
