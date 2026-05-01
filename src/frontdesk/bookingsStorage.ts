@@ -1,3 +1,10 @@
+import {
+  createLedgerEntry,
+  roundLedgerMoney,
+  upsertLedgerEntries,
+  type CanonicalLedgerEntry,
+} from "../finance/financialLedger";
+
 export type BookingStatus =
   | "reserved"
   | "checked_in"
@@ -119,6 +126,158 @@ export function money(n: number) {
   return Number.isFinite(n) ? n.toFixed(2) : "0.00";
 }
 
+function toIso(value: number | string | undefined | null) {
+  if (!value) return new Date().toISOString();
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
+
+function derivePaymentStatusFromAmounts(totalAmount: number, amountPaid: number): PaymentStatus {
+  const total = roundMoney(Math.max(0, safeNumber(totalAmount, 0)));
+  const paid = roundMoney(clamp(safeNumber(amountPaid, 0), 0, total));
+  const balance = roundMoney(Math.max(0, total - paid));
+
+  if (total <= 0) return "unpaid";
+  if (balance <= 0.01) return "paid";
+  return paid > 0 ? "partial" : "unpaid";
+}
+
+function folioChargeTotal(booking: Pick<BookingRecord, "folioActivity">) {
+  return roundMoney(
+    (booking.folioActivity || [])
+      .filter((activity) => activity.type === "charge")
+      .reduce((sum, activity) => sum + safeNumber(activity.amount, 0), 0)
+  );
+}
+
+function roomBookingRevenueAmount(booking: BookingRecord) {
+  return roundMoney(Math.max(0, safeNumber(booking.totalAmount, 0) - folioChargeTotal(booking)));
+}
+
+function bookingCreatedBy(booking: BookingRecord): CanonicalLedgerEntry["createdBy"] {
+  return booking.createdBy
+    ? {
+        employeeId: booking.createdBy.employeeId,
+        role: booking.createdBy.role,
+      }
+    : undefined;
+}
+
+function bookingRevenueLedgerEntry(booking: BookingRecord) {
+  const revenueAmount = roomBookingRevenueAmount(booking);
+  if (revenueAmount <= 0) return null;
+
+  return createLedgerEntry({
+    id: `room_booking_revenue:${booking.id}`,
+    occurredAt: toIso(booking.createdAt || booking.updatedAt),
+    departmentKey: "front-desk",
+    sourceType: "room_booking_revenue",
+    sourceId: booking.id,
+    bookingId: booking.id,
+    bookingCode: booking.bookingCode,
+    roomNo: booking.roomNo,
+    customerName: booking.guestName,
+    paymentMethod: "room_booking",
+    revenueAmount,
+    collectionAmount: 0,
+    receivableAmount: revenueAmount,
+    expenseAmount: 0,
+    status: "posted",
+    createdBy: bookingCreatedBy(booking),
+  });
+}
+
+function bookingPaymentLedgerEntry(
+  booking: BookingRecord,
+  activity: BookingFolioActivity
+) {
+  const amount = roundLedgerMoney(Math.max(0, safeNumber(activity.amount, 0)));
+  if (amount <= 0) return null;
+
+  return createLedgerEntry({
+    id: `guest_payment_collection:${booking.id}:${activity.id}`,
+    occurredAt: toIso(activity.createdAt || booking.updatedAt || booking.createdAt),
+    departmentKey: "front-desk",
+    shiftId: activity.shiftId,
+    sourceType: "guest_payment_collection",
+    sourceId: activity.id,
+    bookingId: activity.bookingId || booking.id,
+    bookingCode: activity.bookingCode || booking.bookingCode,
+    roomNo: activity.roomNo || booking.roomNo,
+    customerName: activity.customerName || booking.guestName,
+    paymentMethod: activity.paymentMethod || "cash",
+    revenueAmount: 0,
+    collectionAmount: amount,
+    receivableAmount: -amount,
+    expenseAmount: 0,
+    status: "posted",
+    createdBy: {
+      employeeId: activity.submittedBy,
+      role: booking.createdBy?.role,
+    },
+  });
+}
+
+function legacyBookingPaymentLedgerEntry(booking: BookingRecord, amount: number) {
+  const paid = roundLedgerMoney(Math.max(0, amount));
+  if (paid <= 0) return null;
+
+  return createLedgerEntry({
+    id: `guest_payment_collection:${booking.id}:legacy_amount_paid`,
+    occurredAt: toIso(booking.createdAt || booking.updatedAt),
+    departmentKey: "front-desk",
+    sourceType: "guest_payment_collection",
+    sourceId: `${booking.id}:legacy_amount_paid`,
+    bookingId: booking.id,
+    bookingCode: booking.bookingCode,
+    roomNo: booking.roomNo,
+    customerName: booking.guestName,
+    paymentMethod: "cash",
+    revenueAmount: 0,
+    collectionAmount: paid,
+    receivableAmount: -paid,
+    expenseAmount: 0,
+    status: "posted",
+    createdBy: bookingCreatedBy(booking),
+  });
+}
+
+function ledgerEntriesForBooking(booking: BookingRecord) {
+  const entries: CanonicalLedgerEntry[] = [];
+  const revenueEntry = bookingRevenueLedgerEntry(booking);
+  if (revenueEntry) entries.push(revenueEntry);
+
+  const paymentActivities = (booking.folioActivity || []).filter(
+    (activity) => activity.type === "payment"
+  );
+  const paymentActivityTotal = roundMoney(
+    paymentActivities.reduce((sum, activity) => sum + safeNumber(activity.amount, 0), 0)
+  );
+
+  paymentActivities.forEach((activity) => {
+    const entry = bookingPaymentLedgerEntry(booking, activity);
+    if (entry) entries.push(entry);
+  });
+
+  const missingPaidAmount = roundMoney(
+    Math.max(0, safeNumber(booking.amountPaid, 0) - paymentActivityTotal)
+  );
+  const legacyEntry = legacyBookingPaymentLedgerEntry(booking, missingPaidAmount);
+  if (legacyEntry) entries.push(legacyEntry);
+
+  return entries;
+}
+
+function syncBookingLedgerEntries(booking: BookingRecord) {
+  upsertLedgerEntries(ledgerEntriesForBooking(booking));
+}
+
+export function migrateBookingsToLedger(bookings: BookingRecord[] = loadBookings()) {
+  const entries = bookings.flatMap((booking) => ledgerEntriesForBooking(booking));
+  upsertLedgerEntries(entries);
+  return entries.length;
+}
+
 export function loadBookings(): BookingRecord[] {
   try {
     const raw = localStorage.getItem(BOOKINGS_KEY);
@@ -143,7 +302,9 @@ export function saveBookings(list: BookingRecord[]) {
 }
 
 export function getAllBookings() {
-  return loadBookings().sort((a, b) => b.createdAt - a.createdAt);
+  const bookings = loadBookings().sort((a, b) => b.createdAt - a.createdAt);
+  migrateBookingsToLedger(bookings);
+  return bookings;
 }
 
 export function createBooking(input: {
@@ -227,8 +388,7 @@ export function createBooking(input: {
 
     bookingSource: input.bookingSource || "walk_in",
     bookingStatus: input.bookingStatus || "reserved",
-    paymentStatus:
-      input.paymentStatus || (balance <= 0 ? "paid" : amountPaid > 0 ? "partial" : "unpaid"),
+    paymentStatus: derivePaymentStatusFromAmounts(totalAmount, amountPaid),
     roomStatus: normalizeRoomStatusForBookingStatus(
       input.bookingStatus || "reserved",
       input.roomStatus
@@ -249,6 +409,7 @@ export function createBooking(input: {
   const list = getAllBookings();
   const next = [booking, ...list];
   saveBookings(next);
+  syncBookingLedgerEntries(booking);
   return booking;
 }
 
@@ -264,17 +425,15 @@ export function updateBooking(id: string, patch: Partial<BookingRecord>) {
     };
 
     const totalAmount = Math.max(0, safeNumber(merged.totalAmount, 0));
-    const amountPaid = clamp(safeNumber(merged.amountPaid, 0), 0, totalAmount);
-    const balance = Math.max(0, totalAmount - amountPaid);
+    const amountPaid = roundMoney(clamp(safeNumber(merged.amountPaid, 0), 0, totalAmount));
+    const balance = roundMoney(Math.max(0, totalAmount - amountPaid));
 
     merged.totalAmount = totalAmount;
     merged.amountPaid = amountPaid;
     merged.balance = balance;
     merged.nights = computeNights(merged.checkInDate, merged.checkOutDate);
 
-    if (!patch.paymentStatus) {
-      merged.paymentStatus = balance <= 0 ? "paid" : amountPaid > 0 ? "partial" : "unpaid";
-    }
+    merged.paymentStatus = derivePaymentStatusFromAmounts(totalAmount, amountPaid);
 
     if (patch.bookingStatus) {
       merged.roomStatus = normalizeRoomStatusForBookingStatus(
@@ -286,8 +445,10 @@ export function updateBooking(id: string, patch: Partial<BookingRecord>) {
     return merged;
   });
 
+  const saved = next.find((x) => x.id === id) || null;
   saveBookings(next);
-  return next.find((x) => x.id === id) || null;
+  if (saved) syncBookingLedgerEntries(saved);
+  return saved;
 }
 
 export function deleteBooking(id: string) {
@@ -486,6 +647,7 @@ export function postRoomChargeToBooking(
   });
 
   saveBookings(next);
+  if (updated) syncBookingLedgerEntries(updated);
   return updated;
 }
 
@@ -572,7 +734,7 @@ export function recordPaymentToBooking(
       ...item,
       amountPaid,
       balance,
-      paymentStatus: balance <= 0.01 ? "paid" : "partial",
+      paymentStatus: derivePaymentStatusFromAmounts(totalAmount, amountPaid),
       folioActivity: [activity, ...(item.folioActivity || [])],
       updatedAt: Date.now(),
     };
@@ -590,6 +752,7 @@ export function recordPaymentToBooking(
   }
 
   saveBookings(next);
+  syncBookingLedgerEntries(savedBooking);
   return savedBooking;
 }
 

@@ -59,6 +59,9 @@ export type CanonicalLedgerEntry = {
   createdBy?: LedgerActor;
 };
 
+const LEDGER_STORAGE_KEY = "sikatech_financial_ledger_v1";
+export const FINANCIAL_LEDGER_CHANGED_EVENT = "sikatech_financial_ledger_changed";
+
 export type LedgerAmountTotals = {
   revenue: number;
   collections: number;
@@ -83,6 +86,56 @@ export type LedgerShiftTotals = Record<
 
 export function roundLedgerMoney(value: number) {
   return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
+}
+
+function readLedgerArray(): CanonicalLedgerEntry[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(LEDGER_STORAGE_KEY) || "[]");
+    return Array.isArray(parsed) ? (parsed as CanonicalLedgerEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLedgerArray(entries: CanonicalLedgerEntry[]) {
+  localStorage.setItem(LEDGER_STORAGE_KEY, JSON.stringify(entries));
+  try {
+    window.dispatchEvent(new CustomEvent(FINANCIAL_LEDGER_CHANGED_EVENT));
+  } catch {
+    // Ledger storage should stay safe in non-browser test contexts.
+  }
+}
+
+export function loadLedgerEntries(): CanonicalLedgerEntry[] {
+  return readLedgerArray().sort(
+    (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+  );
+}
+
+export function saveLedgerEntries(entries: CanonicalLedgerEntry[]) {
+  writeLedgerArray(entries);
+}
+
+export function upsertLedgerEntries(entries: CanonicalLedgerEntry[]) {
+  if (entries.length === 0) return loadLedgerEntries();
+
+  const current = loadLedgerEntries();
+  const byId = new Map(current.map((entry) => [entry.id, entry]));
+
+  entries.forEach((entry) => {
+    byId.set(entry.id, createLedgerEntry(entry));
+  });
+
+  const next = Array.from(byId.values()).sort(
+    (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+  );
+  if (JSON.stringify(next) === JSON.stringify(current)) return current;
+  saveLedgerEntries(next);
+  return next;
+}
+
+export function getLedgerEntryById(id: string) {
+  return loadLedgerEntries().find((entry) => entry.id === id) || null;
 }
 
 export function normalizeLedgerPaymentMethod(
