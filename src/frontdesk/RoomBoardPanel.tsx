@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import {
   FINANCIAL_LEDGER_CHANGED_EVENT,
   loadLedgerEntries,
   type CanonicalLedgerEntry,
 } from "../finance/financialLedger";
-import { generateFrontDeskInsights } from "../finance/frontDeskInsights";
+import {
+  generateFrontDeskInsights,
+  type FrontDeskInsightAlert,
+} from "../finance/frontDeskInsights";
 import {
   BOOKINGS_CHANGED_EVENT,
   getAllBookings,
@@ -191,6 +194,7 @@ function buildRoomBoard(bookings: BookingRecord[]): RoomCard[] {
 }
 
 export default function RoomBoardPanel() {
+  const detailRef = useRef<HTMLDivElement | null>(null);
   const [version, setVersion] = useState(0);
   const [ledgerVersion, setLedgerVersion] = useState(0);
   const [selectedRoomNo, setSelectedRoomNo] = useState<string | null>(null);
@@ -310,6 +314,48 @@ export default function RoomBoardPanel() {
   function refreshBoard(message?: string) {
     setVersion((v) => v + 1);
     if (message) setMsg(message);
+  }
+
+  function focusRoomDetail() {
+    window.setTimeout(() => {
+      detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      detailRef.current?.focus();
+    }, 0);
+  }
+
+  function selectAlertRoom(alert: FrontDeskInsightAlert) {
+    const booking = alert.bookingId
+      ? bookings.find((item) => item.id === alert.bookingId)
+      : null;
+    const roomNo = String(alert.roomNo || booking?.roomNo || "").trim();
+
+    if (!roomNo || !rooms.some((room) => room.roomNo === roomNo)) {
+      setMsg("Booking record not found in current room board.");
+      return false;
+    }
+
+    setFilter("all");
+    setSelectedRoomNo(roomNo);
+    setMsg(null);
+    return true;
+  }
+
+  function handleInsightAction(
+    alert: FrontDeskInsightAlert,
+    action: "collect" | "booking" | "room"
+  ) {
+    const selected = selectAlertRoom(alert);
+    if (!selected) return;
+
+    if (action === "collect") {
+      setMsg("Room selected. Use the existing booking/payment controls to collect payment.");
+      focusRoomDetail();
+      return;
+    }
+
+    if (action === "booking") {
+      focusRoomDetail();
+    }
   }
 
   function handleStatusOnly(status: RoomStatus) {
@@ -499,7 +545,32 @@ export default function RoomBoardPanel() {
           <div style={styles.alertList}>
             {frontDeskInsights.alerts.slice(0, 5).map((alert) => (
               <div key={alert.id} style={styles.alertItem}>
-                {alert.message}
+                <div>{alert.message}</div>
+                {alert.type === "unpaid_booking_balance" ? (
+                  <div style={styles.alertActionRow}>
+                    <button
+                      type="button"
+                      style={styles.alertActionBtn}
+                      onClick={() => handleInsightAction(alert, "collect")}
+                    >
+                      Collect Payment
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.alertActionBtn}
+                      onClick={() => handleInsightAction(alert, "booking")}
+                    >
+                      View Booking
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.alertActionBtn}
+                      onClick={() => handleInsightAction(alert, "room")}
+                    >
+                      View Room
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
@@ -555,7 +626,7 @@ export default function RoomBoardPanel() {
           )}
         </div>
 
-        <div style={styles.detailCard}>
+        <div ref={detailRef} tabIndex={-1} style={styles.detailCard}>
           <div style={styles.sectionTitle}>Room Detail</div>
 
           {!selectedRoom ? (
@@ -763,6 +834,22 @@ const styles: Record<string, CSSProperties> = {
     border: "1px solid rgba(245,158,11,0.22)",
     color: "#78350f",
     fontWeight: 800,
+  },
+  alertActionRow: {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+    marginTop: 10,
+  },
+  alertActionBtn: {
+    border: "1px solid rgba(120,53,15,0.22)",
+    background: "#ffffff",
+    color: "#78350f",
+    borderRadius: 8,
+    padding: "7px 10px",
+    fontSize: 12,
+    fontWeight: 900,
+    cursor: "pointer",
   },
   filterRow: {
     display: "flex",

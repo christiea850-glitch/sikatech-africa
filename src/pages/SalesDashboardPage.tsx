@@ -1584,9 +1584,9 @@ export default function SalesDashboardPage() {
                       </span>
                     </div>
                     <div style={styles.alertMessage}>{action.description}</div>
-                    {action.department ? (
+                    {action.departmentKey ? (
                       <div style={styles.alertAction}>
-                        Department: {getDepartmentLabel(action.department, departmentOptions)}
+                        Department: {getDepartmentLabel(action.departmentKey, departmentOptions)}
                       </div>
                     ) : null}
                   </div>
