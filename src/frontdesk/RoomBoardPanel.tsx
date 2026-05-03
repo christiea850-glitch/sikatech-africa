@@ -195,6 +195,7 @@ function buildRoomBoard(bookings: BookingRecord[]): RoomCard[] {
 
 export default function RoomBoardPanel() {
   const detailRef = useRef<HTMLDivElement | null>(null);
+  const roomBoardRef = useRef<HTMLDivElement | null>(null);
   const [version, setVersion] = useState(0);
   const [ledgerVersion, setLedgerVersion] = useState(0);
   const [selectedRoomNo, setSelectedRoomNo] = useState<string | null>(null);
@@ -321,6 +322,18 @@ export default function RoomBoardPanel() {
       detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       detailRef.current?.focus();
     }, 0);
+  }
+
+  function focusRoomBoard() {
+    window.setTimeout(() => {
+      roomBoardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      roomBoardRef.current?.focus();
+    }, 0);
+  }
+
+  function handleFilterClick(nextFilter: "all" | RoomBoardStatus) {
+    setFilter(nextFilter);
+    focusRoomBoard();
   }
 
   function selectAlertRoom(alert: FrontDeskInsightAlert) {
@@ -472,42 +485,42 @@ export default function RoomBoardPanel() {
         <button
           type="button"
           style={filter === "all" ? styles.filterBtnActive : styles.filterBtn}
-          onClick={() => setFilter("all")}
+          onClick={() => handleFilterClick("all")}
         >
           All Rooms
         </button>
         <button
           type="button"
           style={filter === "available" ? styles.filterBtnActive : styles.filterBtn}
-          onClick={() => setFilter("available")}
+          onClick={() => handleFilterClick("available")}
         >
           Available
         </button>
         <button
           type="button"
           style={filter === "occupied" ? styles.filterBtnActive : styles.filterBtn}
-          onClick={() => setFilter("occupied")}
+          onClick={() => handleFilterClick("occupied")}
         >
           Occupied
         </button>
         <button
           type="button"
           style={filter === "reserved" ? styles.filterBtnActive : styles.filterBtn}
-          onClick={() => setFilter("reserved")}
+          onClick={() => handleFilterClick("reserved")}
         >
           Reserved
         </button>
         <button
           type="button"
           style={filter === "dirty" ? styles.filterBtnActive : styles.filterBtn}
-          onClick={() => setFilter("dirty")}
+          onClick={() => handleFilterClick("dirty")}
         >
           Dirty
         </button>
         <button
           type="button"
           style={filter === "out_of_service" ? styles.filterBtnActive : styles.filterBtn}
-          onClick={() => setFilter("out_of_service")}
+          onClick={() => handleFilterClick("out_of_service")}
         >
           Out of Service
         </button>
@@ -580,7 +593,7 @@ export default function RoomBoardPanel() {
       </div>
 
       <div style={styles.layout}>
-        <div style={styles.boardCard}>
+        <div ref={roomBoardRef} tabIndex={-1} style={styles.boardCard}>
           <div style={styles.sectionTitle}>Room Board</div>
 
           {filteredRooms.length === 0 ? (
