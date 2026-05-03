@@ -19,7 +19,7 @@ import { useDepartments } from "../departments/DepartmentsContext";
 import FocusedViewPanel from "../components/FocusedViewPanel";
 import {
   handleOpenFocusedView,
-  restoreFocusedViewScroll,
+  handleCloseFocusedView,
 } from "../components/focusedNavigation";
 import { normalizeDepartmentKey } from "../lib/departments";
 import { formatShiftStatus } from "../lib/shiftTrace";
@@ -476,9 +476,8 @@ export default function SalesDashboardPage() {
   }
 
   function closeDashboardFocusedView() {
-    setFocusedDashboardView(null);
-    restoreFocusedViewScroll(previousScrollRef.current);
-  }
+  handleCloseFocusedView(setFocusedDashboardView);
+}
 
   const ledgerEntries = useMemo(() => loadLedgerEntries(), [ledgerVersion]);
 
