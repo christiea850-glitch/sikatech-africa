@@ -7,6 +7,10 @@ import {
 } from "../finance/financialLedger";
 import FocusedViewPanel from "../components/FocusedViewPanel";
 import {
+  handleOpenFocusedView,
+  restoreFocusedViewScroll,
+} from "../components/focusedNavigation";
+import {
   generateFrontDeskInsights,
   generateFrontDeskRecommendedActions,
   type FrontDeskInsightAlert,
@@ -216,6 +220,7 @@ function buildRoomBoard(bookings: BookingRecord[]): RoomCard[] {
 export default function RoomBoardPanel() {
   const overviewRef = useRef<HTMLDivElement | null>(null);
   const focusedPanelRef = useRef<HTMLDivElement | null>(null);
+  const previousScrollRef = useRef(0);
   const detailRef = useRef<HTMLDivElement | null>(null);
   const roomBoardRef = useRef<HTMLDivElement | null>(null);
   const [version, setVersion] = useState(0);
@@ -354,13 +359,6 @@ export default function RoomBoardPanel() {
     }, 0);
   }
 
-  function focusFrontDeskOverview() {
-    window.setTimeout(() => {
-      overviewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      overviewRef.current?.focus();
-    }, 0);
-  }
-
   useEffect(() => {
     if (!focusedFrontDeskView) return;
 
@@ -392,7 +390,7 @@ export default function RoomBoardPanel() {
     setActiveRoomBoardView(null);
     setFilter("all");
     if (rooms.length > 0) setSelectedRoomNo(rooms[0].roomNo);
-    focusFrontDeskOverview();
+    restoreFocusedViewScroll(previousScrollRef.current);
   }
 
   function selectRoomContext(input: { bookingId?: string; roomNo?: string }) {
@@ -420,7 +418,8 @@ export default function RoomBoardPanel() {
     const context = selectRoomContext(input);
     if (!context) return;
 
-    setFocusedFrontDeskView({
+    previousScrollRef.current = window.scrollY;
+    handleOpenFocusedView(setFocusedFrontDeskView, {
       type: view,
       roomNo: context.roomNo,
       bookingId: input.bookingId || context.booking?.id,
@@ -476,7 +475,8 @@ export default function RoomBoardPanel() {
     if (!room) return;
 
     if (command === "view_room") {
-      setFocusedFrontDeskView({
+      previousScrollRef.current = window.scrollY;
+      handleOpenFocusedView(setFocusedFrontDeskView, {
         type: "room",
         roomNo: room.roomNo,
         bookingId: action.bookingId,
@@ -488,7 +488,8 @@ export default function RoomBoardPanel() {
       if (command === "collect_payment") {
         setMsg("Room selected. Use the existing booking/payment controls to collect payment.");
       }
-      setFocusedFrontDeskView({
+      previousScrollRef.current = window.scrollY;
+      handleOpenFocusedView(setFocusedFrontDeskView, {
         type: command === "collect_payment" ? "payment" : "booking",
         roomNo: room.roomNo,
         bookingId: action.bookingId,
@@ -668,6 +669,8 @@ export default function RoomBoardPanel() {
         </div>
       ) : null}
 
+      {!focusedFrontDeskView ? (
+        <>
       {!activeRoomBoardView ? (
         <>
           <div style={styles.topStats}>
@@ -741,15 +744,33 @@ export default function RoomBoardPanel() {
           <div style={styles.insightsCard}>
             <div style={styles.sectionTitle}>Front Desk Insights</div>
             <div style={styles.insightGrid}>
-              <div style={styles.insightItem}>
+              <div
+                style={{ ...styles.insightItem, ...styles.clickableAlertItem }}
+                onClick={() => {
+                  const first = frontDeskInsights.unpaidBookings[0];
+                  if (first) openFocusedFrontDeskView("booking", first);
+                }}
+              >
                 <div style={styles.statLabel}>Unpaid bookings</div>
                 <div style={styles.statValue}>{frontDeskInsights.unpaidBookings.length}</div>
               </div>
-              <div style={styles.insightItem}>
+              <div
+                style={{ ...styles.insightItem, ...styles.clickableAlertItem }}
+                onClick={() => {
+                  const first = frontDeskInsights.unpaidBookings[0];
+                  if (first) openFocusedFrontDeskView("payment", first);
+                }}
+              >
                 <div style={styles.statLabel}>Total unpaid balance</div>
                 <div style={styles.statValue}>{money(totalUnpaidBalance)}</div>
               </div>
-              <div style={styles.insightItem}>
+              <div
+                style={{ ...styles.insightItem, ...styles.clickableAlertItem }}
+                onClick={() => {
+                  const topRoom = frontDeskInsights.topRooms[0];
+                  if (topRoom) openFocusedFrontDeskView("room", { roomNo: topRoom.roomNo });
+                }}
+              >
                 <div style={styles.statLabel}>Top revenue room</div>
                 <div style={styles.statValue}>
                   {frontDeskInsights.topRooms[0]?.roomNo || "-"}
@@ -760,7 +781,13 @@ export default function RoomBoardPanel() {
                     : "No room revenue"}
                 </div>
               </div>
-              <div style={styles.insightItem}>
+              <div
+                style={{ ...styles.insightItem, ...styles.clickableAlertItem }}
+                onClick={() => {
+                  const first = frontDeskInsights.partialPayments[0];
+                  if (first) openFocusedFrontDeskView("payment", first);
+                }}
+              >
                 <div style={styles.statLabel}>Partial payments</div>
                 <div style={styles.statValue}>{frontDeskInsights.partialPayments.length}</div>
               </div>
@@ -1103,6 +1130,8 @@ export default function RoomBoardPanel() {
           )}
         </div>
       </div>
+        </>
+      ) : null}
     </div>
   );
 }

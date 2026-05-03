@@ -1,7 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { useShift } from "../shifts/ShiftContext";
+import FocusedViewPanel from "../components/FocusedViewPanel";
+import {
+  handleOpenFocusedView,
+  restoreFocusedViewScroll,
+} from "../components/focusedNavigation";
 import {
   bookingStatusColor,
   BOOKINGS_CHANGED_EVENT,
@@ -102,6 +107,7 @@ function FormSection({
 export default function FrontDeskBookingsPanel() {
   const { user } = useAuth();
   const { activeShift } = useShift() as any;
+  const previousScrollRef = useRef(0);
   const [version, setVersion] = useState(0);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -205,6 +211,9 @@ export default function FrontDeskBookingsPanel() {
       balance: Math.max(0, total - paid),
     };
   }, [selectedBooking]);
+  function isBookingOverviewMode() {
+    return selectedBookingId === null;
+  }
 
   useEffect(() => {
     const refreshBookings = () => setVersion((v) => v + 1);
@@ -221,6 +230,17 @@ export default function FrontDeskBookingsPanel() {
   function selectBooking(id: string | null) {
     resetFolioPaymentForm();
     setSelectedBookingId(id);
+  }
+
+  function openBookingFocusedView(id: string) {
+    previousScrollRef.current = window.scrollY;
+    resetFolioPaymentForm();
+    handleOpenFocusedView(setSelectedBookingId, id);
+  }
+
+  function closeBookingFocusedView() {
+    selectBooking(null);
+    restoreFocusedViewScroll(previousScrollRef.current);
   }
 
   function resetForm() {
@@ -355,6 +375,164 @@ export default function FrontDeskBookingsPanel() {
     <div style={styles.wrap}>
       {msg ? <div style={styles.message}>{msg}</div> : null}
 
+      {selectedBooking ? (
+        <FocusedViewPanel
+          title={selectedBooking.guestName}
+          subtitle={`Room ${selectedBooking.roomNo} - ${selectedBooking.bookingCode}`}
+          onBack={closeBookingFocusedView}
+        >
+          <div style={styles.detailGrid}>
+            <div style={styles.detailItem}>
+              <span style={styles.detailLabel}>Check-In</span>
+              <b>{formatDate(selectedBooking.checkInDate)}</b>
+            </div>
+            <div style={styles.detailItem}>
+              <span style={styles.detailLabel}>Check-Out</span>
+              <b>{formatDate(selectedBooking.checkOutDate)}</b>
+            </div>
+            <div style={styles.detailItem}>
+              <span style={styles.detailLabel}>Booking Status</span>
+              <b>{selectedBooking.bookingStatus}</b>
+            </div>
+            <div style={styles.detailItem}>
+              <span style={styles.detailLabel}>Payment Status</span>
+              <b>{selectedBooking.paymentStatus}</b>
+            </div>
+            <div style={styles.detailItem}>
+              <span style={styles.detailLabel}>Total Amount</span>
+              <b>{money(selectedAmounts.totalAmount)}</b>
+            </div>
+            <div style={styles.detailItem}>
+              <span style={styles.detailLabel}>Amount Paid</span>
+              <b>{money(selectedAmounts.amountPaid)}</b>
+            </div>
+            <div style={styles.detailItem}>
+              <span style={styles.detailLabel}>Unpaid Balance</span>
+              <b>{money(selectedAmounts.balance)}</b>
+            </div>
+          </div>
+
+          <div style={styles.activityGrid}>
+            <div style={styles.activitySection}>
+              <div style={styles.activityTitle}>Room / Folio Charges</div>
+              {selectedCharges.length === 0 ? (
+                <div style={styles.empty}>No room charges posted.</div>
+              ) : (
+                selectedCharges.map((charge) => (
+                  <div key={charge.id} style={styles.activityItem}>
+                    <div style={styles.activityTop}>
+                      <b>{charge.title}</b>
+                      <b>{money(charge.amount)}</b>
+                    </div>
+                    <div style={styles.subMeta}>
+                      {formatDateTime(charge.createdAt)}
+                      {charge.transactionId ? ` - ${charge.transactionId}` : ""}
+                    </div>
+                    {charge.items && charge.items.length > 0 ? (
+                      <div style={styles.chargeLines}>
+                        {charge.items.map((line, index) => (
+                          <div key={`${charge.id}-${index}`} style={styles.chargeLine}>
+                            <span>
+                              {line.name} x {line.qty}
+                            </span>
+                            <span>{money(line.total)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div style={styles.activitySection}>
+              <div style={styles.activityTitle}>Payments</div>
+              <div style={styles.paymentForm}>
+                <div style={styles.field}>
+                  <label style={styles.label}>Amount</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={selectedAmounts.balance}
+                    style={styles.input}
+                    value={folioPaymentAmount}
+                    onChange={(e) =>
+                      setFolioPaymentAmount(Math.max(0, Number(e.target.value) || 0))
+                    }
+                    disabled={selectedAmounts.balance <= 0}
+                  />
+                </div>
+
+                <div style={styles.field}>
+                  <label style={styles.label}>Method</label>
+                  <select
+                    style={styles.input}
+                    value={folioPaymentMethod}
+                    onChange={(e) =>
+                      setFolioPaymentMethod(e.target.value as FolioPaymentMethod)
+                    }
+                    disabled={selectedAmounts.balance <= 0}
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="momo">MoMo</option>
+                    <option value="card">Card</option>
+                    <option value="transfer">Transfer</option>
+                  </select>
+                </div>
+
+                <div style={styles.field}>
+                  <label style={styles.label}>Note</label>
+                  <input
+                    style={styles.input}
+                    value={folioPaymentNote}
+                    onChange={(e) => setFolioPaymentNote(e.target.value)}
+                    placeholder="Optional"
+                    disabled={selectedAmounts.balance <= 0}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  style={folioPaymentAmount <= 0 ? styles.disabledBtn : styles.primaryBtn}
+                  onClick={handleRecordPayment}
+                  disabled={folioPaymentAmount <= 0}
+                >
+                  Record Payment
+                </button>
+              </div>
+
+              {selectedAmounts.amountPaid > 0 ? (
+                <div style={styles.activityItem}>
+                  <div style={styles.activityTop}>
+                    <b>Booking payment</b>
+                    <b>{money(selectedAmounts.amountPaid)}</b>
+                  </div>
+                  <div style={styles.subMeta}>{selectedBooking.paymentStatus}</div>
+                </div>
+              ) : null}
+              {selectedPayments.map((payment) => (
+                <div key={payment.id} style={styles.activityItem}>
+                  <div style={styles.activityTop}>
+                    <b>{payment.title}</b>
+                    <b>{money(payment.amount)}</b>
+                  </div>
+                  <div style={styles.subMeta}>
+                    {formatDateTime(payment.createdAt)}
+                    {payment.paymentMethod ? ` - ${payment.paymentMethod}` : ""}
+                  </div>
+                  {payment.note ? <div style={styles.subMeta}>{payment.note}</div> : null}
+                </div>
+              ))}
+              {selectedAmounts.amountPaid <= 0 && selectedPayments.length === 0 ? (
+                <div style={styles.empty}>No payments recorded.</div>
+              ) : null}
+            </div>
+          </div>
+        </FocusedViewPanel>
+      ) : null}
+
+      {isBookingOverviewMode() ? (
+        <>
       <div style={styles.kpiGrid}>
         <KpiCard label="Today's Arrivals" value={stats.arrivalsToday} />
         <KpiCard label="Today's Departures" value={stats.departuresToday} />
@@ -617,7 +795,7 @@ export default function FrontDeskBookingsPanel() {
               {filteredBookings.map((b: BookingRecord) => (
                 <tr
                   key={b.id}
-                  onClick={() => selectBooking(b.id)}
+                  onClick={() => openBookingFocusedView(b.id)}
                   style={{
                     ...styles.clickableRow,
                     ...(selectedBookingId === b.id ? styles.selectedRow : {}),
@@ -839,6 +1017,8 @@ export default function FrontDeskBookingsPanel() {
           </div>
         ) : null}
       </div>
+        </>
+      ) : null}
     </div>
   );
 }

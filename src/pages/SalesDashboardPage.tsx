@@ -1,5 +1,5 @@
 // src/pages/SalesDashboardPage.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -16,6 +16,11 @@ import {
   Line,
 } from "recharts";
 import { useDepartments } from "../departments/DepartmentsContext";
+import FocusedViewPanel from "../components/FocusedViewPanel";
+import {
+  handleOpenFocusedView,
+  restoreFocusedViewScroll,
+} from "../components/focusedNavigation";
 import { normalizeDepartmentKey } from "../lib/departments";
 import { formatShiftStatus } from "../lib/shiftTrace";
 import {
@@ -50,6 +55,13 @@ type RangeFilter = "today" | "yesterday" | "week" | "month" | "all";
 type QuickRangeFilter = RangeFilter | "custom";
 type DateRange = { startDate: string; endDate: string };
 type DashboardFocus = "all" | "revenue" | "collections" | "receivables" | "expenses";
+type FocusedDashboardView =
+  | { type: "kpi"; focus: DashboardFocus | "netProfit" | "transactions" | "cash" | "momo" | "card"; title: string }
+  | { type: "alert"; alert: any }
+  | { type: "action"; action: any }
+  | { type: "department"; departmentKey: string; title: string }
+  | { type: "transaction"; tx: Tx }
+  | { type: "expense"; expense: ExpenseRow };
 const DEPARTMENT_ANALYTICS_LEDGER_SOURCE_TYPES = new Set([
   "room_booking_revenue",
   "guest_payment_collection",
@@ -429,6 +441,7 @@ function ChartCard({
 
 export default function SalesDashboardPage() {
   const { departments = [] } = useDepartments();
+  const previousScrollRef = useRef(0);
 
   const [search, setSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
@@ -440,6 +453,8 @@ export default function SalesDashboardPage() {
   );
   const [selectedFocus, setSelectedFocus] = useState<DashboardFocus>("all");
   const [selectedDepartmentKey, setSelectedDepartmentKey] = useState<string | null>(null);
+  const [focusedDashboardView, setFocusedDashboardView] =
+    useState<FocusedDashboardView | null>(null);
   const [selectedTx, setSelectedTx] = useState<Tx | null>(null);
   const [selectedExpense, setSelectedExpense] = useState<ExpenseRow | null>(null);
   const [activeTab, setActiveTab] = useState<MainTab>("overview");
@@ -454,6 +469,16 @@ export default function SalesDashboardPage() {
       window.removeEventListener("storage", refreshLedger);
     };
   }, []);
+
+  function openDashboardFocusedView(view: FocusedDashboardView) {
+    previousScrollRef.current = window.scrollY;
+    handleOpenFocusedView(setFocusedDashboardView, view);
+  }
+
+  function closeDashboardFocusedView() {
+    setFocusedDashboardView(null);
+    restoreFocusedViewScroll(previousScrollRef.current);
+  }
 
   const ledgerEntries = useMemo(() => loadLedgerEntries(), [ledgerVersion]);
 
@@ -987,6 +1012,34 @@ export default function SalesDashboardPage() {
 
   const pieColors = ["#0F172A", "#2563EB", "#8B5CF6", "#10B981", "#F59E0B"];
 
+  const focusedViewDepartment = useMemo(() => {
+    if (focusedDashboardView?.type !== "department") return null;
+    return departmentPerformance.find(
+      (row) => row.department === focusedDashboardView.departmentKey
+    ) || null;
+  }, [focusedDashboardView, departmentPerformance]);
+
+  const focusedViewRows = useMemo(() => {
+    if (focusedDashboardView?.type !== "kpi") return [];
+
+    return filteredLedgerEntries.filter((entry) => {
+      if (focusedDashboardView.focus === "revenue") return entry.revenueAmount > 0;
+      if (focusedDashboardView.focus === "collections") return entry.collectionAmount > 0;
+      if (focusedDashboardView.focus === "receivables") return entry.receivableAmount > 0;
+      if (focusedDashboardView.focus === "expenses") return entry.expenseAmount > 0;
+      if (focusedDashboardView.focus === "cash") {
+        return entry.collectionAmount > 0 && normalizeLedgerPaymentMethod(entry.paymentMethod) === "cash";
+      }
+      if (focusedDashboardView.focus === "momo") {
+        return entry.collectionAmount > 0 && normalizeLedgerPaymentMethod(entry.paymentMethod) === "momo";
+      }
+      if (focusedDashboardView.focus === "card") {
+        return entry.collectionAmount > 0 && normalizeLedgerPaymentMethod(entry.paymentMethod) === "card";
+      }
+      return true;
+    });
+  }, [focusedDashboardView, filteredLedgerEntries]);
+
   const exportSummary = useMemo(() => {
     const topDept = departmentLeaderboard[0];
     const underperformingDept = departmentHighlights.underperforming;
@@ -1267,6 +1320,165 @@ export default function SalesDashboardPage() {
         </div>
       </div>
 
+      {focusedDashboardView ? (
+        <FocusedViewPanel
+          title={
+            focusedDashboardView.type === "kpi"
+              ? focusedDashboardView.title
+              : focusedDashboardView.type === "alert"
+              ? focusedDashboardView.alert.title
+              : focusedDashboardView.type === "action"
+              ? focusedDashboardView.action.title
+              : focusedDashboardView.type === "department"
+              ? focusedDashboardView.title
+              : focusedDashboardView.type === "transaction"
+              ? "Transaction Details"
+              : "Expense Details"
+          }
+          subtitle={selectedDateRangeLabel}
+          onBack={closeDashboardFocusedView}
+        >
+          {focusedDashboardView.type === "kpi" ? (
+            <div style={styles.focusedMode}>
+              <div style={styles.detailGrid}>
+                <DetailItem label="Matching Ledger Entries" value={String(focusedViewRows.length)} />
+                <DetailItem
+                  label="Total Revenue"
+                  value={money(focusedViewRows.reduce((sum, entry) => sum + entry.revenueAmount, 0))}
+                />
+                <DetailItem
+                  label="Collections"
+                  value={money(focusedViewRows.reduce((sum, entry) => sum + entry.collectionAmount, 0))}
+                />
+                <DetailItem
+                  label="Expenses"
+                  value={money(focusedViewRows.reduce((sum, entry) => sum + entry.expenseAmount, 0))}
+                />
+              </div>
+              <div style={styles.activityList}>
+                {focusedViewRows.slice(0, 10).map((entry) => (
+                  <button
+                    key={entry.id}
+                    style={styles.activityCardButton}
+                    onClick={() =>
+                      openDashboardFocusedView(
+                        entry.expenseAmount > 0
+                          ? { type: "expense", expense: entry }
+                          : { type: "transaction", tx: entry }
+                      )
+                    }
+                  >
+                    <div style={styles.activityCard}>
+                      <div style={styles.activityTop}>
+                        <span style={entry.expenseAmount > 0 ? styles.activityBadgeNegative : styles.activityBadgePositive}>
+                          {entry.sourceType.replace(/_/g, " ")}
+                        </span>
+                        <span style={entry.expenseAmount > 0 ? styles.activityAmountNegative : styles.activityAmount}>
+                          {money(entry.expenseAmount || entry.collectionAmount || entry.revenueAmount)}
+                        </span>
+                      </div>
+                      <div style={styles.activityTitle}>{getAccountingSourceLabel(entry)}</div>
+                      <div style={styles.activityMeta}>
+                        <span>{formatDateTime(entry.occurredAt)}</span>
+                        <span>{getDepartmentLabel(getLedgerDepartmentValue(entry), departmentOptions)}</span>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {focusedDashboardView.type === "alert" ? (
+            <div style={styles.focusedMode}>
+              <div style={styles.alertMessage}>{focusedDashboardView.alert.message}</div>
+              <div style={styles.alertAction}>{focusedDashboardView.alert.recommendedAction}</div>
+              {focusedDashboardView.alert.departmentKey ? (
+                <div style={styles.detailGrid}>
+                  <DetailItem
+                    label="Department"
+                    value={getDepartmentLabel(focusedDashboardView.alert.departmentKey, departmentOptions)}
+                  />
+                  <DetailItem label="Metric Value" value={money(Number(focusedDashboardView.alert.metricValue) || 0)} />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {focusedDashboardView.type === "action" ? (
+            <div style={styles.focusedMode}>
+              <div style={styles.alertMessage}>{focusedDashboardView.action.description}</div>
+              <div style={styles.alertAction}>Severity: {focusedDashboardView.action.severity}</div>
+              {focusedDashboardView.action.departmentKey ? (
+                <DetailItem
+                  label="Department"
+                  value={getDepartmentLabel(focusedDashboardView.action.departmentKey, departmentOptions)}
+                />
+              ) : null}
+            </div>
+          ) : null}
+
+          {focusedDashboardView.type === "department" ? (
+            <div style={styles.focusedMode}>
+              {!focusedViewDepartment ? (
+                <div style={styles.emptyState}>No department data found for this filter.</div>
+              ) : (
+                <div style={styles.detailGrid}>
+                  <DetailItem label="Revenue" value={money(focusedViewDepartment.revenue)} />
+                  <DetailItem label="Collections" value={money(focusedViewDepartment.collections)} />
+                  <DetailItem label="Receivables" value={money(focusedViewDepartment.receivables)} />
+                  <DetailItem label="Expenses" value={money(focusedViewDepartment.expenses)} />
+                  <DetailItem label="Net" value={money(focusedViewDepartment.net)} />
+                  <DetailItem label="Transactions" value={String(focusedViewDepartment.transactions)} />
+                  <DetailItem label="Insight" value={focusedViewDepartment.insight} />
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {focusedDashboardView.type === "transaction" ? (
+            <div style={styles.detailGrid}>
+              <DetailItem label="Tx ID" value={focusedDashboardView.tx?.txId || focusedDashboardView.tx?.id || "—"} />
+              <DetailItem label="Time" value={formatDateTime(getTxTime(focusedDashboardView.tx))} />
+              <DetailItem
+                label="Department"
+                value={getDepartmentLabel(getDepartmentValue(focusedDashboardView.tx), departmentOptions)}
+              />
+              <DetailItem label="Source" value={getAccountingSourceLabel(focusedDashboardView.tx)} />
+              <DetailItem label="Booking Code" value={focusedDashboardView.tx?.bookingCode || "—"} />
+              <DetailItem label="Room" value={focusedDashboardView.tx?.roomNo || focusedDashboardView.tx?.room || "—"} />
+              <DetailItem label="Staff" value={getStaffLabel(focusedDashboardView.tx)} />
+              <DetailItem label="Payment Method" value={focusedDashboardView.tx?.paymentMethod || "—"} />
+              <DetailItem label="Status" value={statusLabel(focusedDashboardView.tx)} />
+              <DetailItem label="Total" value={money(getTxAmount(focusedDashboardView.tx))} />
+              <TransactionItemBreakdown tx={focusedDashboardView.tx} />
+            </div>
+          ) : null}
+
+          {focusedDashboardView.type === "expense" ? (
+            <div style={styles.detailGrid}>
+              <DetailItem label="Time" value={formatDateTime(getTxTime(focusedDashboardView.expense))} />
+              <DetailItem
+                label="Department"
+                value={getDepartmentLabel(
+                  getExpenseDepartmentValue(focusedDashboardView.expense),
+                  departmentOptions
+                )}
+              />
+              <DetailItem
+                label="Category"
+                value={formatCategoryLabel(
+                  focusedDashboardView.expense?.category || focusedDashboardView.expense?.sourceType
+                )}
+              />
+              <DetailItem label="Amount" value={money(getTxAmount(focusedDashboardView.expense))} />
+              <DetailItem label="Description" value={focusedDashboardView.expense?.description || "—"} />
+              <DetailItem label="Note" value={focusedDashboardView.expense?.note || "—"} />
+            </div>
+          ) : null}
+        </FocusedViewPanel>
+      ) : (
+        <>
       <div style={styles.filtersRow}>
         <input
           type="text"
@@ -1415,7 +1627,7 @@ export default function SalesDashboardPage() {
           active={selectedFocus === "revenue"}
           onClick={() => {
             setSelectedFocus("revenue");
-            setActiveTab("activity");
+            openDashboardFocusedView({ type: "kpi", focus: "revenue", title: "Revenue Drill-Down" });
           }}
         />
         <MetricCard
@@ -1426,7 +1638,7 @@ export default function SalesDashboardPage() {
           active={selectedFocus === "collections"}
           onClick={() => {
             setSelectedFocus("collections");
-            setActiveTab("activity");
+            openDashboardFocusedView({ type: "kpi", focus: "collections", title: "Collections Drill-Down" });
           }}
         />
         <MetricCard
@@ -1437,7 +1649,7 @@ export default function SalesDashboardPage() {
           active={selectedFocus === "receivables"}
           onClick={() => {
             setSelectedFocus("receivables");
-            setActiveTab("activity");
+            openDashboardFocusedView({ type: "kpi", focus: "receivables", title: "Receivables Drill-Down" });
           }}
         />
         <MetricCard
@@ -1448,7 +1660,7 @@ export default function SalesDashboardPage() {
           active={selectedFocus === "expenses"}
           onClick={() => {
             setSelectedFocus("expenses");
-            setActiveTab("activity");
+            openDashboardFocusedView({ type: "kpi", focus: "expenses", title: "Expenses Drill-Down" });
           }}
         />
         <MetricCard
@@ -1456,30 +1668,45 @@ export default function SalesDashboardPage() {
           value={money(summary.netProfit)}
           note="Revenue minus expenses"
           accent="#10B981"
+          onClick={() =>
+            openDashboardFocusedView({ type: "kpi", focus: "netProfit", title: "Net Profit Drill-Down" })
+          }
         />
         <MetricCard
           title="Transactions"
           value={String(summary.transactions)}
           note={`Within ${selectedDateRangeLabel.toLowerCase()}`}
           accent="#94A3B8"
+          onClick={() =>
+            openDashboardFocusedView({ type: "kpi", focus: "transactions", title: "Transaction Drill-Down" })
+          }
         />
         <MetricCard
           title="Cash"
           value={money(summary.cash)}
           note="Cash payments"
           accent="#22C55E"
+          onClick={() =>
+            openDashboardFocusedView({ type: "kpi", focus: "cash", title: "Cash Collections" })
+          }
         />
         <MetricCard
           title="MoMo"
           value={money(summary.momo)}
           note="Mobile money"
           accent="#8B5CF6"
+          onClick={() =>
+            openDashboardFocusedView({ type: "kpi", focus: "momo", title: "MoMo Collections" })
+          }
         />
         <MetricCard
           title="Card"
           value={money(summary.card)}
           note="Card payments"
           accent="#3B82F6"
+          onClick={() =>
+            openDashboardFocusedView({ type: "kpi", focus: "card", title: "Card Collections" })
+          }
         />
       </div>
 
@@ -1523,6 +1750,7 @@ export default function SalesDashboardPage() {
                           ? "expenses"
                           : "activity"
                       );
+                      openDashboardFocusedView({ type: "alert", alert });
                     }}
                     style={{
                       ...styles.alertCard,
@@ -1567,10 +1795,13 @@ export default function SalesDashboardPage() {
             ) : (
               <div style={styles.alertsGrid}>
                 {recommendedActions.map((action) => (
-                  <div
+                  <button
+                    type="button"
                     key={action.id}
+                    onClick={() => openDashboardFocusedView({ type: "action", action })}
                     style={{
                       ...styles.alertCard,
+                      ...styles.alertCardButton,
                       ...(action.severity === "high"
                         ? styles.alertDanger
                         : action.severity === "medium"
@@ -1601,7 +1832,7 @@ export default function SalesDashboardPage() {
                         Department: {getDepartmentLabel(action.departmentKey, departmentOptions)}
                       </div>
                     ) : null}
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -1795,7 +2026,19 @@ export default function SalesDashboardPage() {
             ) : (
               <div style={styles.leaderboardList}>
                 {departmentLeaderboard.slice(0, 5).map((row) => (
-                  <div key={row.department} style={styles.leaderboardCard}>
+                  <button
+                    key={row.department}
+                    type="button"
+                    style={styles.leaderboardCard}
+                    onClick={() => {
+                      setSelectedDepartmentKey(row.department);
+                      openDashboardFocusedView({
+                        type: "department",
+                        departmentKey: row.department,
+                        title: `${getDepartmentLabel(row.department, departmentOptions)} Department`,
+                      });
+                    }}
+                  >
                     <div style={styles.leaderboardTop}>
                       <div style={styles.leaderboardLeft}>
                         <div style={styles.rankBadge}>{row.rank}</div>
@@ -1839,7 +2082,7 @@ export default function SalesDashboardPage() {
                       <span>Margin: {row.marginPct.toFixed(1)}%</span>
                       <span>Collections: {row.collectionPct.toFixed(1)}%</span>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -2237,7 +2480,19 @@ export default function SalesDashboardPage() {
             ) : (
               <div style={styles.leaderboardList}>
                 {departmentLeaderboard.map((row) => (
-                  <div key={row.department} style={styles.leaderboardCard}>
+                  <button
+                    key={row.department}
+                    type="button"
+                    style={styles.leaderboardCard}
+                    onClick={() => {
+                      setSelectedDepartmentKey(row.department);
+                      openDashboardFocusedView({
+                        type: "department",
+                        departmentKey: row.department,
+                        title: `${getDepartmentLabel(row.department, departmentOptions)} Department`,
+                      });
+                    }}
+                  >
                     <div style={styles.leaderboardTop}>
                       <div style={styles.leaderboardLeft}>
                         <div style={styles.rankBadge}>{row.rank}</div>
@@ -2281,7 +2536,7 @@ export default function SalesDashboardPage() {
                       <span>Margin: {row.marginPct.toFixed(1)}%</span>
                       <span>Collections: {row.collectionPct.toFixed(1)}%</span>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -2311,9 +2566,14 @@ export default function SalesDashboardPage() {
                       <tr
                         key={row.department}
                         onClick={() =>
-                          setSelectedDepartmentKey((prev) =>
-                            prev === row.department ? null : row.department
-                          )
+                          {
+                            setSelectedDepartmentKey(row.department);
+                            openDashboardFocusedView({
+                              type: "department",
+                              departmentKey: row.department,
+                              title: `${getDepartmentLabel(row.department, departmentOptions)} Department`,
+                            });
+                          }
                         }
                         style={{
                           ...styles.tableRow,
@@ -2469,10 +2729,9 @@ export default function SalesDashboardPage() {
                   <button
                     key={`tx-${item.id}`}
                     style={styles.activityCardButton}
-                    onClick={() => {
-                      setSelectedTx(item.raw);
-                      setSelectedExpense(null);
-                    }}
+                    onClick={() =>
+                      openDashboardFocusedView({ type: "transaction", tx: item.raw })
+                    }
                   >
                     <div style={styles.activityCard}>
                       <div style={styles.activityTop}>
@@ -2506,10 +2765,9 @@ export default function SalesDashboardPage() {
                   <button
                     key={`expense-${item.id}`}
                     style={styles.activityCardButton}
-                    onClick={() => {
-                      setSelectedExpense(item.raw);
-                      setSelectedTx(null);
-                    }}
+                    onClick={() =>
+                      openDashboardFocusedView({ type: "expense", expense: item.raw })
+                    }
                   >
                     <div style={styles.activityCard}>
                       <div style={styles.activityTop}>
@@ -2631,6 +2889,8 @@ export default function SalesDashboardPage() {
             <DetailItem label="Note" value={selectedExpense?.note || "—"} />
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );
@@ -2965,6 +3225,10 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#0F172A",
     fontWeight: 800,
   },
+  focusedMode: {
+    display: "grid",
+    gap: 14,
+  },
   intelligenceGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
@@ -3089,6 +3353,10 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid #E9EEF5",
     borderRadius: 14,
     padding: 14,
+    width: "100%",
+    textAlign: "left",
+    cursor: "pointer",
+    font: "inherit",
   },
   leaderboardTop: {
     display: "flex",
