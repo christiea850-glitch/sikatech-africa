@@ -1,114 +1,63 @@
 import type { CanonicalLedgerEntry } from "./financialLedger";
-import { normalizeDepartmentKey } from "../lib/departments";
-
-export type RecommendedActionSeverity = "high" | "medium" | "low";
 
 export type ActionSuggestion = {
   id: string;
   title: string;
   description: string;
-  severity: RecommendedActionSeverity;
-  departmentKey?: string;
+  severity: "high" | "medium" | "low";
+  departmentKey?: string;   // ✅ FIXED
 };
 
-export type RecommendedAction = ActionSuggestion;
-
-function roundMoney(value: number) {
-  return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
-}
-
-function formatDepartment(value: string) {
-  return normalizeDepartmentKey(value)
-    .split("-")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-export function generateRecommendedActions(
-  ledgerEntries: CanonicalLedgerEntry[]
-): ActionSuggestion[] {
-  const departmentMap = new Map<
-    string,
-    { revenue: number; collections: number; receivables: number; expenses: number; count: number }
-  >();
-
-  for (const entry of ledgerEntries) {
-    const departmentKey = normalizeDepartmentKey(entry.departmentKey || "unknown");
-    const current =
-      departmentMap.get(departmentKey) || {
-        revenue: 0,
-        collections: 0,
-        receivables: 0,
-        expenses: 0,
-        count: 0,
-      };
-
-    current.revenue += Number(entry.revenueAmount) || 0;
-    current.collections += Number(entry.collectionAmount) || 0;
-    current.receivables += Number(entry.receivableAmount) || 0;
-    current.expenses += Number(entry.expenseAmount) || 0;
-    current.count += 1;
-    departmentMap.set(departmentKey, current);
-  }
-
+export function generateRecommendedActions(entries: CanonicalLedgerEntry[]): ActionSuggestion[] {
   const actions: ActionSuggestion[] = [];
 
-  for (const [departmentKey, totals] of departmentMap.entries()) {
-    const revenue = roundMoney(totals.revenue);
-    const collections = roundMoney(totals.collections);
-    const expenses = roundMoney(totals.expenses);
-    const net = roundMoney(revenue - expenses);
-    const label = formatDepartment(departmentKey);
+  const revenue = entries.reduce((sum, e) => sum + (e.revenueAmount || 0), 0);
+  const expenses = entries.reduce((sum, e) => sum + (e.expenseAmount || 0), 0);
 
-    if (net < 0) {
-      actions.push({
-        id: `reduce-loss:${departmentKey}`,
-        title: `Reduce loss in ${label}`,
-        description: `${label} is down ${Math.abs(net).toFixed(2)}. Review large expenses and adjust pricing or volume.`,
-        severity: "high",
-        departmentKey,
-      });
-    }
-
-    if (revenue > 0 && collections / revenue < 0.7) {
-      actions.push({
-        id: `improve-collections:${departmentKey}`,
-        title: `Improve collections in ${label}`,
-        description: `${label} has collected ${Math.round((collections / revenue) * 100)}% of revenue. Follow up on outstanding payments.`,
-        severity: "medium",
-        departmentKey,
-      });
-    }
-
-    if (expenses > 0 && revenue > 0 && expenses / revenue > 0.6) {
-      actions.push({
-        id: `audit-expenses:${departmentKey}`,
-        title: `Audit expenses in ${label}`,
-        description: `${label} expenses are ${Math.round((expenses / revenue) * 100)}% of revenue. Check recent expense categories and approvals.`,
-        severity: "medium",
-        departmentKey,
-      });
-    }
-
-    if (revenue > 0 && net / revenue > 0.5) {
-      actions.push({
-        id: `scale-performance:${departmentKey}`,
-        title: `Scale ${label} performance`,
-        description: `${label} is generating a strong margin. Preserve the current operating pattern and consider scaling it.`,
-        severity: "low",
-        departmentKey,
-      });
-    }
+  // 🔴 LOSS DETECTION
+  if (expenses > revenue) {
+    actions.push({
+      id: "loss-warning",
+      title: "Business Operating at a Loss",
+      description: "Expenses exceed revenue. Reduce costs or increase pricing immediately.",
+      severity: "high",
+    });
   }
 
-  const severityRank: Record<RecommendedActionSeverity, number> = {
-    high: 0,
-    medium: 1,
-    low: 2,
-  };
+  // 📊 EXPENSE CATEGORY ANALYSIS
+  const expenseMap: Record<string, number> = {};
 
-  return actions
-    .sort((a, b) => severityRank[a.severity] - severityRank[b.severity])
-    .slice(0, 6);
+  entries.forEach(e => {
+    if (e.expenseAmount) {
+      const key = e.sourceType || "unknown";
+      expenseMap[key] = (expenseMap[key] || 0) + e.expenseAmount;
+    }
+  });
+
+  const totalExpenses = Object.values(expenseMap).reduce((a, b) => a + b, 0);
+
+  Object.entries(expenseMap).forEach(([key, value]) => {
+    const pct = (value / totalExpenses) * 100;
+
+    if (pct > 50) {
+      actions.push({
+        id: `expense-${key}`,
+        title: "High Expense Concentration",
+        description: `${key} accounts for ${pct.toFixed(1)}% of expenses. Consider reducing frequency or negotiating supplier costs.`,
+        severity: "medium",
+      });
+    }
+  });
+
+  // 🟢 LOW ACTIVITY
+  if (entries.length < 5) {
+    actions.push({
+      id: "low-activity",
+      title: "Low Business Activity",
+      description: "Very few transactions detected. Consider promotions or marketing campaigns.",
+      severity: "low",
+    });
+  }
+
+  return actions;
 }

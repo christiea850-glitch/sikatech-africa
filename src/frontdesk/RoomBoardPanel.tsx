@@ -200,6 +200,7 @@ export default function RoomBoardPanel() {
   const [ledgerVersion, setLedgerVersion] = useState(0);
   const [selectedRoomNo, setSelectedRoomNo] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | RoomBoardStatus>("all");
+  const [boardHighlighted, setBoardHighlighted] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const bookings = useMemo(() => {
@@ -332,8 +333,19 @@ export default function RoomBoardPanel() {
   }
 
   function handleFilterClick(nextFilter: "all" | RoomBoardStatus) {
+    const nextRooms =
+      nextFilter === "all"
+        ? rooms
+        : rooms.filter((room) => room.status === nextFilter);
+
+    if (nextRooms.length > 0) {
+      setSelectedRoomNo(nextRooms[0].roomNo);
+    }
+
     setFilter(nextFilter);
+    setBoardHighlighted(true);
     focusRoomBoard();
+    window.setTimeout(() => setBoardHighlighted(false), 900);
   }
 
   function selectAlertRoom(alert: FrontDeskInsightAlert) {
@@ -593,7 +605,14 @@ export default function RoomBoardPanel() {
       </div>
 
       <div style={styles.layout}>
-        <div ref={roomBoardRef} tabIndex={-1} style={styles.boardCard}>
+        <div
+          ref={roomBoardRef}
+          tabIndex={-1}
+          style={{
+            ...styles.boardCard,
+            ...(boardHighlighted ? styles.boardCardHighlight : {}),
+          }}
+        >
           <div style={styles.sectionTitle}>Room Board</div>
 
           {filteredRooms.length === 0 ? (
@@ -869,6 +888,10 @@ const styles: Record<string, CSSProperties> = {
     gap: 16,
     flexWrap: "wrap",
     borderBottom: "1px solid rgba(11,42,58,0.12)",
+    position: "sticky",
+    top: 0,
+    zIndex: 5,
+    background: "#ffffff",
   },
   filterBtn: {
     border: "none",
@@ -902,6 +925,11 @@ const styles: Record<string, CSSProperties> = {
     background: "#ffffff",
     border: "1px solid rgba(11,42,58,0.10)",
     minHeight: 360,
+    transition: "box-shadow 180ms ease, border-color 180ms ease",
+  },
+  boardCardHighlight: {
+    borderColor: "rgba(209,168,75,0.75)",
+    boxShadow: "0 0 0 3px rgba(209,168,75,0.18), 0 10px 28px rgba(15,23,42,0.10)",
   },
   detailCard: {
     padding: 14,
