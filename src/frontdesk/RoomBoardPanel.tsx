@@ -214,6 +214,8 @@ function buildRoomBoard(bookings: BookingRecord[]): RoomCard[] {
 }
 
 export default function RoomBoardPanel() {
+  const overviewRef = useRef<HTMLDivElement | null>(null);
+  const focusedPanelRef = useRef<HTMLDivElement | null>(null);
   const detailRef = useRef<HTMLDivElement | null>(null);
   const roomBoardRef = useRef<HTMLDivElement | null>(null);
   const [version, setVersion] = useState(0);
@@ -352,6 +354,22 @@ export default function RoomBoardPanel() {
     }, 0);
   }
 
+  function focusFrontDeskOverview() {
+    window.setTimeout(() => {
+      overviewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      overviewRef.current?.focus();
+    }, 0);
+  }
+
+  useEffect(() => {
+    if (!focusedFrontDeskView) return;
+
+    window.setTimeout(() => {
+      focusedPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      focusedPanelRef.current?.focus();
+    }, 0);
+  }, [focusedFrontDeskView]);
+
   function handleFilterClick(nextFilter: RoomBoardView) {
     const nextRooms =
       nextFilter === "all"
@@ -374,7 +392,7 @@ export default function RoomBoardPanel() {
     setActiveRoomBoardView(null);
     setFilter("all");
     if (rooms.length > 0) setSelectedRoomNo(rooms[0].roomNo);
-    focusRoomBoard();
+    focusFrontDeskOverview();
   }
 
   function selectRoomContext(input: { bookingId?: string; roomNo?: string }) {
@@ -569,10 +587,15 @@ export default function RoomBoardPanel() {
   }
 
   return (
-    <div style={styles.wrap}>
+    <div ref={overviewRef} tabIndex={-1} style={styles.wrap}>
       {msg ? <div style={styles.message}>{msg}</div> : null}
 
       {focusedFrontDeskView ? (
+        <div
+          ref={focusedPanelRef}
+          tabIndex={-1}
+          style={styles.focusedPanelAnchor}
+        >
         <FocusedViewPanel
           title={
             focusedFrontDeskView.type === "payment"
@@ -642,6 +665,7 @@ export default function RoomBoardPanel() {
             </div>
           ) : null}
         </FocusedViewPanel>
+        </div>
       ) : null}
 
       {!activeRoomBoardView ? (
@@ -1096,6 +1120,10 @@ const styles: Record<string, CSSProperties> = {
     border: "1px solid rgba(18,94,60,0.18)",
     color: "#125e3c",
     fontWeight: 800,
+  },
+  focusedPanelAnchor: {
+    scrollMarginTop: 12,
+    outline: "none",
   },
   topStats: {
     display: "grid",
