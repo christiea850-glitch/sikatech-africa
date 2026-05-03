@@ -41,6 +41,34 @@ export type FrontDeskInsights = {
   alerts: FrontDeskInsightAlert[];
 };
 
+export type FrontDeskRoomState = {
+  roomNo: string;
+  status: string;
+  bookingId?: string;
+  bookingCode?: string;
+  balance?: number;
+  totalAmount?: number;
+  amountPaid?: number;
+};
+
+export type FrontDeskRecommendedAction = {
+  id: string;
+  title: string;
+  message: string;
+  severity: "info" | "warning" | "danger" | "success";
+  roomNo?: string;
+  bookingCode?: string;
+  bookingId?: string;
+  recommendedAction: string;
+  actionType:
+    | "collect_payment"
+    | "follow_up_before_checkout"
+    | "ready_for_sale"
+    | "send_housekeeping"
+    | "review_maintenance"
+    | "protect_premium_room";
+};
+
 type BookingAccumulator = {
   bookingId: string;
   bookingCode?: string;
@@ -222,4 +250,131 @@ export function generateFrontDeskInsights(
     partialPayments,
     alerts,
   };
+}
+
+export function generateFrontDeskRecommendedActions(
+  entries: CanonicalLedgerEntry[],
+  rooms: FrontDeskRoomState[]
+): FrontDeskRecommendedAction[] {
+  const insights = generateFrontDeskInsights(entries);
+  const actions: FrontDeskRecommendedAction[] = [];
+  const activeRoomRevenue = new Map<string, number>();
+
+  entries.forEach((entry) => {
+    const roomNo = String(entry.roomNo || "").trim();
+    if (!roomNo) return;
+    activeRoomRevenue.set(
+      roomNo,
+      (activeRoomRevenue.get(roomNo) || 0) + (Number(entry.revenueAmount) || 0)
+    );
+  });
+
+  insights.unpaidBookings.slice(0, 5).forEach((booking) => {
+    actions.push({
+      id: `collect_payment:${booking.bookingId}`,
+      title: "Collect payment",
+      message: `${booking.bookingCode || booking.bookingId} has ${booking.outstanding.toFixed(
+        2
+      )} outstanding.`,
+      severity: "danger",
+      roomNo: booking.roomNo,
+      bookingCode: booking.bookingCode,
+      bookingId: booking.bookingId,
+      recommendedAction: "Collect payment before checkout or settlement.",
+      actionType: "collect_payment",
+    });
+  });
+
+  rooms
+    .filter((room) => room.status === "occupied" && (Number(room.balance) || 0) > 0)
+    .slice(0, 5)
+    .forEach((room) => {
+      actions.push({
+        id: `follow_up_before_checkout:${room.roomNo}:${room.bookingId || ""}`,
+        title: "Follow up before checkout",
+        message: `Room ${room.roomNo} is occupied with ${roundMoney(
+          Number(room.balance) || 0
+        ).toFixed(2)} still unpaid.`,
+        severity: "warning",
+        roomNo: room.roomNo,
+        bookingCode: room.bookingCode,
+        bookingId: room.bookingId,
+        recommendedAction: "Confirm settlement with the guest before checkout.",
+        actionType: "follow_up_before_checkout",
+      });
+    });
+
+  rooms
+    .filter((room) => room.status === "available" && !activeRoomRevenue.has(room.roomNo))
+    .slice(0, 5)
+    .forEach((room) => {
+      actions.push({
+        id: `ready_for_sale:${room.roomNo}`,
+        title: "Ready for sale",
+        message: `Room ${room.roomNo} is available and has no current ledger activity.`,
+        severity: "success",
+        roomNo: room.roomNo,
+        recommendedAction: "Offer this room to the next suitable guest.",
+        actionType: "ready_for_sale",
+      });
+    });
+
+  rooms
+    .filter((room) => room.status === "dirty")
+    .slice(0, 5)
+    .forEach((room) => {
+      actions.push({
+        id: `send_housekeeping:${room.roomNo}`,
+        title: "Send to housekeeping",
+        message: `Room ${room.roomNo} is marked dirty.`,
+        severity: "info",
+        roomNo: room.roomNo,
+        bookingCode: room.bookingCode,
+        bookingId: room.bookingId,
+        recommendedAction: "Clean and inspect the room, then mark available when safe.",
+        actionType: "send_housekeeping",
+      });
+    });
+
+  rooms
+    .filter((room) => room.status === "out_of_service")
+    .slice(0, 5)
+    .forEach((room) => {
+      actions.push({
+        id: `review_maintenance:${room.roomNo}`,
+        title: "Review maintenance status",
+        message: `Room ${room.roomNo} is out of service.`,
+        severity: "warning",
+        roomNo: room.roomNo,
+        bookingCode: room.bookingCode,
+        bookingId: room.bookingId,
+        recommendedAction: "Confirm maintenance notes before returning the room to sale.",
+        actionType: "review_maintenance",
+      });
+    });
+
+  insights.topRooms.slice(0, 3).forEach((room) => {
+    actions.push({
+      id: `protect_premium_room:${room.roomNo}`,
+      title: "Protect as premium room",
+      message: `Room ${room.roomNo} is a top revenue room with ${room.revenue.toFixed(
+        2
+      )} posted.`,
+      severity: "success",
+      roomNo: room.roomNo,
+      recommendedAction: "Prioritize upkeep, pricing discipline, and availability for this room.",
+      actionType: "protect_premium_room",
+    });
+  });
+
+  const severityRank: Record<FrontDeskRecommendedAction["severity"], number> = {
+    danger: 0,
+    warning: 1,
+    info: 2,
+    success: 3,
+  };
+
+  return actions
+    .sort((a, b) => severityRank[a.severity] - severityRank[b.severity])
+    .slice(0, 10);
 }

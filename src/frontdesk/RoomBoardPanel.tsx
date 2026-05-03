@@ -7,7 +7,9 @@ import {
 } from "../finance/financialLedger";
 import {
   generateFrontDeskInsights,
+  generateFrontDeskRecommendedActions,
   type FrontDeskInsightAlert,
+  type FrontDeskRecommendedAction,
 } from "../finance/frontDeskInsights";
 import {
   BOOKINGS_CHANGED_EVENT,
@@ -245,6 +247,11 @@ export default function RoomBoardPanel() {
 
   const rooms = useMemo(() => buildRoomBoard(bookings), [bookings]);
 
+  const frontDeskActions = useMemo(
+    () => generateFrontDeskRecommendedActions(ledgerEntries, rooms),
+    [ledgerEntries, rooms]
+  );
+
   const filteredRooms = useMemo(() => {
     if (filter === "all") return rooms;
     return rooms.filter((room) => room.status === filter);
@@ -383,22 +390,68 @@ export default function RoomBoardPanel() {
     }
   }
 
-  function handleStatusOnly(status: RoomStatus) {
-    if (!selectedRoom?.bookingId) {
+  function selectActionRoom(action: FrontDeskRecommendedAction) {
+    const booking = action.bookingId
+      ? bookings.find((item) => item.id === action.bookingId)
+      : null;
+    const roomNo = String(action.roomNo || booking?.roomNo || "").trim();
+
+    if (!roomNo) {
+      setMsg("Booking record not found in current room board.");
+      return null;
+    }
+
+    const room = rooms.find((item) => item.roomNo === roomNo) || null;
+    if (!room) {
+      setMsg("Booking record not found in current room board.");
+      return null;
+    }
+
+    setFilter("all");
+    setSelectedRoomNo(room.roomNo);
+    setMsg(null);
+    return room;
+  }
+
+  function handleRecommendedAction(
+    action: FrontDeskRecommendedAction,
+    command: "view_room" | "view_booking" | "collect_payment" | "mark_dirty" | "mark_available"
+  ) {
+    const room = selectActionRoom(action);
+    if (!room) return;
+
+    if (command === "view_room") {
+      focusRoomBoard();
+      return;
+    }
+
+    if (command === "view_booking" || command === "collect_payment") {
+      if (command === "collect_payment") {
+        setMsg("Room selected. Use the existing booking/payment controls to collect payment.");
+      }
+      focusRoomDetail();
+      return;
+    }
+
+    handleRoomStatusOnly(room, command === "mark_dirty" ? "dirty" : "available");
+  }
+
+  function handleRoomStatusOnly(room: RoomCard | null, status: RoomStatus) {
+    if (!room?.bookingId) {
       setMsg("This room has no linked booking record to update.");
       return;
     }
 
     if (status === "available") {
       if (
-        selectedRoom.bookingStatus === "checked_in" ||
-        selectedRoom.status === "occupied"
+        room.bookingStatus === "checked_in" ||
+        room.status === "occupied"
       ) {
         setMsg("Check out the guest before marking the room available.");
         return;
       }
 
-      if (selectedRoom.bookingStatus === "reserved") {
+      if (room.bookingStatus === "reserved") {
         setMsg("This room has an active reservation. Update the reservation before marking it available.");
         return;
       }
@@ -406,20 +459,24 @@ export default function RoomBoardPanel() {
 
     if (status === "dirty") {
       if (
-        selectedRoom.bookingStatus === "checked_in" ||
-        selectedRoom.status === "occupied"
+        room.bookingStatus === "checked_in" ||
+        room.status === "occupied"
       ) {
-        updateBooking(selectedRoom.bookingId, {
+        updateBooking(room.bookingId, {
           bookingStatus: "checked_out",
           roomStatus: normalizeRoomStatusForBookingStatus("checked_out"),
         });
-        refreshBoard(`Guest checked out and room ${selectedRoom.roomNo} marked dirty.`);
+        refreshBoard(`Guest checked out and room ${room.roomNo} marked dirty.`);
         return;
       }
     }
 
-    updateBooking(selectedRoom.bookingId, { roomStatus: status });
-    refreshBoard(`Room ${selectedRoom.roomNo} updated to ${status.replace(/_/g, " ")}.`);
+    updateBooking(room.bookingId, { roomStatus: status });
+    refreshBoard(`Room ${room.roomNo} updated to ${status.replace(/_/g, " ")}.`);
+  }
+
+  function handleStatusOnly(status: RoomStatus) {
+    handleRoomStatusOnly(selectedRoom, status);
   }
 
   function handleCheckIn() {
@@ -601,6 +658,88 @@ export default function RoomBoardPanel() {
           </div>
         ) : (
           <div style={styles.emptyState}>No front desk financial alerts right now.</div>
+        )}
+      </div>
+
+      <div style={styles.insightsCard}>
+        <div style={styles.sectionTitle}>Front Desk Recommended Actions</div>
+        {frontDeskActions.length === 0 ? (
+          <div style={styles.emptyState}>No front desk recommendations right now.</div>
+        ) : (
+          <div style={styles.recommendationList}>
+            {frontDeskActions.map((action) => (
+              <div
+                key={action.id}
+                style={{
+                  ...styles.recommendationItem,
+                  ...(action.severity === "danger"
+                    ? styles.recommendationDanger
+                    : action.severity === "warning"
+                    ? styles.recommendationWarning
+                    : action.severity === "success"
+                    ? styles.recommendationSuccess
+                    : styles.recommendationInfo),
+                }}
+              >
+                <div style={styles.recommendationTop}>
+                  <div>
+                    <div style={styles.recommendationTitle}>{action.title}</div>
+                    <div style={styles.recommendationMessage}>{action.message}</div>
+                  </div>
+                  <span style={styles.recommendationBadge}>{action.severity}</span>
+                </div>
+                <div style={styles.recommendationAction}>{action.recommendedAction}</div>
+                <div style={styles.alertActionRow}>
+                  {action.roomNo ? (
+                    <button
+                      type="button"
+                      style={styles.alertActionBtn}
+                      onClick={() => handleRecommendedAction(action, "view_room")}
+                    >
+                      View Room
+                    </button>
+                  ) : null}
+                  {action.bookingId ? (
+                    <button
+                      type="button"
+                      style={styles.alertActionBtn}
+                      onClick={() => handleRecommendedAction(action, "view_booking")}
+                    >
+                      View Booking
+                    </button>
+                  ) : null}
+                  {action.actionType === "collect_payment" ||
+                  action.actionType === "follow_up_before_checkout" ? (
+                    <button
+                      type="button"
+                      style={styles.alertActionBtn}
+                      onClick={() => handleRecommendedAction(action, "collect_payment")}
+                    >
+                      Collect Payment
+                    </button>
+                  ) : null}
+                  {action.actionType === "send_housekeeping" ? (
+                    <button
+                      type="button"
+                      style={styles.alertActionBtn}
+                      onClick={() => handleRecommendedAction(action, "mark_available")}
+                    >
+                      Mark Available
+                    </button>
+                  ) : null}
+                  {action.actionType === "follow_up_before_checkout" ? (
+                    <button
+                      type="button"
+                      style={styles.alertActionBtn}
+                      onClick={() => handleRecommendedAction(action, "mark_dirty")}
+                    >
+                      Mark Dirty
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
@@ -882,6 +1021,63 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 12,
     fontWeight: 900,
     cursor: "pointer",
+  },
+  recommendationList: {
+    display: "grid",
+    gap: 10,
+  },
+  recommendationItem: {
+    padding: 12,
+    borderRadius: 8,
+    border: "1px solid rgba(11,42,58,0.10)",
+  },
+  recommendationDanger: {
+    background: "rgba(220,38,38,0.08)",
+    borderColor: "rgba(220,38,38,0.20)",
+  },
+  recommendationWarning: {
+    background: "rgba(245,158,11,0.10)",
+    borderColor: "rgba(245,158,11,0.22)",
+  },
+  recommendationInfo: {
+    background: "rgba(37,99,235,0.08)",
+    borderColor: "rgba(37,99,235,0.18)",
+  },
+  recommendationSuccess: {
+    background: "rgba(16,185,129,0.08)",
+    borderColor: "rgba(16,185,129,0.18)",
+  },
+  recommendationTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "flex-start",
+  },
+  recommendationTitle: {
+    color: "#0b2a3a",
+    fontWeight: 900,
+  },
+  recommendationMessage: {
+    marginTop: 4,
+    color: "#334155",
+    fontWeight: 800,
+    lineHeight: 1.4,
+  },
+  recommendationAction: {
+    marginTop: 8,
+    color: "#0b2a3a",
+    fontSize: 13,
+    fontWeight: 900,
+  },
+  recommendationBadge: {
+    borderRadius: 999,
+    padding: "4px 8px",
+    background: "#ffffff",
+    color: "#0b2a3a",
+    border: "1px solid rgba(11,42,58,0.12)",
+    fontSize: 11,
+    fontWeight: 900,
+    textTransform: "uppercase",
   },
   filterRow: {
     display: "flex",
