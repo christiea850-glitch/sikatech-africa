@@ -54,6 +54,12 @@ type RoomFinancialInsight = {
   paymentCount: number;
 };
 
+type FocusedFrontDeskView = {
+  type: "room" | "booking" | "payment";
+  roomNo?: string;
+  bookingId?: string;
+};
+
 const DEFAULT_ROOMS: Array<{ roomNo: string; roomType: string }> = [
   { roomNo: "101", roomType: "Deluxe" },
   { roomNo: "102", roomType: "Deluxe" },
@@ -214,6 +220,7 @@ export default function RoomBoardPanel() {
   const [selectedRoomNo, setSelectedRoomNo] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | RoomBoardStatus>("all");
   const [activeRoomBoardView, setActiveRoomBoardView] = useState<RoomBoardView | null>(null);
+  const [focusedFrontDeskView, setFocusedFrontDeskView] = useState<FocusedFrontDeskView | null>(null);
   const [boardHighlighted, setBoardHighlighted] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -337,13 +344,6 @@ export default function RoomBoardPanel() {
     if (message) setMsg(message);
   }
 
-  function focusRoomDetail() {
-    window.setTimeout(() => {
-      detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      detailRef.current?.focus();
-    }, 0);
-  }
-
   function focusRoomBoard() {
     window.setTimeout(() => {
       roomBoardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -369,45 +369,61 @@ export default function RoomBoardPanel() {
   }
 
   function handleBackToOverview() {
+    setFocusedFrontDeskView(null);
     setActiveRoomBoardView(null);
     setFilter("all");
     if (rooms.length > 0) setSelectedRoomNo(rooms[0].roomNo);
     focusRoomBoard();
   }
 
-  function selectAlertRoom(alert: FrontDeskInsightAlert) {
-    const booking = alert.bookingId
-      ? bookings.find((item) => item.id === alert.bookingId)
+  function selectRoomContext(input: { bookingId?: string; roomNo?: string }) {
+    const booking = input.bookingId
+      ? bookings.find((item) => item.id === input.bookingId)
       : null;
-    const roomNo = String(alert.roomNo || booking?.roomNo || "").trim();
+    const roomNo = String(input.roomNo || booking?.roomNo || "").trim();
 
     if (!roomNo || !rooms.some((room) => room.roomNo === roomNo)) {
       setMsg("Booking record not found in current room board.");
-      return false;
+      return null;
     }
 
     setFilter("all");
+    setActiveRoomBoardView(null);
     setSelectedRoomNo(roomNo);
     setMsg(null);
-    return true;
+    return { booking, roomNo };
+  }
+
+  function openFocusedFrontDeskView(
+    view: FocusedFrontDeskView["type"],
+    input: { bookingId?: string; roomNo?: string }
+  ) {
+    const context = selectRoomContext(input);
+    if (!context) return;
+
+    setFocusedFrontDeskView({
+      type: view,
+      roomNo: context.roomNo,
+      bookingId: input.bookingId || context.booking?.id,
+    });
   }
 
   function handleInsightAction(
     alert: FrontDeskInsightAlert,
     action: "collect" | "booking" | "room"
   ) {
-    const selected = selectAlertRoom(alert);
-    if (!selected) return;
-
     if (action === "collect") {
+      openFocusedFrontDeskView("payment", alert);
       setMsg("Room selected. Use the existing booking/payment controls to collect payment.");
-      focusRoomDetail();
       return;
     }
 
     if (action === "booking") {
-      focusRoomDetail();
+      openFocusedFrontDeskView("booking", alert);
+      return;
     }
+
+    openFocusedFrontDeskView("room", alert);
   }
 
   function selectActionRoom(action: FrontDeskRecommendedAction) {
@@ -441,7 +457,11 @@ export default function RoomBoardPanel() {
     if (!room) return;
 
     if (command === "view_room") {
-      focusRoomBoard();
+      setFocusedFrontDeskView({
+        type: "room",
+        roomNo: room.roomNo,
+        bookingId: action.bookingId,
+      });
       return;
     }
 
@@ -449,7 +469,11 @@ export default function RoomBoardPanel() {
       if (command === "collect_payment") {
         setMsg("Room selected. Use the existing booking/payment controls to collect payment.");
       }
-      focusRoomDetail();
+      setFocusedFrontDeskView({
+        type: command === "collect_payment" ? "payment" : "booking",
+        roomNo: room.roomNo,
+        bookingId: action.bookingId,
+      });
       return;
     }
 
@@ -546,6 +570,79 @@ export default function RoomBoardPanel() {
   return (
     <div style={styles.wrap}>
       {msg ? <div style={styles.message}>{msg}</div> : null}
+
+      {focusedFrontDeskView ? (
+        <div style={styles.focusedDetailCard}>
+          <button type="button" style={styles.backBtn} onClick={handleBackToOverview}>
+            ← Back to Room Board Overview
+          </button>
+          <div style={styles.focusTitle}>
+            {focusedFrontDeskView.type === "payment"
+              ? "Collect Payment"
+              : focusedFrontDeskView.type === "booking"
+              ? "Booking Detail"
+              : "Room Detail"}
+          </div>
+
+          {!selectedRoom ? (
+            <div style={styles.emptyState}>Booking record not found in current room board.</div>
+          ) : (
+            <div style={styles.focusedGrid}>
+              <div style={styles.detailBlock}>
+                <div style={styles.detailRow}>
+                  <span style={styles.detailLabel}>Room</span>
+                  <span style={styles.detailValue}>{selectedRoom.roomNo}</span>
+                </div>
+                <div style={styles.detailRow}>
+                  <span style={styles.detailLabel}>Status</span>
+                  <span style={styles.detailValue}>{selectedRoom.status.replace(/_/g, " ")}</span>
+                </div>
+                <div style={styles.detailRow}>
+                  <span style={styles.detailLabel}>Guest</span>
+                  <span style={styles.detailValue}>{selectedRoom.guestName || "—"}</span>
+                </div>
+                <div style={styles.detailRow}>
+                  <span style={styles.detailLabel}>Booking Code</span>
+                  <span style={styles.detailValue}>{selectedRoom.bookingCode || "—"}</span>
+                </div>
+              </div>
+
+              <div style={styles.detailBlock}>
+                <div style={styles.detailRow}>
+                  <span style={styles.detailLabel}>Booking Revenue</span>
+                  <span style={styles.detailValue}>
+                    {money(selectedRoomInsight?.revenue ?? selectedRoom.totalAmount)}
+                  </span>
+                </div>
+                <div style={styles.detailRow}>
+                  <span style={styles.detailLabel}>Amount Paid</span>
+                  <span style={styles.detailValue}>
+                    {money(selectedRoomInsight?.paid ?? selectedRoom.amountPaid)}
+                  </span>
+                </div>
+                <div style={styles.detailRow}>
+                  <span style={styles.detailLabel}>Balance</span>
+                  <span style={styles.detailValue}>
+                    {money(selectedRoomInsight?.balance ?? selectedRoom.balance)}
+                  </span>
+                </div>
+                <div style={styles.detailRow}>
+                  <span style={styles.detailLabel}>Payment Activity</span>
+                  <span style={styles.detailValue}>
+                    {selectedRoomInsight?.paymentCount ?? selectedFolioActivity.filter((item) => item.type === "payment").length} payment(s)
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {focusedFrontDeskView.type === "payment" ? (
+            <div style={styles.focusHint}>
+              Use the existing booking/payment workflow for this selected room. No new payment system has been created.
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {!activeRoomBoardView ? (
         <>
@@ -647,31 +744,51 @@ export default function RoomBoardPanel() {
 
             {frontDeskInsights.alerts.length > 0 ? (
               <div style={styles.alertList}>
-                {frontDeskInsights.alerts.slice(0, 5).map((alert) => (
-                  <div key={alert.id} style={styles.alertItem}>
-                    <div>{alert.message}</div>
-                    {alert.type === "unpaid_booking_balance" ? (
-                      <div style={styles.alertActionRow}>
-                        <button
-                          type="button"
-                          style={styles.alertActionBtn}
-                          onClick={() => handleInsightAction(alert, "collect")}
-                        >
-                          Collect Payment
-                        </button>
-                        <button
-                          type="button"
-                          style={styles.alertActionBtn}
-                          onClick={() => handleInsightAction(alert, "booking")}
-                        >
-                          View Booking
-                        </button>
-                        <button
-                          type="button"
-                          style={styles.alertActionBtn}
-                          onClick={() => handleInsightAction(alert, "room")}
-                        >
-                          View Room
+            {frontDeskInsights.alerts.slice(0, 5).map((alert) => (
+              <div
+                key={alert.id}
+                style={{
+                  ...styles.alertItem,
+                  ...(alert.type === "unpaid_booking_balance" ? styles.clickableAlertItem : {}),
+                }}
+                onClick={() => {
+                  if (alert.type === "unpaid_booking_balance") {
+                    openFocusedFrontDeskView("booking", alert);
+                  }
+                }}
+              >
+                <div>{alert.message}</div>
+                {alert.type === "unpaid_booking_balance" ? (
+                  <div style={styles.alertActionRow}>
+                    <button
+                      type="button"
+                      style={styles.alertActionBtn}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleInsightAction(alert, "collect");
+                      }}
+                    >
+                      Collect Payment
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.alertActionBtn}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleInsightAction(alert, "booking");
+                      }}
+                    >
+                      View Booking
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.alertActionBtn}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleInsightAction(alert, "room");
+                      }}
+                    >
+                      View Room
                         </button>
                       </div>
                     ) : null}
@@ -1037,6 +1154,9 @@ const styles: Record<string, CSSProperties> = {
     color: "#78350f",
     fontWeight: 800,
   },
+  clickableAlertItem: {
+    cursor: "pointer",
+  },
   alertActionRow: {
     display: "flex",
     gap: 8,
@@ -1130,6 +1250,27 @@ const styles: Record<string, CSSProperties> = {
     color: "#0b2a3a",
     fontSize: 22,
     fontWeight: 900,
+  },
+  focusedDetailCard: {
+    padding: 14,
+    borderRadius: 8,
+    background: "#ffffff",
+    border: "1px solid rgba(11,42,58,0.10)",
+  },
+  focusedGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    gap: 14,
+    marginTop: 12,
+  },
+  focusHint: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 8,
+    background: "rgba(37,99,235,0.08)",
+    border: "1px solid rgba(37,99,235,0.18)",
+    color: "#1e3a8a",
+    fontWeight: 800,
   },
   filterRow: {
     display: "flex",
