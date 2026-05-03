@@ -1567,23 +1567,35 @@ export default function SalesDashboardPage() {
             ) : (
               <div style={styles.alertsGrid}>
                 {recommendedActions.map((action) => (
-                  <div key={action.id} style={styles.actionCard}>
+                  <div
+                    key={action.id}
+                    style={{
+                      ...styles.alertCard,
+                      ...(action.severity === "high"
+                        ? styles.alertDanger
+                        : action.severity === "medium"
+                        ? styles.alertWarning
+                        : styles.alertInfo),
+                    }}
+                  >
                     <div style={styles.alertTitle}>
                       {action.title}
                       <span
                         style={{
                           ...styles.alertBadge,
                           ...(action.severity === "high"
-                            ? styles.actionBadgeHigh
+                            ? styles.alertBadgeDanger
                             : action.severity === "medium"
-                            ? styles.actionBadgeMedium
-                            : styles.actionBadgeLow),
+                            ? styles.alertBadgeWarning
+                            : styles.alertBadgeInfo),
                         }}
                       >
                         {action.severity}
                       </span>
                     </div>
+
                     <div style={styles.alertMessage}>{action.description}</div>
+
                     {action.departmentKey ? (
                       <div style={styles.alertAction}>
                         Department: {getDepartmentLabel(action.departmentKey, departmentOptions)}
