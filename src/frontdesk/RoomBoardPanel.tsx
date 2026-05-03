@@ -5,6 +5,7 @@ import {
   loadLedgerEntries,
   type CanonicalLedgerEntry,
 } from "../finance/financialLedger";
+import FocusedViewPanel from "../components/FocusedViewPanel";
 import {
   generateFrontDeskInsights,
   generateFrontDeskRecommendedActions,
@@ -572,18 +573,17 @@ export default function RoomBoardPanel() {
       {msg ? <div style={styles.message}>{msg}</div> : null}
 
       {focusedFrontDeskView ? (
-        <div style={styles.focusedDetailCard}>
-          <button type="button" style={styles.backBtn} onClick={handleBackToOverview}>
-            ← Back to Room Board Overview
-          </button>
-          <div style={styles.focusTitle}>
-            {focusedFrontDeskView.type === "payment"
+        <FocusedViewPanel
+          title={
+            focusedFrontDeskView.type === "payment"
               ? "Collect Payment"
               : focusedFrontDeskView.type === "booking"
               ? "Booking Detail"
-              : "Room Detail"}
-          </div>
-
+              : "Room Detail"
+          }
+          subtitle="Room Board drill-down"
+          onBack={handleBackToOverview}
+        >
           {!selectedRoom ? (
             <div style={styles.emptyState}>Booking record not found in current room board.</div>
           ) : (
@@ -641,7 +641,7 @@ export default function RoomBoardPanel() {
               Use the existing booking/payment workflow for this selected room. No new payment system has been created.
             </div>
           ) : null}
-        </div>
+        </FocusedViewPanel>
       ) : null}
 
       {!activeRoomBoardView ? (
@@ -883,12 +883,15 @@ export default function RoomBoardPanel() {
           </div>
         </>
       ) : (
-        <div style={styles.focusHeader}>
-          <button type="button" style={styles.backBtn} onClick={handleBackToOverview}>
-            ← Back to Room Board Overview
-          </button>
-          <div style={styles.focusTitle}>{getRoomBoardViewTitle(activeRoomBoardView)}</div>
-        </div>
+        <FocusedViewPanel
+          title={getRoomBoardViewTitle(activeRoomBoardView)}
+          subtitle="Filtered Room Board view"
+          onBack={handleBackToOverview}
+        >
+          <div style={styles.emptyState}>
+            Select a room below, or use Back to return to the full Room Board overview.
+          </div>
+        </FocusedViewPanel>
       )}
 
       <div style={styles.layout}>
@@ -1229,33 +1232,6 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 11,
     fontWeight: 900,
     textTransform: "uppercase",
-  },
-  focusHeader: {
-    padding: 14,
-    borderRadius: 8,
-    background: "#ffffff",
-    border: "1px solid rgba(11,42,58,0.10)",
-  },
-  backBtn: {
-    border: "1px solid rgba(11,42,58,0.18)",
-    background: "#ffffff",
-    color: "#0b2a3a",
-    borderRadius: 8,
-    padding: "9px 12px",
-    cursor: "pointer",
-    fontWeight: 900,
-    marginBottom: 12,
-  },
-  focusTitle: {
-    color: "#0b2a3a",
-    fontSize: 22,
-    fontWeight: 900,
-  },
-  focusedDetailCard: {
-    padding: 14,
-    borderRadius: 8,
-    background: "#ffffff",
-    border: "1px solid rgba(11,42,58,0.10)",
   },
   focusedGrid: {
     display: "grid",
