@@ -29,6 +29,7 @@ type RoomBoardStatus =
   | "reserved"
   | "dirty"
   | "out_of_service";
+type RoomBoardView = "all" | RoomBoardStatus;
 
 type RoomCard = {
   roomNo: string;
@@ -84,6 +85,16 @@ function formatDateTime(value?: number) {
 
 function money(n?: number) {
   return Number.isFinite(Number(n)) ? Number(n).toFixed(2) : "0.00";
+}
+
+function getRoomBoardViewTitle(view: RoomBoardView | null) {
+  if (view === "all") return "All Rooms";
+  if (view === "available") return "Available Rooms";
+  if (view === "occupied") return "Occupied Rooms";
+  if (view === "reserved") return "Reserved Rooms";
+  if (view === "dirty") return "Dirty Rooms";
+  if (view === "out_of_service") return "Out of Service Rooms";
+  return "Room Board";
 }
 
 function sumLedgerAmount(
@@ -202,6 +213,7 @@ export default function RoomBoardPanel() {
   const [ledgerVersion, setLedgerVersion] = useState(0);
   const [selectedRoomNo, setSelectedRoomNo] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | RoomBoardStatus>("all");
+  const [activeRoomBoardView, setActiveRoomBoardView] = useState<RoomBoardView | null>(null);
   const [boardHighlighted, setBoardHighlighted] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -339,7 +351,7 @@ export default function RoomBoardPanel() {
     }, 0);
   }
 
-  function handleFilterClick(nextFilter: "all" | RoomBoardStatus) {
+  function handleFilterClick(nextFilter: RoomBoardView) {
     const nextRooms =
       nextFilter === "all"
         ? rooms
@@ -350,9 +362,17 @@ export default function RoomBoardPanel() {
     }
 
     setFilter(nextFilter);
+    setActiveRoomBoardView(nextFilter);
     setBoardHighlighted(true);
     focusRoomBoard();
     window.setTimeout(() => setBoardHighlighted(false), 900);
+  }
+
+  function handleBackToOverview() {
+    setActiveRoomBoardView(null);
+    setFilter("all");
+    if (rooms.length > 0) setSelectedRoomNo(rooms[0].roomNo);
+    focusRoomBoard();
   }
 
   function selectAlertRoom(alert: FrontDeskInsightAlert) {
@@ -527,221 +547,232 @@ export default function RoomBoardPanel() {
     <div style={styles.wrap}>
       {msg ? <div style={styles.message}>{msg}</div> : null}
 
-      <div style={styles.topStats}>
-        <div style={styles.statCard}>
-          <div style={styles.statLabel}>Available</div>
-          <div style={styles.statValue}>{stats.available}</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statLabel}>Occupied</div>
-          <div style={styles.statValue}>{stats.occupied}</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statLabel}>Reserved</div>
-          <div style={styles.statValue}>{stats.reserved}</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statLabel}>Dirty</div>
-          <div style={styles.statValue}>{stats.dirty}</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statLabel}>Out of Service</div>
-          <div style={styles.statValue}>{stats.out_of_service}</div>
-        </div>
-      </div>
-
-      <div style={styles.filterRow}>
-        <button
-          type="button"
-          style={filter === "all" ? styles.filterBtnActive : styles.filterBtn}
-          onClick={() => handleFilterClick("all")}
-        >
-          All Rooms
-        </button>
-        <button
-          type="button"
-          style={filter === "available" ? styles.filterBtnActive : styles.filterBtn}
-          onClick={() => handleFilterClick("available")}
-        >
-          Available
-        </button>
-        <button
-          type="button"
-          style={filter === "occupied" ? styles.filterBtnActive : styles.filterBtn}
-          onClick={() => handleFilterClick("occupied")}
-        >
-          Occupied
-        </button>
-        <button
-          type="button"
-          style={filter === "reserved" ? styles.filterBtnActive : styles.filterBtn}
-          onClick={() => handleFilterClick("reserved")}
-        >
-          Reserved
-        </button>
-        <button
-          type="button"
-          style={filter === "dirty" ? styles.filterBtnActive : styles.filterBtn}
-          onClick={() => handleFilterClick("dirty")}
-        >
-          Dirty
-        </button>
-        <button
-          type="button"
-          style={filter === "out_of_service" ? styles.filterBtnActive : styles.filterBtn}
-          onClick={() => handleFilterClick("out_of_service")}
-        >
-          Out of Service
-        </button>
-      </div>
-
-      <div style={styles.insightsCard}>
-        <div style={styles.sectionTitle}>Front Desk Insights</div>
-        <div style={styles.insightGrid}>
-          <div style={styles.insightItem}>
-            <div style={styles.statLabel}>Unpaid bookings</div>
-            <div style={styles.statValue}>{frontDeskInsights.unpaidBookings.length}</div>
-          </div>
-          <div style={styles.insightItem}>
-            <div style={styles.statLabel}>Total unpaid balance</div>
-            <div style={styles.statValue}>{money(totalUnpaidBalance)}</div>
-          </div>
-          <div style={styles.insightItem}>
-            <div style={styles.statLabel}>Top revenue room</div>
-            <div style={styles.statValue}>
-              {frontDeskInsights.topRooms[0]?.roomNo || "-"}
+      {!activeRoomBoardView ? (
+        <>
+          <div style={styles.topStats}>
+            <div style={styles.statCard}>
+              <div style={styles.statLabel}>Available</div>
+              <div style={styles.statValue}>{stats.available}</div>
             </div>
-            <div style={styles.insightMeta}>
-              {frontDeskInsights.topRooms[0]
-                ? money(frontDeskInsights.topRooms[0].revenue)
-                : "No room revenue"}
+            <div style={styles.statCard}>
+              <div style={styles.statLabel}>Occupied</div>
+              <div style={styles.statValue}>{stats.occupied}</div>
+            </div>
+            <div style={styles.statCard}>
+              <div style={styles.statLabel}>Reserved</div>
+              <div style={styles.statValue}>{stats.reserved}</div>
+            </div>
+            <div style={styles.statCard}>
+              <div style={styles.statLabel}>Dirty</div>
+              <div style={styles.statValue}>{stats.dirty}</div>
+            </div>
+            <div style={styles.statCard}>
+              <div style={styles.statLabel}>Out of Service</div>
+              <div style={styles.statValue}>{stats.out_of_service}</div>
             </div>
           </div>
-          <div style={styles.insightItem}>
-            <div style={styles.statLabel}>Partial payments</div>
-            <div style={styles.statValue}>{frontDeskInsights.partialPayments.length}</div>
+
+          <div style={styles.filterRow}>
+            <button
+              type="button"
+              style={filter === "all" ? styles.filterBtnActive : styles.filterBtn}
+              onClick={() => handleFilterClick("all")}
+            >
+              All Rooms
+            </button>
+            <button
+              type="button"
+              style={filter === "available" ? styles.filterBtnActive : styles.filterBtn}
+              onClick={() => handleFilterClick("available")}
+            >
+              Available
+            </button>
+            <button
+              type="button"
+              style={filter === "occupied" ? styles.filterBtnActive : styles.filterBtn}
+              onClick={() => handleFilterClick("occupied")}
+            >
+              Occupied
+            </button>
+            <button
+              type="button"
+              style={filter === "reserved" ? styles.filterBtnActive : styles.filterBtn}
+              onClick={() => handleFilterClick("reserved")}
+            >
+              Reserved
+            </button>
+            <button
+              type="button"
+              style={filter === "dirty" ? styles.filterBtnActive : styles.filterBtn}
+              onClick={() => handleFilterClick("dirty")}
+            >
+              Dirty
+            </button>
+            <button
+              type="button"
+              style={filter === "out_of_service" ? styles.filterBtnActive : styles.filterBtn}
+              onClick={() => handleFilterClick("out_of_service")}
+            >
+              Out of Service
+            </button>
           </div>
+
+          <div style={styles.insightsCard}>
+            <div style={styles.sectionTitle}>Front Desk Insights</div>
+            <div style={styles.insightGrid}>
+              <div style={styles.insightItem}>
+                <div style={styles.statLabel}>Unpaid bookings</div>
+                <div style={styles.statValue}>{frontDeskInsights.unpaidBookings.length}</div>
+              </div>
+              <div style={styles.insightItem}>
+                <div style={styles.statLabel}>Total unpaid balance</div>
+                <div style={styles.statValue}>{money(totalUnpaidBalance)}</div>
+              </div>
+              <div style={styles.insightItem}>
+                <div style={styles.statLabel}>Top revenue room</div>
+                <div style={styles.statValue}>
+                  {frontDeskInsights.topRooms[0]?.roomNo || "-"}
+                </div>
+                <div style={styles.insightMeta}>
+                  {frontDeskInsights.topRooms[0]
+                    ? money(frontDeskInsights.topRooms[0].revenue)
+                    : "No room revenue"}
+                </div>
+              </div>
+              <div style={styles.insightItem}>
+                <div style={styles.statLabel}>Partial payments</div>
+                <div style={styles.statValue}>{frontDeskInsights.partialPayments.length}</div>
+              </div>
+            </div>
+
+            {frontDeskInsights.alerts.length > 0 ? (
+              <div style={styles.alertList}>
+                {frontDeskInsights.alerts.slice(0, 5).map((alert) => (
+                  <div key={alert.id} style={styles.alertItem}>
+                    <div>{alert.message}</div>
+                    {alert.type === "unpaid_booking_balance" ? (
+                      <div style={styles.alertActionRow}>
+                        <button
+                          type="button"
+                          style={styles.alertActionBtn}
+                          onClick={() => handleInsightAction(alert, "collect")}
+                        >
+                          Collect Payment
+                        </button>
+                        <button
+                          type="button"
+                          style={styles.alertActionBtn}
+                          onClick={() => handleInsightAction(alert, "booking")}
+                        >
+                          View Booking
+                        </button>
+                        <button
+                          type="button"
+                          style={styles.alertActionBtn}
+                          onClick={() => handleInsightAction(alert, "room")}
+                        >
+                          View Room
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={styles.emptyState}>No front desk financial alerts right now.</div>
+            )}
+          </div>
+
+          <div style={styles.insightsCard}>
+            <div style={styles.sectionTitle}>Front Desk Recommended Actions</div>
+            {frontDeskActions.length === 0 ? (
+              <div style={styles.emptyState}>No front desk recommendations right now.</div>
+            ) : (
+              <div style={styles.recommendationList}>
+                {frontDeskActions.map((action) => (
+                  <div
+                    key={action.id}
+                    style={{
+                      ...styles.recommendationItem,
+                      ...(action.severity === "danger"
+                        ? styles.recommendationDanger
+                        : action.severity === "warning"
+                        ? styles.recommendationWarning
+                        : action.severity === "success"
+                        ? styles.recommendationSuccess
+                        : styles.recommendationInfo),
+                    }}
+                  >
+                    <div style={styles.recommendationTop}>
+                      <div>
+                        <div style={styles.recommendationTitle}>{action.title}</div>
+                        <div style={styles.recommendationMessage}>{action.message}</div>
+                      </div>
+                      <span style={styles.recommendationBadge}>{action.severity}</span>
+                    </div>
+                    <div style={styles.recommendationAction}>{action.recommendedAction}</div>
+                    <div style={styles.alertActionRow}>
+                      {action.roomNo ? (
+                        <button
+                          type="button"
+                          style={styles.alertActionBtn}
+                          onClick={() => handleRecommendedAction(action, "view_room")}
+                        >
+                          View Room
+                        </button>
+                      ) : null}
+                      {action.bookingId ? (
+                        <button
+                          type="button"
+                          style={styles.alertActionBtn}
+                          onClick={() => handleRecommendedAction(action, "view_booking")}
+                        >
+                          View Booking
+                        </button>
+                      ) : null}
+                      {action.actionType === "collect_payment" ||
+                      action.actionType === "follow_up_before_checkout" ? (
+                        <button
+                          type="button"
+                          style={styles.alertActionBtn}
+                          onClick={() => handleRecommendedAction(action, "collect_payment")}
+                        >
+                          Collect Payment
+                        </button>
+                      ) : null}
+                      {action.actionType === "send_housekeeping" ? (
+                        <button
+                          type="button"
+                          style={styles.alertActionBtn}
+                          onClick={() => handleRecommendedAction(action, "mark_available")}
+                        >
+                          Mark Available
+                        </button>
+                      ) : null}
+                      {action.actionType === "follow_up_before_checkout" ? (
+                        <button
+                          type="button"
+                          style={styles.alertActionBtn}
+                          onClick={() => handleRecommendedAction(action, "mark_dirty")}
+                        >
+                          Mark Dirty
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <div style={styles.focusHeader}>
+          <button type="button" style={styles.backBtn} onClick={handleBackToOverview}>
+            ← Back to Room Board Overview
+          </button>
+          <div style={styles.focusTitle}>{getRoomBoardViewTitle(activeRoomBoardView)}</div>
         </div>
-
-        {frontDeskInsights.alerts.length > 0 ? (
-          <div style={styles.alertList}>
-            {frontDeskInsights.alerts.slice(0, 5).map((alert) => (
-              <div key={alert.id} style={styles.alertItem}>
-                <div>{alert.message}</div>
-                {alert.type === "unpaid_booking_balance" ? (
-                  <div style={styles.alertActionRow}>
-                    <button
-                      type="button"
-                      style={styles.alertActionBtn}
-                      onClick={() => handleInsightAction(alert, "collect")}
-                    >
-                      Collect Payment
-                    </button>
-                    <button
-                      type="button"
-                      style={styles.alertActionBtn}
-                      onClick={() => handleInsightAction(alert, "booking")}
-                    >
-                      View Booking
-                    </button>
-                    <button
-                      type="button"
-                      style={styles.alertActionBtn}
-                      onClick={() => handleInsightAction(alert, "room")}
-                    >
-                      View Room
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div style={styles.emptyState}>No front desk financial alerts right now.</div>
-        )}
-      </div>
-
-      <div style={styles.insightsCard}>
-        <div style={styles.sectionTitle}>Front Desk Recommended Actions</div>
-        {frontDeskActions.length === 0 ? (
-          <div style={styles.emptyState}>No front desk recommendations right now.</div>
-        ) : (
-          <div style={styles.recommendationList}>
-            {frontDeskActions.map((action) => (
-              <div
-                key={action.id}
-                style={{
-                  ...styles.recommendationItem,
-                  ...(action.severity === "danger"
-                    ? styles.recommendationDanger
-                    : action.severity === "warning"
-                    ? styles.recommendationWarning
-                    : action.severity === "success"
-                    ? styles.recommendationSuccess
-                    : styles.recommendationInfo),
-                }}
-              >
-                <div style={styles.recommendationTop}>
-                  <div>
-                    <div style={styles.recommendationTitle}>{action.title}</div>
-                    <div style={styles.recommendationMessage}>{action.message}</div>
-                  </div>
-                  <span style={styles.recommendationBadge}>{action.severity}</span>
-                </div>
-                <div style={styles.recommendationAction}>{action.recommendedAction}</div>
-                <div style={styles.alertActionRow}>
-                  {action.roomNo ? (
-                    <button
-                      type="button"
-                      style={styles.alertActionBtn}
-                      onClick={() => handleRecommendedAction(action, "view_room")}
-                    >
-                      View Room
-                    </button>
-                  ) : null}
-                  {action.bookingId ? (
-                    <button
-                      type="button"
-                      style={styles.alertActionBtn}
-                      onClick={() => handleRecommendedAction(action, "view_booking")}
-                    >
-                      View Booking
-                    </button>
-                  ) : null}
-                  {action.actionType === "collect_payment" ||
-                  action.actionType === "follow_up_before_checkout" ? (
-                    <button
-                      type="button"
-                      style={styles.alertActionBtn}
-                      onClick={() => handleRecommendedAction(action, "collect_payment")}
-                    >
-                      Collect Payment
-                    </button>
-                  ) : null}
-                  {action.actionType === "send_housekeeping" ? (
-                    <button
-                      type="button"
-                      style={styles.alertActionBtn}
-                      onClick={() => handleRecommendedAction(action, "mark_available")}
-                    >
-                      Mark Available
-                    </button>
-                  ) : null}
-                  {action.actionType === "follow_up_before_checkout" ? (
-                    <button
-                      type="button"
-                      style={styles.alertActionBtn}
-                      onClick={() => handleRecommendedAction(action, "mark_dirty")}
-                    >
-                      Mark Dirty
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      )}
 
       <div style={styles.layout}>
         <div
@@ -752,7 +783,7 @@ export default function RoomBoardPanel() {
             ...(boardHighlighted ? styles.boardCardHighlight : {}),
           }}
         >
-          <div style={styles.sectionTitle}>Room Board</div>
+          <div style={styles.sectionTitle}>{getRoomBoardViewTitle(activeRoomBoardView)}</div>
 
           {filteredRooms.length === 0 ? (
             <div style={styles.emptyBoard}>No rooms found in this status.</div>
@@ -1078,6 +1109,27 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 11,
     fontWeight: 900,
     textTransform: "uppercase",
+  },
+  focusHeader: {
+    padding: 14,
+    borderRadius: 8,
+    background: "#ffffff",
+    border: "1px solid rgba(11,42,58,0.10)",
+  },
+  backBtn: {
+    border: "1px solid rgba(11,42,58,0.18)",
+    background: "#ffffff",
+    color: "#0b2a3a",
+    borderRadius: 8,
+    padding: "9px 12px",
+    cursor: "pointer",
+    fontWeight: 900,
+    marginBottom: 12,
+  },
+  focusTitle: {
+    color: "#0b2a3a",
+    fontSize: 22,
+    fontWeight: 900,
   },
   filterRow: {
     display: "flex",
