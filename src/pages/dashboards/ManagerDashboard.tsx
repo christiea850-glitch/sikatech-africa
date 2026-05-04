@@ -5,6 +5,7 @@ import { useDepartments } from "../../departments/DepartmentsContext";
 import { useExpenses } from "../../expenses/ExpenseContext";
 import { loadBookings } from "../../frontdesk/bookingsStorage";
 import { loadLedgerEntries, roundLedgerMoney } from "../../finance/financialLedger";
+import { useScrollHighlight } from "../../hooks/useScrollHighlight";
 import { useSales } from "../../sales/SalesContext";
 import { useShift } from "../../shifts/ShiftContext";
 import { loadShiftClosings } from "../../shifts/shiftClosingStore";
@@ -102,8 +103,15 @@ export default function ManagerDashboard() {
   const [datePreset, setDatePreset] = useState<DatePreset>("today");
   const [customRange, setCustomRange] = useState<DateRange>(() => getPresetRange("today"));
   const [groupBy, setGroupBy] = useState<GroupBy>("department");
-  const groupedPerformanceRef = useRef<HTMLElement | null>(null);
   const previousGroupByRef = useRef<GroupBy>(groupBy);
+  const {
+    ref: groupedPerformanceRef,
+    flash: groupedPerformanceFlash,
+    trigger: triggerGroupedPerformanceHighlight,
+  } = useScrollHighlight<HTMLElement>({
+    durationMs: 1000,
+    block: "start",
+  });
 
   const activeRange = datePreset === "custom" ? customRange : getPresetRange(datePreset);
 
@@ -111,11 +119,8 @@ export default function ManagerDashboard() {
     if (previousGroupByRef.current === groupBy) return;
 
     previousGroupByRef.current = groupBy;
-    groupedPerformanceRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-  }, [groupBy]);
+    triggerGroupedPerformanceHighlight();
+  }, [groupBy, triggerGroupedPerformanceHighlight]);
 
   const enabledDepartments = useMemo(
     () => departments.filter((department) => department.enabled),
@@ -461,7 +466,13 @@ export default function ManagerDashboard() {
         )}
       </section>
 
-      <section ref={groupedPerformanceRef} style={styles.section}>
+      <section
+        ref={groupedPerformanceRef}
+        style={{
+          ...styles.section,
+          ...(groupedPerformanceFlash ? styles.sectionFlash : {}),
+        }}
+      >
         <div style={styles.sectionHeader}>
           <h2 style={styles.sectionTitle}>Grouped Performance</h2>
           <span style={styles.sectionMeta}>
@@ -621,6 +632,12 @@ const styles: Record<string, CSSProperties> = {
   },
   section: {
     marginBottom: 20,
+  },
+  sectionFlash: {
+    borderRadius: 8,
+    background: "rgba(239, 246, 255, 0.75)",
+    boxShadow: "0 0 0 3px rgba(59, 130, 246, 0.16), 0 12px 28px rgba(15, 38, 55, 0.08)",
+    transition: "background 220ms ease, box-shadow 220ms ease",
   },
   sectionHeader: {
     display: "flex",
