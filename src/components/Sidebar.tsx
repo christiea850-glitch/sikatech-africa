@@ -44,13 +44,18 @@ export default function Sidebar() {
 
   if (!user) return null;
 
+  const rawRole = (user as any)?.role;
+  const normalizedRole = String(rawRole || "").toLowerCase().trim();
   const privileged = canViewBroadOperations(user);
-  const isOwnerOrSuperAdmin = user.role === "owner" || user.role === "super_admin";
-  const isAdmin = user.role === "admin";
-  const isManager = user.role === "manager" || user.role === "assistant_manager";
-  const isAccounting = user.role === "accounting";
-  const isAuditor = user.role === "auditor";
-  const primaryDailyOperator = user.role === "staff" || user.role === "front_desk";
+  const isOwnerOrSuperAdmin = normalizedRole === "owner" || normalizedRole === "super_admin";
+  const isAdmin = normalizedRole === "admin";
+  const isManager =
+    normalizedRole === "manager" ||
+    normalizedRole === "assistant_manager" ||
+    normalizedRole === "assistant manager";
+  const isAccounting = normalizedRole === "accounting";
+  const isAuditor = normalizedRole === "auditor";
+  const primaryDailyOperator = normalizedRole === "staff" || normalizedRole === "front_desk";
   const showSetupLinks = isOwnerOrSuperAdmin || isAdmin;
   const showAuditLogs = isOwnerOrSuperAdmin || isAdmin || isAuditor;
   const showLedgerDebug = isOwnerOrSuperAdmin || isAdmin;
@@ -190,14 +195,14 @@ export default function Sidebar() {
   }, [user, modules, privileged, isManager, isAuditor]);
 
   const visibleDepartments = useMemo(() => {
-    if (isAccounting || isAuditor) return [];
+    if (isManager || isAccounting || isAuditor) return [];
 
     return departments
       .filter((d: any) => d.enabled)
       .filter((d: any) => canViewDepartmentRoute(user, d.key))
       .slice()
       .sort((a: any, b: any) => String(a.name).localeCompare(String(b.name)));
-  }, [departments, user, isAccounting, isAuditor]);
+  }, [departments, user, isManager, isAccounting, isAuditor]);
 
   const departmentItems: Item[] = useMemo(() => {
     return visibleDepartments.map((d: any) => ({
