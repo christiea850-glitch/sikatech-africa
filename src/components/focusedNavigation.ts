@@ -32,3 +32,12 @@ export function handleCloseFocusedView<T>(
     });
   });
 }
+
+export function restoreFocusedViewScroll(scrollY: number) {
+  requestAnimationFrame(() => {
+    window.scrollTo({
+      top: Math.max(0, scrollY),
+      behavior: "smooth",
+    });
+  });
+}

@@ -6,6 +6,7 @@ import {
   type CanonicalLedgerEntry,
 } from "../finance/financialLedger";
 import FocusedViewPanel from "../components/FocusedViewPanel";
+import ClickableCard from "../components/ClickableCard";
 import {
   handleOpenFocusedView,
   restoreFocusedViewScroll,
@@ -744,32 +745,38 @@ export default function RoomBoardPanel() {
           <div style={styles.insightsCard}>
             <div style={styles.sectionTitle}>Front Desk Insights</div>
             <div style={styles.insightGrid}>
-              <div
-                style={{ ...styles.insightItem, ...styles.clickableAlertItem }}
+              <ClickableCard
+                style={styles.insightItem}
                 onClick={() => {
                   const first = frontDeskInsights.unpaidBookings[0];
                   if (first) openFocusedFrontDeskView("booking", first);
                 }}
+                hint="View details"
+                ariaLabel="View unpaid booking details"
               >
                 <div style={styles.statLabel}>Unpaid bookings</div>
                 <div style={styles.statValue}>{frontDeskInsights.unpaidBookings.length}</div>
-              </div>
-              <div
-                style={{ ...styles.insightItem, ...styles.clickableAlertItem }}
+              </ClickableCard>
+              <ClickableCard
+                style={styles.insightItem}
                 onClick={() => {
                   const first = frontDeskInsights.unpaidBookings[0];
                   if (first) openFocusedFrontDeskView("payment", first);
                 }}
+                hint="Click to view"
+                ariaLabel="View unpaid balance details"
               >
                 <div style={styles.statLabel}>Total unpaid balance</div>
                 <div style={styles.statValue}>{money(totalUnpaidBalance)}</div>
-              </div>
-              <div
-                style={{ ...styles.insightItem, ...styles.clickableAlertItem }}
+              </ClickableCard>
+              <ClickableCard
+                style={styles.insightItem}
                 onClick={() => {
                   const topRoom = frontDeskInsights.topRooms[0];
                   if (topRoom) openFocusedFrontDeskView("room", { roomNo: topRoom.roomNo });
                 }}
+                hint="View room"
+                ariaLabel="View top revenue room"
               >
                 <div style={styles.statLabel}>Top revenue room</div>
                 <div style={styles.statValue}>
@@ -780,17 +787,19 @@ export default function RoomBoardPanel() {
                     ? money(frontDeskInsights.topRooms[0].revenue)
                     : "No room revenue"}
                 </div>
-              </div>
-              <div
-                style={{ ...styles.insightItem, ...styles.clickableAlertItem }}
+              </ClickableCard>
+              <ClickableCard
+                style={styles.insightItem}
                 onClick={() => {
                   const first = frontDeskInsights.partialPayments[0];
                   if (first) openFocusedFrontDeskView("payment", first);
                 }}
+                hint="View details"
+                ariaLabel="View partial payment details"
               >
                 <div style={styles.statLabel}>Partial payments</div>
                 <div style={styles.statValue}>{frontDeskInsights.partialPayments.length}</div>
-              </div>
+              </ClickableCard>
             </div>
 
             {frontDeskInsights.alerts.length > 0 ? (

@@ -16,6 +16,7 @@ import {
   Line,
 } from "recharts";
 import { useDepartments } from "../departments/DepartmentsContext";
+import ClickableCard from "../components/ClickableCard";
 import FocusedViewPanel from "../components/FocusedViewPanel";
 import {
   handleOpenFocusedView,
@@ -333,18 +334,19 @@ function MetricCard({
 
   if (onClick) {
     return (
-      <button
-        type="button"
+      <ClickableCard
         onClick={onClick}
         style={{
           ...styles.metricCard,
-          ...styles.metricCardButton,
-          ...(active ? styles.metricCardActive : {}),
           borderTop: `4px solid ${accent}`,
         }}
+        active={active}
+        activeStyle={styles.metricCardActive}
+        hint="Click to view"
+        ariaLabel={`View ${title} details`}
       >
         {content}
-      </button>
+      </ClickableCard>
     );
   }
 
@@ -1732,8 +1734,7 @@ export default function SalesDashboardPage() {
             ) : (
               <div style={styles.alertsGrid}>
                 {smartAlerts.map((alert) => (
-                  <button
-                    type="button"
+                  <ClickableCard
                     key={alert.id}
                     onClick={() => {
                       if (alert.departmentKey) setSelectedDepartmentKey(alert.departmentKey);
@@ -1753,7 +1754,6 @@ export default function SalesDashboardPage() {
                     }}
                     style={{
                       ...styles.alertCard,
-                      ...styles.alertCardButton,
                       ...(alert.severity === "danger"
                         ? styles.alertDanger
                         : alert.severity === "warning"
@@ -1762,6 +1762,8 @@ export default function SalesDashboardPage() {
                         ? styles.alertSuccess
                         : styles.alertInfo),
                     }}
+                    hint="Click to view"
+                    ariaLabel={`View alert details: ${alert.title}`}
                   >
                     <div style={styles.alertTitle}>
                       {alert.title}
@@ -1782,7 +1784,7 @@ export default function SalesDashboardPage() {
                     </div>
                     <div style={styles.alertMessage}>{alert.message}</div>
                     <div style={styles.alertAction}>{alert.recommendedAction}</div>
-                  </button>
+                  </ClickableCard>
                 ))}
               </div>
             )}
@@ -1794,19 +1796,19 @@ export default function SalesDashboardPage() {
             ) : (
               <div style={styles.alertsGrid}>
                 {recommendedActions.map((action) => (
-                  <button
-                    type="button"
+                  <ClickableCard
                     key={action.id}
                     onClick={() => openDashboardFocusedView({ type: "action", action })}
                     style={{
                       ...styles.alertCard,
-                      ...styles.alertCardButton,
                       ...(action.severity === "high"
                         ? styles.alertDanger
                         : action.severity === "medium"
                         ? styles.alertWarning
                         : styles.alertInfo),
                     }}
+                    hint="View details"
+                    ariaLabel={`View recommended action: ${action.title}`}
                   >
                     <div style={styles.alertTitle}>
                       {action.title}
@@ -1831,7 +1833,7 @@ export default function SalesDashboardPage() {
                         Department: {getDepartmentLabel(action.departmentKey, departmentOptions)}
                       </div>
                     ) : null}
-                  </button>
+                  </ClickableCard>
                 ))}
               </div>
             )}
@@ -2025,9 +2027,8 @@ export default function SalesDashboardPage() {
             ) : (
               <div style={styles.leaderboardList}>
                 {departmentLeaderboard.slice(0, 5).map((row) => (
-                  <button
+                  <ClickableCard
                     key={row.department}
-                    type="button"
                     style={styles.leaderboardCard}
                     onClick={() => {
                       setSelectedDepartmentKey(row.department);
@@ -2037,6 +2038,8 @@ export default function SalesDashboardPage() {
                         title: `${getDepartmentLabel(row.department, departmentOptions)} Department`,
                       });
                     }}
+                    hint="View department"
+                    ariaLabel={`View ${getDepartmentLabel(row.department, departmentOptions)} department details`}
                   >
                     <div style={styles.leaderboardTop}>
                       <div style={styles.leaderboardLeft}>
@@ -2081,7 +2084,7 @@ export default function SalesDashboardPage() {
                       <span>Margin: {row.marginPct.toFixed(1)}%</span>
                       <span>Collections: {row.collectionPct.toFixed(1)}%</span>
                     </div>
-                  </button>
+                  </ClickableCard>
                 ))}
               </div>
             )}
@@ -2479,9 +2482,8 @@ export default function SalesDashboardPage() {
             ) : (
               <div style={styles.leaderboardList}>
                 {departmentLeaderboard.map((row) => (
-                  <button
+                  <ClickableCard
                     key={row.department}
-                    type="button"
                     style={styles.leaderboardCard}
                     onClick={() => {
                       setSelectedDepartmentKey(row.department);
@@ -2491,6 +2493,8 @@ export default function SalesDashboardPage() {
                         title: `${getDepartmentLabel(row.department, departmentOptions)} Department`,
                       });
                     }}
+                    hint="View department"
+                    ariaLabel={`View ${getDepartmentLabel(row.department, departmentOptions)} department details`}
                   >
                     <div style={styles.leaderboardTop}>
                       <div style={styles.leaderboardLeft}>
@@ -2535,7 +2539,7 @@ export default function SalesDashboardPage() {
                       <span>Margin: {row.marginPct.toFixed(1)}%</span>
                       <span>Collections: {row.collectionPct.toFixed(1)}%</span>
                     </div>
-                  </button>
+                  </ClickableCard>
                 ))}
               </div>
             )}
