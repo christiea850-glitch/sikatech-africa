@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 
 import { useDepartments } from "../../departments/DepartmentsContext";
@@ -102,8 +102,20 @@ export default function ManagerDashboard() {
   const [datePreset, setDatePreset] = useState<DatePreset>("today");
   const [customRange, setCustomRange] = useState<DateRange>(() => getPresetRange("today"));
   const [groupBy, setGroupBy] = useState<GroupBy>("department");
+  const groupedPerformanceRef = useRef<HTMLElement | null>(null);
+  const previousGroupByRef = useRef<GroupBy>(groupBy);
 
   const activeRange = datePreset === "custom" ? customRange : getPresetRange(datePreset);
+
+  useEffect(() => {
+    if (previousGroupByRef.current === groupBy) return;
+
+    previousGroupByRef.current = groupBy;
+    groupedPerformanceRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, [groupBy]);
 
   const enabledDepartments = useMemo(
     () => departments.filter((department) => department.enabled),
@@ -449,7 +461,7 @@ export default function ManagerDashboard() {
         )}
       </section>
 
-      <section style={styles.section}>
+      <section ref={groupedPerformanceRef} style={styles.section}>
         <div style={styles.sectionHeader}>
           <h2 style={styles.sectionTitle}>Grouped Performance</h2>
           <span style={styles.sectionMeta}>
