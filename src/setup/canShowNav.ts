@@ -1,6 +1,7 @@
 // src/setup/canShowNav.ts
 import type { User } from "../auth/AuthContext";
 import { ROLE_ACCESS } from "../auth/access";
+import { canViewModuleKey, isOwnerRole } from "../auth/permissions";
 
 export type ModuleConfig = {
   key: string;
@@ -8,16 +9,8 @@ export type ModuleConfig = {
   viewRoles?: string[];
 };
 
-const PRIVILEGED_ROLES = [
-  "admin",
-  "manager",
-  "assistant_manager",
-  "accounting",
-  "auditor",
-] as const;
-
 function isPrivileged(role: string): boolean {
-  return (PRIVILEGED_ROLES as readonly string[]).includes(role);
+  return canViewModuleKey(role, "accounting") || isOwnerRole(role);
 }
 
 /**
@@ -34,6 +27,7 @@ export function permissionKeyFor(rawKey: string): string {
     case "activity":
       return "dashboard";
     case "sales-dashboard":
+    case "sales-summary":
     case "sales-history":
     case "sales-history-central":
       return "sales";
@@ -66,6 +60,7 @@ export function canShowNav(
   // Static (role) access
   const allowedList = ROLE_ACCESS[user.role] as readonly string[] | undefined;
   if (allowedList?.includes(key) === true) return true;
+  if (canViewModuleKey(user, key)) return true;
 
   // Dynamic (module) access
   if (!mod) return false;

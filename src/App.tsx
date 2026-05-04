@@ -40,8 +40,22 @@ export default function App() {
 
         <Route path="dashboard" element={<DashboardPage />} />
 
-        <Route path="sales" element={<SalesPage />} />
-        <Route path="sales-dashboard" element={<SalesDashboardPage />} />
+        <Route
+          path="sales"
+          element={
+            <ProtectedRoute moduleKey="sales-entry">
+              <SalesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="sales-dashboard"
+          element={
+            <ProtectedRoute moduleKey="sales-summary">
+              <SalesDashboardPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="accounting-workbench"
           element={
@@ -53,7 +67,7 @@ export default function App() {
         <Route
           path="ledger-debug"
           element={
-            <ProtectedRoute moduleKey="accounting-workbench">
+            <ProtectedRoute moduleKey="ledger-debug">
               <LedgerDebugPage />
             </ProtectedRoute>
           }

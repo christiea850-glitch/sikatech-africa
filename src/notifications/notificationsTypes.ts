@@ -1,10 +1,13 @@
 // src/notifications/notificationsTypes.ts
 
 export type Role =
+  | "owner"
+  | "super_admin"
   | "admin"
   | "manager"
   | "assistant_manager"
   | "accounting"
+  | "front_desk"
   | "staff"
   | "auditor";
 

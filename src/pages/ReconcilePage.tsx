@@ -3,17 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { canOperateFrontDesk } from "../auth/permissions";
 import { useShift } from "../shifts/ShiftContext";
 import { getRoomFolio, getShiftSummary } from "../api/mvpClient";
-
-const PRIV = new Set([
-  "admin",
-  "manager",
-  "assistant_manager",
-  "accounting",
-  "auditor",
-  "front_desk",
-]);
 
 function money(n: number) {
   return (Number.isFinite(n) ? n : 0).toFixed(2);
@@ -42,7 +34,7 @@ export default function ReconcilePage() {
   const [folio, setFolio] = useState<any | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const canView = !!user && PRIV.has(String(user.role));
+  const canView = !!user && canOperateFrontDesk(user);
 
   const loadSummary = async () => {
     if (!user || !activeShift?.id || !canView) return;

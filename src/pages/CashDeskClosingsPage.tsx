@@ -1,6 +1,7 @@
 // src/pages/CashDeskClosingsPage.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { canApproveClosings, canReviewFinancials } from "../auth/permissions";
 import { recordShiftSubmission } from "../lib/shiftTrace";
 import {
   getShiftClosingById,
@@ -12,6 +13,8 @@ import {
 } from "../shifts/shiftClosingStore";
 
 type Role =
+  | "owner"
+  | "super_admin"
   | "admin"
   | "manager"
   | "assistant_manager"
@@ -107,8 +110,7 @@ function resolveBusinessId(raw: unknown): number {
 }
 
 function canManagerApprove(role: string) {
-  void role;
-  return false;
+  return canApproveClosings(role);
 }
 
 function canAccountingReview(role: string) {
@@ -222,11 +224,7 @@ export default function CashDeskClosingsPage() {
 
   const canSeePage = useMemo(() => {
     return (
-      role === "admin" ||
-      role === "manager" ||
-      role === "assistant_manager" ||
-      role === "accounting" ||
-      role === "auditor"
+      canReviewFinancials(role)
     );
   }, [role]);
 

@@ -2,6 +2,7 @@
 import { createContext, useContext, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { User } from "../auth/AuthContext";
+import { ALL_ROLES, canManageSetup, canReviewFinancials } from "../auth/permissions";
 
 export type Role = User["role"];
 
@@ -40,8 +41,8 @@ function toKey(label: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-const ALL_ROLES: Role[] = ["admin", "manager", "assistant_manager", "accounting", "auditor", "staff"];
-const PRIVILEGED_ROLES: Role[] = ["admin", "manager", "assistant_manager", "accounting", "auditor"];
+const FINANCIAL_VIEW_ROLES = ALL_ROLES.filter((role) => canReviewFinancials(role));
+const SETUP_ROLES = ALL_ROLES.filter((role) => canManageSetup(role));
 
 const DEFAULT_MODULES: ModuleConfig[] = [
   {
@@ -56,7 +57,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     key: "audit-logs",
     label: "Audit Logs",
     enabled: true,
-    viewRoles: ["admin", "manager", "assistant_manager", "auditor"],
+    viewRoles: ["owner", "super_admin", "admin", "manager", "assistant_manager", "auditor"],
     editRoles: [],
     system: true,
   },
@@ -64,7 +65,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     key: "activity",
     label: "Activity Feed",
     enabled: true,
-    viewRoles: ["admin", "manager", "assistant_manager", "auditor"],
+    viewRoles: ["owner", "super_admin", "admin", "manager", "assistant_manager", "auditor"],
     editRoles: [],
     system: true,
   },
@@ -72,7 +73,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     key: "executive-overview",
     label: "Executive Overview Log",
     enabled: true,
-    viewRoles: ["admin", "manager"],
+    viewRoles: ["owner", "super_admin", "admin", "manager"],
     editRoles: [],
     system: true,
   },
@@ -82,16 +83,16 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     key: "manage-modules",
     label: "Manage Modules",
     enabled: true,
-    viewRoles: ["admin", "manager"],
-    editRoles: ["admin", "manager"],
+    viewRoles: SETUP_ROLES,
+    editRoles: SETUP_ROLES,
     system: true,
   },
   {
     key: "manage-departments",
     label: "Manage Departments",
     enabled: true,
-    viewRoles: ["admin", "manager"],
-    editRoles: ["admin", "manager"],
+    viewRoles: SETUP_ROLES,
+    editRoles: SETUP_ROLES,
     system: true,
   },
 
@@ -114,7 +115,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     key: "accounting",
     label: "Accounting",
     enabled: true,
-    viewRoles: PRIVILEGED_ROLES,
+    viewRoles: FINANCIAL_VIEW_ROLES,
     editRoles: ["accounting"],
   },
 ];
@@ -226,7 +227,7 @@ export function ModuleConfigProvider({ children }: { children: ReactNode }) {
             key,
             label,
             enabled: m.enabled ?? true,
-            viewRoles: m.viewRoles ?? PRIVILEGED_ROLES,
+            viewRoles: m.viewRoles ?? FINANCIAL_VIEW_ROLES,
             editRoles: m.editRoles ?? ["accounting"],
             system: false,
           },

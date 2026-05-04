@@ -4,8 +4,7 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useDepartments } from "../departments/DepartmentsContext";
 import type { Role } from "../departments/DepartmentsContext";
-
-const MANAGE_ROLES = new Set<Role>(["admin", "manager", "assistant_manager"]);
+import { canManageSetup } from "../auth/permissions";
 
 export default function DepartmentsPage() {
   const { user } = useAuth();
@@ -24,7 +23,7 @@ export default function DepartmentsPage() {
   if (!user) return null;
 
   // ✅ HARD STOP: staff/auditor/accounting must NEVER see this page
-  if (!MANAGE_ROLES.has(user.role as Role)) {
+  if (!canManageSetup(user)) {
     // If staff has a departmentKey, send them back to their dept page
     const deptKey = (user as any).departmentKey;
     return <Navigate to={deptKey ? `/app/departments/${deptKey}` : "/app/dashboard"} replace />;

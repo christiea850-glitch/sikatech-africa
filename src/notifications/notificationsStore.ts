@@ -1,5 +1,6 @@
 // src/notifications/notificationsStore.ts
 import type { SikaNotification, Role } from "./notificationsTypes";
+import { canViewBroadOperations } from "../auth/permissions";
 
 export const NOTIFY_STORAGE_KEY = "sikatech_notify_v1";
 
@@ -89,7 +90,7 @@ export function canUserSeeNotification(
   // - privileged roles always
   // - staff only if their dept matches
   if (Array.isArray(toDeptKeys) && toDeptKeys.length > 0) {
-    if (role === "admin" || role === "manager" || role === "assistant_manager" || role === "accounting" || role === "auditor") {
+    if (canViewBroadOperations(role)) {
       return true;
     }
     if (!deptKey) return false;

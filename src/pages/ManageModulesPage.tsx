@@ -5,10 +5,11 @@ import { useModuleConfig } from "../setup/ModuleConfigContext";
 import type { User } from "../auth/AuthContext";
 import { useActivity } from "../activity/ActivityContext";
 import { useAuth } from "../auth/AuthContext";
+import { ALL_ROLES, canReviewFinancials } from "../auth/permissions";
 
 type Role = User["role"];
 
-const ALL_ROLES: Role[] = ["admin", "manager", "assistant_manager", "accounting", "auditor", "staff"];
+const DEFAULT_VIEW_ROLES = ALL_ROLES.filter((role) => canReviewFinancials(role));
 
 function toKey(label: string) {
   return label
@@ -30,7 +31,7 @@ export default function ManageModulesPage() {
   const [name, setName] = useState("");
   const [enabled, setEnabled] = useState(true);
 
-  const [viewRoles, setViewRoles] = useState<Role[]>(["admin", "manager", "assistant_manager", "auditor", "accounting"]);
+  const [viewRoles, setViewRoles] = useState<Role[]>(DEFAULT_VIEW_ROLES);
   const [editRoles, setEditRoles] = useState<Role[]>(["accounting"]);
 
   const sorted = useMemo(() => {
@@ -90,7 +91,7 @@ export default function ManageModulesPage() {
 
     setName("");
     setEnabled(true);
-    setViewRoles(["admin", "manager", "assistant_manager", "auditor", "accounting"]);
+    setViewRoles(DEFAULT_VIEW_ROLES);
     setEditRoles(["accounting"]);
 
     setSearchParams({ focus: "1" }, { replace: true });

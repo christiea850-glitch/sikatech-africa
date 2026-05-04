@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { canReviewFinancials } from "../auth/permissions";
 import { useBusinessSetup } from "../setup/BusinessSetupContext";
 import { formatDepartmentLabel, normalizeDepartmentKey } from "../lib/departments";
 import { useShift } from "../shifts/ShiftContext";
@@ -305,12 +306,7 @@ export default function AccountingWorkbenchPage() {
   const [collapsedUnclosedDates, setCollapsedUnclosedDates] = useState<Record<string, boolean>>({});
 
   const role = String(user?.role || "").toLowerCase();
-  const allowed =
-    role === "accounting" ||
-    role === "admin" ||
-    role === "manager" ||
-    role === "assistant_manager" ||
-    role === "auditor";
+  const allowed = canReviewFinancials(role);
   const canEditReviewLayer = role === "accounting";
   const businessName = resolveBusinessName(user, setupBusinessName);
   const startDate = dateRange.startDate;

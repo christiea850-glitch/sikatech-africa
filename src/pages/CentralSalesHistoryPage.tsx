@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { canReviewFinancials } from "../auth/permissions";
 import type { Transaction } from "../sales/FrontDeskEntry";
 
 const STORAGE_KEY = "sikatech_transactions_v1";
@@ -81,13 +82,7 @@ const deptOptions: Array<{ value: DeptFilter; label: string }> = [
 ];
 
 function canAccessCentral(role?: string) {
-  return (
-    role === "admin" ||
-    role === "accounting" ||
-    role === "manager" ||
-    role === "assistant_manager" ||
-    role === "auditor"
-  );
+  return canReviewFinancials(role);
 }
 
 export default function CentralSalesHistoryPage() {

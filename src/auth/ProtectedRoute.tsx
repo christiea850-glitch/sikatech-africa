@@ -4,6 +4,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 import { useModuleConfig } from "../setup/ModuleConfigContext";
 import { canShowNav } from "../nav/canSeeNav";
+import { canManageSetup, canReviewFinancials, canViewModuleKey } from "./permissions";
 
 type Props = {
   children: ReactNode;
@@ -22,10 +23,7 @@ export default function ProtectedRoute({ children, moduleKey }: Props) {
   if (moduleKey) {
     // ✅ hard role rule for manage-departments (even if module is enabled)
     if (moduleKey === "manage-departments") {
-      const allowed =
-        user.role === "admin" ||
-        user.role === "manager" ||
-        user.role === "assistant_manager";
+      const allowed = canManageSetup(user);
 
       if (!allowed) {
         const deptKey = (user as any).departmentKey;
@@ -39,13 +37,13 @@ export default function ProtectedRoute({ children, moduleKey }: Props) {
     }
 
     if (moduleKey === "accounting-workbench") {
-      const allowed = user.role === "accounting" || user.role === "admin";
+      const allowed = canReviewFinancials(user);
       if (!allowed) return <Navigate to="/app/not-authorized" replace />;
       return <>{children}</>;
     }
 
-    // Normal module access rules (admin bypass)
-    const ok = canShowNav(user as any, modules as any, moduleKey) || user.role === "admin";
+    // Normal module access rules
+    const ok = canViewModuleKey(user, moduleKey) && canShowNav(user as any, modules as any, moduleKey);
     if (!ok) return <Navigate to="/app/not-authorized" replace />;
   }
 

@@ -5,6 +5,8 @@ const DEFAULT_BUSINESS_ID = "biz_main";
 const DEFAULT_BRANCH_ID = "main";
 
 type Role =
+  | "owner"
+  | "super_admin"
   | "admin"
   | "manager"
   | "assistant_manager"
@@ -22,6 +24,8 @@ export type AuthedUser = {
 };
 
 const ROLES: Role[] = [
+  "owner",
+  "super_admin",
   "admin",
   "manager",
   "assistant_manager",

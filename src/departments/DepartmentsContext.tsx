@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "../auth/AuthContext";
 import type { User } from "../auth/AuthContext";
+import { canManageSetup } from "../auth/permissions";
 
 export type BusinessType =
   | "hotel_restaurant"
@@ -84,9 +85,9 @@ export function toKey(label: string) {
 }
 
 // Default role rules (if roles are missing/empty)
-const DEFAULT_VIEW_ROLES: Role[] = ["admin", "manager", "assistant_manager", "auditor", "staff"];
-const DEFAULT_EDIT_ROLES: Role[] = ["admin", "manager", "assistant_manager", "staff"];
-const DEFAULT_REVIEW_ROLES: Role[] = ["admin", "manager", "accounting"];
+const DEFAULT_VIEW_ROLES: Role[] = ["owner", "super_admin", "admin", "manager", "assistant_manager", "auditor", "front_desk", "staff"];
+const DEFAULT_EDIT_ROLES: Role[] = ["owner", "super_admin", "admin", "manager", "assistant_manager", "front_desk", "staff"];
+const DEFAULT_REVIEW_ROLES: Role[] = ["owner", "super_admin", "admin", "manager", "accounting"];
 
 // Default template (Hotel/Restaurant)
 const HOTEL_DEFAULT_DEPARTMENTS: Department[] = [
@@ -253,7 +254,7 @@ export function DepartmentsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const canManageDepartments = !!user && (user.role === "admin" || user.role === "manager");
+  const canManageDepartments = !!user && canManageSetup(user);
 
   const api = useMemo<DepartmentsContextType>(() => {
     const setBusinessType: DepartmentsContextType["setBusinessType"] = (bt) => {

@@ -1,5 +1,6 @@
 // src/nav/canSeeNav.ts
 import type { User } from "../auth/AuthContext";
+import { canViewModuleKey } from "../auth/permissions";
 
 /**
  * Sidebar item definition
@@ -15,27 +16,13 @@ export type NavItem = {
  * Roles that can see ALL enabled modules (nav visibility)
  * NOTE: Keep as string[] so TS doesn't fail when your Role union is missing a value.
  */
-const PRIVILEGED_ROLES: readonly string[] = [
-  "admin",
-  "manager",
-  "assistant_manager",
-  "accounting",
-  "auditor",
-  "front_desk",
-];
-
-function roleKey(user: User): string {
-  return String(user.role ?? "").toLowerCase();
-}
-
 /**
  * Sidebar visibility
  */
 export function canSeeNavItem(user: User, item: NavItem): boolean {
   if (!user) return false;
 
-  // Privileged sees all nav items (actual module gating is handled by canShowNav + ProtectedRoute)
-  if (PRIVILEGED_ROLES.includes(roleKey(user))) return true;
+  if (canViewModuleKey(user, item.moduleKey)) return true;
 
   // Always visible for staff
   if (item.moduleKey === "dashboard") return true;

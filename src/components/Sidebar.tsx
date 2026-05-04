@@ -7,6 +7,15 @@ import { useAuth, type User } from "../auth/AuthContext";
 import { useModuleConfig } from "../setup/ModuleConfigContext";
 import { useDepartments } from "../departments/DepartmentsContext";
 import { canShowNav } from "../setup/canShowNav";
+import {
+  canAuditReadOnly,
+  canManageSetup,
+  canOperateFrontDesk,
+  canOperateSales,
+  canReviewFinancials,
+  canViewBroadOperations,
+  canViewModuleKey,
+} from "../auth/permissions";
 
 type Item = {
   key: string;
@@ -15,30 +24,9 @@ type Item = {
   group: "daily" | "financial" | "business" | "system" | "departments";
 };
 
-const PRIVILEGED_ROLES = [
-  "admin",
-  "manager",
-  "assistant_manager",
-  "accounting",
-  "auditor",
-  "front_desk",
-] as const;
-
-function isPrivilegedRole(role: string) {
-  return (PRIVILEGED_ROLES as readonly string[]).includes(role);
-}
-
 function getUserDepartmentKey(user: User): string | null {
   return user.departmentKey ?? null;
 }
-
-const CASH_DESK_CLOSINGS_ROLES: User["role"][] = [
-  "admin",
-  "manager",
-  "assistant_manager",
-  "accounting",
-  "auditor",
-];
 
 export default function Sidebar() {
   const { user } = useAuth();
@@ -57,7 +45,7 @@ export default function Sidebar() {
 
   if (!user) return null;
 
-  const privileged = isPrivilegedRole(user.role);
+  const privileged = canViewBroadOperations(user);
   const staffDeptKey = privileged ? null : getUserDepartmentKey(user);
 
   const modulePath = (key: string) => {
@@ -84,7 +72,7 @@ export default function Sidebar() {
       group: "daily",
     });
 
-    if (canShowNav(user, modules, "sales")) {
+    if (canOperateSales(user) && canShowNav(user, modules, "sales")) {
       items.push({
         key: "sales-entry",
         label: "Sales Entry",
@@ -92,7 +80,7 @@ export default function Sidebar() {
         group: "daily",
       });
 
-      if (privileged) {
+      if (canOperateFrontDesk(user)) {
         items.push({
           key: "front-desk-room-board",
           label: "Front Desk / Room Board",
@@ -102,7 +90,7 @@ export default function Sidebar() {
       }
     }
 
-    if (canShowNav(user, modules, "shift-closing") || user.role === "admin") {
+    if (canViewModuleKey(user, "shift-closing") && canShowNav(user, modules, "shift-closing")) {
       items.push({
         key: "shift-closing",
         label: "Shift Closing",
@@ -119,7 +107,7 @@ export default function Sidebar() {
 
     const items: Item[] = [];
 
-    if (canShowNav(user, modules, "sales")) {
+    if (canReviewFinancials(user) && canShowNav(user, modules, "sales-summary")) {
       items.push({
         key: "sales-summary",
         label: "Sales Summary Analytics",
@@ -128,7 +116,7 @@ export default function Sidebar() {
       });
     }
 
-    if (canShowNav(user, modules, "reconcile") || user.role === "admin") {
+    if (canOperateFrontDesk(user) && canShowNav(user, modules, "reconcile")) {
       items.push({
         key: "reconcile",
         label: "Reconcile Sales",
@@ -137,7 +125,7 @@ export default function Sidebar() {
       });
     }
 
-    if (user.role === "accounting" || user.role === "admin") {
+    if (canReviewFinancials(user)) {
       items.push({
         key: "accounting-workbench",
         label: "Accounting Review",
@@ -146,9 +134,7 @@ export default function Sidebar() {
       });
     }
 
-    const canSeeCDC =
-      CASH_DESK_CLOSINGS_ROLES.includes(user.role) &&
-      (canShowNav(user, modules, "cash-desk-closings") || user.role === "admin");
+    const canSeeCDC = canReviewFinancials(user) && canShowNav(user, modules, "cash-desk-closings");
 
     if (canSeeCDC) {
       items.push({
@@ -195,7 +181,7 @@ export default function Sidebar() {
 
     const items: Item[] = [];
 
-    if (canManageDepartments) {
+    if (canManageDepartments && canManageSetup(user)) {
       items.push({
         key: "manage-departments",
         label: "Departments",
@@ -204,7 +190,7 @@ export default function Sidebar() {
       });
     }
 
-    if (canShowNav(user, modules, "manage-modules") || user.role === "admin") {
+    if (canManageSetup(user) && canShowNav(user, modules, "manage-modules")) {
       items.push({
         key: "manage-modules",
         label: "Manage Modules",
@@ -228,7 +214,7 @@ export default function Sidebar() {
       });
     }
 
-    if (user.role === "accounting" || user.role === "admin") {
+    if (canReviewFinancials(user) && !canAuditReadOnly(user)) {
       items.push({
         key: "ledger-debug",
         label: "Ledger Debug",
@@ -237,7 +223,7 @@ export default function Sidebar() {
       });
     }
 
-    if (canShowNav(user, modules, "audit-logs") || user.role === "admin") {
+    if (canViewModuleKey(user, "audit-logs") && canShowNav(user, modules, "audit-logs")) {
       items.push({
         key: "audit-logs",
         label: "Audit Logs",

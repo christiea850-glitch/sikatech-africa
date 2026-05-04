@@ -1,14 +1,14 @@
 // src/shifts/ShiftBanner.tsx
 import { useMemo } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { canApproveClosings } from "../auth/permissions";
 import { useShift } from "./ShiftContext";
 
-type Role = "admin" | "manager" | "assistant_manager" | "accounting" | "auditor" | "staff";
+type Role = "owner" | "super_admin" | "admin" | "manager" | "assistant_manager" | "accounting" | "auditor" | "front_desk" | "staff";
 
 const CAN_OPEN_SHIFT = new Set<Role>(["staff"]);
 const CAN_SUBMIT_CLOSE = new Set<Role>(["staff"]);
 const CAN_ACCOUNTING_REVIEW = new Set<Role>(["accounting"]);
-const CAN_APPROVE_CLOSE = new Set<Role>(["admin", "manager", "assistant_manager"]);
 
 // Try to understand backend shift status values safely
 function normStatus(s: unknown): string {
@@ -109,7 +109,7 @@ export default function ShiftBanner() {
   const canApprove =
     !!user &&
     !!role &&
-    CAN_APPROVE_CLOSE.has(role) &&
+    canApproveClosings(role) &&
     !!shiftId &&
     (state === "APPROVAL" || state === "ACCOUNTING" || state === "SUBMITTED");
 
@@ -192,7 +192,7 @@ export default function ShiftBanner() {
         ) : null}
 
         {/* Manager/Admin: Approve Close */}
-        {role === "admin" || role === "manager" || role === "assistant_manager" ? (
+        {canApproveClosings(role) ? (
           <button
             type="button"
             onClick={() => {

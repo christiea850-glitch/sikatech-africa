@@ -5,6 +5,8 @@ import { normalizeDepartmentKey } from "../lib/departments";
 
 /* -------------------- Types -------------------- */
 export type Role =
+  | "owner"
+  | "super_admin"
   | "admin"
   | "manager"
   | "assistant_manager"
@@ -38,6 +40,8 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
 
 /* -------------------- Helpers -------------------- */
 const VALID_ROLES: Role[] = [
+  "owner",
+  "super_admin",
   "admin",
   "manager",
   "assistant_manager",
