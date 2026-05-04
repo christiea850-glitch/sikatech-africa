@@ -37,6 +37,7 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [dailyOpen, setDailyOpen] = useState(true);
   const [financialOpen, setFinancialOpen] = useState(true);
+  const [departmentsOpen, setDepartmentsOpen] = useState(true);
   const [businessOpen, setBusinessOpen] = useState(true);
   const [systemOpen, setSystemOpen] = useState(true);
 
@@ -51,6 +52,7 @@ export default function Sidebar() {
   const modulePath = (key: string) => {
     if (key === "dashboard") return "/app/dashboard";
     if (key === "sales-entry") return "/app/sales";
+    if (key === "front-desk-room-board") return "/app/frontdesk";
     if (key === "sales-summary") return "/app/sales-dashboard";
     if (key === "accounting-workbench") return "/app/accounting-workbench";
     if (key === "ledger-debug") return "/app/ledger-debug";
@@ -84,7 +86,7 @@ export default function Sidebar() {
         items.push({
           key: "front-desk-room-board",
           label: "Front Desk / Room Board",
-          path: modulePath("sales-entry"),
+          path: modulePath("front-desk-room-board"),
           group: "daily",
         });
       }
@@ -312,6 +314,11 @@ export default function Sidebar() {
     </NavLink>
   );
 
+  const renderSectionLinks = (items: Item[], open: boolean) => {
+    if (!collapsed && !open) return null;
+    return items.map((i) => <LinkRow key={i.key} label={i.label} path={i.path} />);
+  };
+
   return (
     <aside
       style={{
@@ -377,53 +384,44 @@ export default function Sidebar() {
 
       <nav style={styles.nav}>
         <SectionTitle title="Daily Operations" open={dailyOpen} onToggle={() => setDailyOpen((v) => !v)} />
-        {collapsed
-          ? null
-          : !dailyOpen
-          ? null
-          : dailyItems.map((i) => <LinkRow key={i.key} label={i.label} path={i.path} />)}
+        {renderSectionLinks(dailyItems, dailyOpen)}
 
         {financialItems.length > 0 ? (
           <>
             <SectionTitle title="Financial Control" open={financialOpen} onToggle={() => setFinancialOpen((v) => !v)} />
-            {collapsed
-              ? null
-              : !financialOpen
-              ? null
-              : financialItems.map((i) => <LinkRow key={i.key} label={i.label} path={i.path} />)}
+            {renderSectionLinks(financialItems, financialOpen)}
           </>
         ) : null}
 
-        {businessItems.length > 0 || departmentItems.length > 0 ? (
+        {departmentItems.length > 0 ? (
+          <>
+            <SectionTitle title="Departments" open={departmentsOpen} onToggle={() => setDepartmentsOpen((v) => !v)} />
+            {renderSectionLinks(departmentItems, departmentsOpen)}
+          </>
+        ) : !collapsed && !privileged && businessItems.length === 0 ? (
+          <>
+            <SectionTitle title="Departments" open={departmentsOpen} onToggle={() => setDepartmentsOpen((v) => !v)} />
+            {departmentsOpen ? <div style={styles.mutedText}>No department assigned.</div> : null}
+          </>
+        ) : null}
+
+        {businessItems.length > 0 ? (
           <>
             <SectionTitle title="Business Setup" open={businessOpen} onToggle={() => setBusinessOpen((v) => !v)} />
-            {collapsed ? null : !businessOpen ? null : (
+            {!collapsed && businessOpen ? (
               <>
                 {businessItems.map((i) => (
                   <LinkRow key={i.key} label={i.label} path={i.path} />
                 ))}
-                {departmentItems.length === 0 ? (
-                  <div style={styles.mutedText}>
-                    {privileged
-                      ? "No departments."
-                      : "No department assigned."}
-                  </div>
-                ) : (
-                  departmentItems.map((i) => <LinkRow key={i.key} label={i.label} path={i.path} />)
-                )}
               </>
-            )}
+            ) : collapsed ? renderSectionLinks(businessItems, businessOpen) : null}
           </>
         ) : null}
 
         {systemItems.length > 0 ? (
           <>
             <SectionTitle title="System" open={systemOpen} onToggle={() => setSystemOpen((v) => !v)} />
-            {collapsed
-              ? null
-              : !systemOpen
-              ? null
-              : systemItems.map((i) => <LinkRow key={i.key} label={i.label} path={i.path} />)}
+            {renderSectionLinks(systemItems, systemOpen)}
           </>
         ) : null}
       </nav>
