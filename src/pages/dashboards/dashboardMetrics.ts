@@ -20,6 +20,14 @@ export type DashboardGroupedRow = {
   transactions: number;
 };
 
+export const DASHBOARD_GROUP_LABELS: Record<DashboardGroupBy, string> = {
+  department: "Department",
+  payment: "Payment Method",
+  shift: "Shift",
+  staff: "Staff",
+  room_customer: "Room / Customer",
+};
+
 export type DashboardMetricsInput = {
   startDate: string;
   endDate: string;
@@ -52,24 +60,45 @@ function inDateRange(value: string | number | undefined, startDate: string, endD
   return true;
 }
 
-function groupName(
+function groupIdentity(
   entry: CanonicalLedgerEntry,
   groupBy: DashboardGroupBy,
   departmentLabels: Map<string, string>
 ) {
   if (groupBy === "department") {
-    return departmentLabels.get(entry.departmentKey) || labelize(entry.departmentKey);
+    const key = entry.departmentKey || "unknown";
+    return {
+      key,
+      name: departmentLabels.get(key) || labelize(key),
+    };
   }
-  if (groupBy === "payment") return labelize(entry.paymentMethod);
-  if (groupBy === "shift") return entry.shiftId ? `Shift ${entry.shiftId}` : "No Shift";
+  if (groupBy === "payment") {
+    const key = entry.paymentMethod || "other";
+    return { key, name: labelize(key) };
+  }
+  if (groupBy === "shift") {
+    const key = entry.shiftId || "no-shift";
+    return { key, name: entry.shiftId ? `Shift ${entry.shiftId}` : "No Shift" };
+  }
   if (groupBy === "staff") {
-    return entry.createdBy?.employeeId || entry.createdBy?.name || "Unassigned Staff";
+    const employeeId = entry.createdBy?.employeeId || "";
+    const name = entry.createdBy?.name || "";
+    const key = employeeId || name || "unassigned-staff";
+    return {
+      key,
+      name: employeeId && name ? `${employeeId} / ${name}` : employeeId || name || "Unassigned Staff",
+    };
   }
 
-  if (entry.roomNo) return `Room ${entry.roomNo}`;
-  if (entry.customerName) return entry.customerName;
-  if (entry.bookingCode) return entry.bookingCode;
-  return "Walk-in / Unassigned";
+  const roomNo = entry.roomNo || "";
+  const customer = entry.customerName || "";
+  const booking = entry.bookingCode || "";
+  const key = roomNo || customer || booking || "walk-in-unassigned";
+  if (roomNo && customer) return { key, name: `Room ${roomNo} / ${customer}` };
+  if (roomNo) return { key, name: `Room ${roomNo}` };
+  if (customer) return { key, name: customer };
+  if (booking) return { key, name: booking };
+  return { key, name: "Walk-in / Unassigned" };
 }
 
 function buildGroupedRows(
@@ -80,13 +109,13 @@ function buildGroupedRows(
   const map = new Map<string, DashboardGroupedRow>();
 
   entries.forEach((entry) => {
-    const name = groupName(entry, groupBy, departmentLabels);
-    const key = `${groupBy}:${name}`;
+    const identity = groupIdentity(entry, groupBy, departmentLabels);
+    const key = `${groupBy}:${identity.key}`;
     const current =
       map.get(key) ||
       {
         key,
-        name,
+        name: identity.name,
         revenue: 0,
         collections: 0,
         expenses: 0,
@@ -138,6 +167,8 @@ export function getDashboardMetrics({
       netProfit: roundLedgerMoney(totals.revenue - totals.expenses),
     },
     groupedRows,
+    groupBy,
+    groupLabel: DASHBOARD_GROUP_LABELS[groupBy],
     salesCount,
     expenseCount,
     transactions: entries.length,

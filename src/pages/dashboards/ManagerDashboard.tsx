@@ -453,11 +453,11 @@ export default function ManagerDashboard() {
         <div style={styles.sectionHeader}>
           <h2 style={styles.sectionTitle}>Grouped Performance</h2>
           <span style={styles.sectionMeta}>
-            {labelize(groupBy)} view from sales, ledger, and expenses
+            Grouped by: {metrics.groupLabel}
           </span>
         </div>
         {metrics.groupedRows.length === 0 ? (
-          <div style={styles.emptyState}>No data found for this date range.</div>
+          <div style={styles.emptyState}>No grouped performance data for this range.</div>
         ) : (
           <div style={styles.tableWrap}>
             <div style={styles.tableHead}>
