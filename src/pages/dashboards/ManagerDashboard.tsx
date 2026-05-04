@@ -9,6 +9,7 @@ import { useScrollHighlight } from "../../hooks/useScrollHighlight";
 import { useSales } from "../../sales/SalesContext";
 import { useShift } from "../../shifts/ShiftContext";
 import { loadShiftClosings } from "../../shifts/shiftClosingStore";
+import { getSmartAlerts, type SmartAlert } from "../../utils/smartAlerts";
 import {
   getDashboardMetrics,
   type DashboardGroupBy,
@@ -17,12 +18,6 @@ import {
 type AlertTone = "green" | "amber" | "red" | "blue";
 type DatePreset = "today" | "yesterday" | "week" | "month" | "custom";
 type GroupBy = DashboardGroupBy;
-
-type ManagerAlert = {
-  title: string;
-  message: string;
-  tone: AlertTone;
-};
 
 type DateRange = {
   startDate: string;
@@ -63,6 +58,29 @@ function getPresetRange(preset: DatePreset): DateRange {
   return { startDate: value, endDate: value };
 }
 
+function getPreviousRange(range: DateRange): DateRange {
+  const start = new Date(`${range.startDate}T00:00:00`);
+  const end = new Date(`${range.endDate}T00:00:00`);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+    return range;
+  }
+
+  const durationDays = Math.max(
+    1,
+    Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1
+  );
+  const previousEnd = new Date(start);
+  previousEnd.setDate(previousEnd.getDate() - 1);
+  const previousStart = new Date(previousEnd);
+  previousStart.setDate(previousStart.getDate() - durationDays + 1);
+
+  return {
+    startDate: toDateInputValue(previousStart),
+    endDate: toDateInputValue(previousEnd),
+  };
+}
+
 function money(value: number) {
   return (Number.isFinite(value) ? value : 0).toLocaleString(undefined, {
     minimumFractionDigits: 2,
@@ -94,11 +112,17 @@ function alertStyle(tone: AlertTone): CSSProperties {
   return palette[tone];
 }
 
+function smartAlertTone(type: SmartAlert["type"]): AlertTone {
+  if (type === "critical") return "red";
+  if (type === "warning") return "amber";
+  return "blue";
+}
+
 export default function ManagerDashboard() {
   const { records } = useSales();
   const { records: expenseRecords } = useExpenses();
   const { departments } = useDepartments();
-  const { shifts, isShiftOpen } = useShift();
+  const { shifts } = useShift();
 
   const [datePreset, setDatePreset] = useState<DatePreset>("today");
   const [customRange, setCustomRange] = useState<DateRange>(() => getPresetRange("today"));
@@ -114,6 +138,7 @@ export default function ManagerDashboard() {
   });
 
   const activeRange = datePreset === "custom" ? customRange : getPresetRange(datePreset);
+  const previousRange = useMemo(() => getPreviousRange(activeRange), [activeRange]);
 
   useEffect(() => {
     if (previousGroupByRef.current === groupBy) return;
@@ -154,6 +179,28 @@ export default function ManagerDashboard() {
       expenseRecords,
       groupBy,
       ledgerEntries,
+      records,
+    ]
+  );
+
+  const previousMetrics = useMemo(
+    () =>
+      getDashboardMetrics({
+        startDate: previousRange.startDate,
+        endDate: previousRange.endDate,
+        groupBy,
+        ledgerEntries,
+        salesRecords: records,
+        expenseRecords,
+        departmentLabels,
+      }),
+    [
+      departmentLabels,
+      expenseRecords,
+      groupBy,
+      ledgerEntries,
+      previousRange.endDate,
+      previousRange.startDate,
       records,
     ]
   );
@@ -231,56 +278,20 @@ export default function ManagerDashboard() {
     });
   }, [enabledDepartments, metrics.entries, pendingClosings]);
 
-  const quietDepartments = departmentPerformance.filter((department) => department.status === "Quiet");
-
-  const alerts = useMemo<ManagerAlert[]>(() => {
-    const next: ManagerAlert[] = [];
-
-    if (openShifts.length > 0 || isShiftOpen) {
-      next.push({
-        title: "Shift still open",
-        message: "One or more shifts are still open and should be checked before close.",
-        tone: "amber",
-      });
-    }
-
-    if (unpaidBookings.length > 0) {
-      next.push({
-        title: "Unpaid room balances",
-        message: `${unpaidBookings.length} room balance${unpaidBookings.length === 1 ? "" : "s"} need front desk follow-up.`,
-        tone: "red",
-      });
-    }
-
-    if (quietDepartments.length > 0) {
-      next.push({
-        title: "Quiet department activity",
-        message: `${quietDepartments.length} department${quietDepartments.length === 1 ? "" : "s"} have no activity in this range.`,
-        tone: "amber",
-      });
-    }
-
-    if (pendingClosings.length > 0) {
-      next.push({
-        title: "Pending review items",
-        message: `${pendingClosings.length} cash desk closing${pendingClosings.length === 1 ? "" : "s"} are awaiting attention.`,
-        tone: "blue",
-      });
-    }
-
-    if (next.length === 0) {
-      next.push({
-        title: "No alerts to review",
-        message: "Operations look calm for this range.",
-        tone: "green",
-      });
-    }
-
-    return next;
-  }, [isShiftOpen, openShifts.length, pendingClosings.length, quietDepartments.length, unpaidBookings.length]);
+  const alerts = useMemo(
+    () =>
+      getSmartAlerts({
+        metrics: {
+          ...metrics,
+          pendingClosings: pendingClosings.length,
+        },
+        previousMetrics,
+        groupedData: departmentPerformance,
+      }),
+    [departmentPerformance, metrics, pendingClosings.length, previousMetrics]
+  );
 
   const activeDepartments = departmentPerformance.filter((department) => department.transactions > 0).length;
-  const nonGreenAlerts = alerts.filter((alert) => alert.tone !== "green").length;
 
   const kpis = [
     { label: "Sales", value: money(metrics.totals.revenue), hint: getRangeLabel(activeRange) },
@@ -288,7 +299,7 @@ export default function ManagerDashboard() {
     { label: "Transactions", value: String(metrics.transactions || metrics.salesCount), hint: "Ledger activity" },
     { label: "Expenses", value: money(metrics.totals.expenses), hint: `${metrics.expenseCount} expense record${metrics.expenseCount === 1 ? "" : "s"}` },
     { label: "Active Departments", value: `${activeDepartments}/${enabledDepartments.length}`, hint: "Departments with activity" },
-    { label: "Alerts", value: String(nonGreenAlerts), hint: "Items needing attention" },
+    { label: "Alerts", value: String(alerts.length), hint: "Items needing attention" },
   ];
 
   const snapshot = [
@@ -513,12 +524,19 @@ export default function ManagerDashboard() {
             <h2 style={styles.sectionTitle}>Manager Alerts</h2>
           </div>
           <div style={styles.alertList}>
-            {alerts.map((alert) => (
-              <article key={alert.title} style={{ ...styles.alertCard, ...alertStyle(alert.tone) }}>
-                <div style={styles.alertTitle}>{alert.title}</div>
-                <div style={styles.alertText}>{alert.message}</div>
+            {alerts.length === 0 ? (
+              <article style={{ ...styles.alertCard, ...alertStyle("blue") }}>
+                <div style={styles.alertTitle}>No major issues detected.</div>
+                <div style={styles.alertText}>Performance and operations look steady for this range.</div>
               </article>
-            ))}
+            ) : (
+              alerts.map((alert) => (
+                <article key={alert.id} style={{ ...styles.alertCard, ...alertStyle(smartAlertTone(alert.type)) }}>
+                  <div style={styles.alertTitle}>{alert.title}</div>
+                  <div style={styles.alertText}>{alert.message}</div>
+                </article>
+              ))
+            )}
           </div>
         </div>
 
