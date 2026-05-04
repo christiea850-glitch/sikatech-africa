@@ -45,6 +45,7 @@ export default function Sidebar() {
   if (!user) return null;
 
   const privileged = canViewBroadOperations(user);
+  const isManager = user.role === "manager";
   const primaryDailyOperator = user.role === "staff" || user.role === "front_desk";
 
   const modulePath = (key: string) => {
@@ -151,7 +152,7 @@ export default function Sidebar() {
       });
     }
 
-    if (canReviewFinancials(user)) {
+    if (!isManager && canReviewFinancials(user)) {
       items.push({
         key: "accounting-workbench",
         label: "Accounting Review",
@@ -172,7 +173,7 @@ export default function Sidebar() {
     }
 
     return items;
-  }, [user, modules, privileged]);
+  }, [user, modules, privileged, isManager]);
 
   const visibleDepartments = useMemo(() => {
     return departments
@@ -196,6 +197,8 @@ export default function Sidebar() {
 
     const items: Item[] = [];
 
+    if (isManager) return items;
+
     if (canManageDepartments && canManageSetup(user)) {
       items.push({
         key: "manage-departments",
@@ -215,7 +218,7 @@ export default function Sidebar() {
     }
 
     return items;
-  }, [privileged, canManageDepartments, user, modules]);
+  }, [privileged, canManageDepartments, user, modules, isManager]);
 
   const systemItems: Item[] = useMemo(() => {
     const items: Item[] = [];
@@ -229,7 +232,7 @@ export default function Sidebar() {
       });
     }
 
-    if (canReviewFinancials(user) && !canAuditReadOnly(user)) {
+    if (!isManager && canReviewFinancials(user) && !canAuditReadOnly(user)) {
       items.push({
         key: "ledger-debug",
         label: "Ledger Debug",
@@ -238,7 +241,7 @@ export default function Sidebar() {
       });
     }
 
-    if (canViewModuleKey(user, "audit-logs") && canShowNav(user, modules, "audit-logs")) {
+    if (!isManager && canViewModuleKey(user, "audit-logs") && canShowNav(user, modules, "audit-logs")) {
       items.push({
         key: "audit-logs",
         label: "Audit Logs",
@@ -248,7 +251,7 @@ export default function Sidebar() {
     }
 
     return items;
-  }, [user, modules]);
+  }, [user, modules, isManager]);
 
   const allItems: Item[] = useMemo(
     () => [...dailyItems, ...operationalItems, ...financialItems, ...departmentItems, ...businessItems, ...systemItems],
