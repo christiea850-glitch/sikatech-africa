@@ -349,7 +349,7 @@ export default function FrontDeskEntry() {
     setCustomerType("Guest");
     setPostToRoom(true);
     setTab("entry");
-    setMsg("Room Charge mode activated. Continue in New Entry.");
+    setMsg("Room charge ready. Start entry.");
   }
 
   function togglePostingStatus() {
@@ -359,7 +359,7 @@ export default function FrontDeskEntry() {
 
   async function onSubmitClose() {
     if (!activeShift?.id) {
-      setMsg("No active shift found.");
+      setMsg("Open a shift to begin.");
       return;
     }
 
@@ -642,7 +642,7 @@ export default function FrontDeskEntry() {
               </span>
             </div>
           ) : (
-            <div style={styles.shiftText}>No open shift</div>
+            <div style={styles.shiftText}>Open a shift to begin</div>
           )}
 
           {msg ? <div style={styles.errorText}>{msg}</div> : null}
@@ -712,8 +712,7 @@ export default function FrontDeskEntry() {
           <div style={styles.section}>
             <div style={styles.sectionTitle}>Room / Folio Summary</div>
             <div style={styles.overviewText}>
-              Use this for room-linked charges, guest folio postings, deposits, laundry,
-              extensions, and any charge that belongs to a guest room.
+              Room charges and folio postings.
             </div>
 
             <div style={styles.infoList}>
@@ -735,8 +734,7 @@ export default function FrontDeskEntry() {
           <div style={styles.section}>
             <div style={styles.sectionTitle}>Food / Service Summary</div>
             <div style={styles.overviewText}>
-              Use this for walk-in orders, in-house food service, beverages, snacks,
-              and guest room service billed through front desk.
+              Quick sales and guest service.
             </div>
 
             <div style={styles.infoList}>
@@ -765,7 +763,7 @@ export default function FrontDeskEntry() {
         <div style={styles.section}>
           <div style={styles.sectionTitle}>Room Charges Mode</div>
           <div style={styles.overviewText}>
-            Use this section to prepare a room-linked charge before moving into entry.
+            Prepare room charge.
           </div>
 
           <div style={styles.clickableGrid}>
@@ -785,7 +783,7 @@ export default function FrontDeskEntry() {
               <input
                 value={roomNo}
                 onChange={(e) => setRoomNo(e.target.value)}
-                placeholder="Enter room no"
+                placeholder="Room no"
                 style={styles.input}
                 disabled={isReadOnly}
               />
@@ -816,7 +814,7 @@ export default function FrontDeskEntry() {
               }}
               disabled={isReadOnly}
             >
-              Open in New Entry
+              Start Entry
             </button>
 
             <button
@@ -826,11 +824,11 @@ export default function FrontDeskEntry() {
                 if (isReadOnly) return;
                 setRoomNo("");
                 setPostToRoom(false);
-                setMsg("Room charge helper reset.");
+                setMsg("Room charge reset.");
               }}
               disabled={isReadOnly}
             >
-              Reset Room Charge Helper
+              Reset
             </button>
           </div>
         </div>
@@ -840,7 +838,7 @@ export default function FrontDeskEntry() {
         <div style={styles.section}>
           <div style={styles.sectionTitle}>Food & Service Mode</div>
           <div style={styles.overviewText}>
-            This mode is for quick sales, beverages, snacks, takeaway, dine-in, and guest room service.
+            Quick sales mode.
           </div>
 
           <div style={styles.infoList}>
@@ -1030,7 +1028,7 @@ export default function FrontDeskEntry() {
                 id="note"
                 name="note"
                 style={styles.input}
-                placeholder="Optional (e.g., table 2, guest request...)"
+                placeholder="Notes"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 disabled={isReadOnly}

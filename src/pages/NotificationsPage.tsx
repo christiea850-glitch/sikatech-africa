@@ -117,7 +117,6 @@ export default function NotificationsPage() {
         <div>
           <h2 style={styles.h2}>Notifications</h2>
           <p style={styles.p}>
-            Alerts for Admin/Accounting/GM (and any role targeted by the notification).{" "}
             <b>{unreadCount}</b> unread.
           </p>
         </div>
@@ -138,7 +137,7 @@ export default function NotificationsPage() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search notifications..."
+          placeholder="Search alerts..."
           style={styles.input}
         />
 
@@ -154,7 +153,7 @@ export default function NotificationsPage() {
 
       <div style={styles.card}>
         {visible.length === 0 ? (
-          <div style={styles.empty}>No notifications to show.</div>
+          <div style={styles.empty}>No alerts to review.</div>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
             {visible.map((raw) => {

@@ -1305,7 +1305,7 @@ export default function SalesDashboardPage() {
         <div>
           <h1 style={styles.title}>Sales Summary (Central)</h1>
           <p style={styles.subtitle}>
-            Central overview first, then department breakdown and recent transactions.
+            Review sales performance.
           </p>
         </div>
 
@@ -1423,7 +1423,7 @@ export default function SalesDashboardPage() {
           {focusedDashboardView.type === "department" ? (
             <div style={styles.focusedMode}>
               {!focusedViewDepartment ? (
-                <div style={styles.emptyState}>No department data found for this filter.</div>
+                <div style={styles.emptyState}>No department data.</div>
               ) : (
                 <div style={styles.detailGrid}>
                   <DetailItem label="Revenue" value={money(focusedViewDepartment.revenue)} />
@@ -1484,7 +1484,7 @@ export default function SalesDashboardPage() {
       <div style={styles.filtersRow}>
         <input
           type="text"
-          placeholder="Search tx, staff, phone, room, item..."
+          placeholder="Search sales..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={styles.searchInput}
@@ -1729,9 +1729,9 @@ export default function SalesDashboardPage() {
 
       {activeTab === "overview" && (
         <>
-          <ChartCard title="Smart Alerts" helper="What needs attention right now">
+          <ChartCard title="Smart Alerts" helper="Review items">
             {smartAlerts.length === 0 ? (
-              <div style={styles.emptyState}>No alerts at the moment.</div>
+              <div style={styles.emptyState}>No alerts to review.</div>
             ) : (
               <div style={styles.alertsGrid}>
                 {smartAlerts.map((alert) => (
@@ -1791,9 +1791,9 @@ export default function SalesDashboardPage() {
             )}
           </ChartCard>
 
-          <ChartCard title="Recommended Actions" helper="Suggested next steps">
+          <ChartCard title="Recommended Actions" helper="Next steps">
             {recommendedActions.length === 0 ? (
-              <div style={styles.emptyState}>No recommended actions at this time.</div>
+              <div style={styles.emptyState}>No actions needed.</div>
             ) : (
               <div style={styles.alertsGrid}>
                 {recommendedActions.map((action) => (
@@ -1844,10 +1844,10 @@ export default function SalesDashboardPage() {
             <div style={styles.sectionCard}>
               <div style={styles.sectionHeader}>
                 <h2 style={styles.sectionTitle}>Detailed Analytics</h2>
-                <span style={styles.helperText}>Charts, tables, and deeper department analysis</span>
+                <span style={styles.helperText}>Charts and tables</span>
               </div>
               <div style={styles.emptyState}>
-                Detailed charts and tables are hidden to keep this overview easy to scan.
+                Hidden for a lighter overview.
               </div>
               <button
                 type="button"
@@ -1880,7 +1880,7 @@ export default function SalesDashboardPage() {
                 <div style={styles.insightCard}>
                   <div style={styles.insightLabel}>Expense Breakdown</div>
                   {departmentRootCause.expenses.topCategories.length === 0 ? (
-                    <div style={styles.insightSub}>No expense categories found.</div>
+                    <div style={styles.insightSub}>No expense categories.</div>
                   ) : (
                     departmentRootCause.expenses.topCategories.map((category) => (
                       <div key={category.category} style={styles.breakdownLine}>
@@ -1926,7 +1926,7 @@ export default function SalesDashboardPage() {
                   </div>
                 </div>
               ) : (
-                <div style={styles.emptyState}>No expense records yet.</div>
+                <div style={styles.emptyState}>No expenses yet.</div>
               )}
             </div>
 
@@ -1997,9 +1997,9 @@ export default function SalesDashboardPage() {
             </div>
           </div>
 
-          <ChartCard title="Today vs Yesterday by Department" helper="Which department changed the overall trend">
+          <ChartCard title="Today vs Yesterday" helper="Department trend">
             {departmentTodayVsYesterday.length === 0 ? (
-              <div style={styles.emptyState}>No department day comparison data yet.</div>
+              <div style={styles.emptyState}>No comparison yet.</div>
             ) : (
               <div style={styles.deptCompareList}>
                 {departmentTodayVsYesterday.map((row) => (
@@ -2041,9 +2041,9 @@ export default function SalesDashboardPage() {
             )}
           </ChartCard>
 
-          <ChartCard title="Department Leaderboard" helper="Top performing departments by revenue">
+          <ChartCard title="Department Leaderboard" helper="Top revenue">
             {departmentLeaderboard.length === 0 ? (
-              <div style={styles.emptyState}>No department data available yet.</div>
+              <div style={styles.emptyState}>No department sales yet.</div>
             ) : (
               <div style={styles.leaderboardList}>
                 {departmentLeaderboard.slice(0, 5).map((row) => (
@@ -2111,9 +2111,9 @@ export default function SalesDashboardPage() {
           </ChartCard>
 
           <div style={styles.chartGrid}>
-            <ChartCard title="Revenue vs Expenses Trend" helper="Quick period trend">
+            <ChartCard title="Revenue vs Expenses" helper="Period trend">
               {overviewTrendData.length === 0 ? (
-                <div style={styles.emptyState}>No trend data available.</div>
+                <div style={styles.emptyState}>No trend yet.</div>
               ) : (
                 <div style={styles.chartWrap}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -2141,9 +2141,9 @@ export default function SalesDashboardPage() {
               )}
             </ChartCard>
 
-            <ChartCard title="Payment Mix Chart" helper="Revenue by method">
+            <ChartCard title="Payment Mix" helper="By method">
               {paymentChartData.length === 0 ? (
-                <div style={styles.emptyState}>No payment chart data available.</div>
+                <div style={styles.emptyState}>No payment data yet.</div>
               ) : (
                 <div style={styles.chartWrap}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -2168,9 +2168,9 @@ export default function SalesDashboardPage() {
             </ChartCard>
           </div>
 
-          <ChartCard title="Hourly Sales Trend" helper="Sales by hour of day">
+          <ChartCard title="Hourly Sales" helper="By hour">
             {hourlySalesTrend.every((row) => row.sales === 0) ? (
-              <div style={styles.emptyState}>No hourly sales data available yet.</div>
+              <div style={styles.emptyState}>No hourly sales yet.</div>
             ) : (
               <div style={styles.chartWrapWide}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -2204,7 +2204,7 @@ export default function SalesDashboardPage() {
           <div style={styles.sectionCard}>
             <div style={styles.sectionHeader}>
               <h2 style={styles.sectionTitle}>Department Highlights</h2>
-              <span style={styles.helperText}>Fast management insights</span>
+              <span style={styles.helperText}>Quick view</span>
             </div>
 
             <div style={styles.highlightsGrid}>
@@ -2284,9 +2284,9 @@ export default function SalesDashboardPage() {
 
       {activeTab === "payments" && (
         <div style={styles.chartGrid}>
-          <ChartCard title="Payment Mix" helper="Revenue split by method">
+          <ChartCard title="Payment Mix" helper="By method">
             {paymentMix.length === 0 ? (
-              <div style={styles.emptyState}>No payment data in the selected filter.</div>
+              <div style={styles.emptyState}>No payments match this filter.</div>
             ) : (
               <div style={styles.paymentMixList}>
                 {paymentMix.map((item) => (
@@ -2313,9 +2313,9 @@ export default function SalesDashboardPage() {
             )}
           </ChartCard>
 
-          <ChartCard title="Payment Pie Chart" helper="Visual payment mix">
+          <ChartCard title="Payment Chart" helper="By method">
             {paymentChartData.length === 0 ? (
-              <div style={styles.emptyState}>No chart data available.</div>
+              <div style={styles.emptyState}>No chart data yet.</div>
             ) : (
               <div style={styles.chartWrap}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -2344,9 +2344,9 @@ export default function SalesDashboardPage() {
       {activeTab === "expenses" && (
         <>
           <div style={styles.chartGrid}>
-            <ChartCard title="Expense Mix" helper="Where money is going">
+            <ChartCard title="Expense Mix" helper="By category">
               {expenseAnalytics.rows.length === 0 ? (
-                <div style={styles.emptyState}>No expense data in the selected filter.</div>
+                <div style={styles.emptyState}>No expenses match this filter.</div>
               ) : (
                 <div style={styles.paymentMixList}>
                   {expenseAnalytics.rows.map((item) => (
@@ -2373,9 +2373,9 @@ export default function SalesDashboardPage() {
               )}
             </ChartCard>
 
-            <ChartCard title="Expense Category Chart" helper="Expense by category">
+            <ChartCard title="Expense Chart" helper="By category">
               {expenseChartData.length === 0 ? (
-                <div style={styles.emptyState}>No expense chart data available.</div>
+                <div style={styles.emptyState}>No expense chart yet.</div>
               ) : (
                 <div style={styles.chartWrap}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -2397,7 +2397,7 @@ export default function SalesDashboardPage() {
             </ChartCard>
           </div>
 
-          <ChartCard title="Department Expense Analytics" helper="Highest spending departments">
+          <ChartCard title="Department Expenses" helper="Highest spend">
             {departmentExpenseAnalytics.length === 0 ? (
               <div style={styles.emptyState}>No expense data in the selected filter.</div>
             ) : (
@@ -2424,9 +2424,9 @@ export default function SalesDashboardPage() {
 
       {activeTab === "departments" && (
         <>
-          <ChartCard title="Today vs Yesterday by Department" helper="Department-level daily comparison">
+          <ChartCard title="Today vs Yesterday" helper="By department">
             {departmentTodayVsYesterday.length === 0 ? (
-              <div style={styles.emptyState}>No department day comparison data yet.</div>
+              <div style={styles.emptyState}>No comparison yet.</div>
             ) : (
               <div style={styles.deptCompareList}>
                 {departmentTodayVsYesterday.map((row) => (
@@ -2468,9 +2468,9 @@ export default function SalesDashboardPage() {
             )}
           </ChartCard>
 
-          <ChartCard title="Department Day Comparison Chart" helper="Today vs yesterday revenue by department">
+          <ChartCard title="Department Day Chart" helper="Revenue change">
             {departmentDayComparisonChart.length === 0 ? (
-              <div style={styles.emptyState}>No department day chart data available.</div>
+              <div style={styles.emptyState}>No day chart yet.</div>
             ) : (
               <div style={styles.chartWrapWide}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -2498,9 +2498,9 @@ export default function SalesDashboardPage() {
             )}
           </ChartCard>
 
-          <ChartCard title="Department Leaderboard" helper="Ranked by revenue">
+          <ChartCard title="Department Leaderboard" helper="By revenue">
             {departmentLeaderboard.length === 0 ? (
-              <div style={styles.emptyState}>No department data available yet.</div>
+              <div style={styles.emptyState}>No department sales yet.</div>
             ) : (
               <div style={styles.leaderboardList}>
                 {departmentLeaderboard.map((row) => (
@@ -2567,9 +2567,9 @@ export default function SalesDashboardPage() {
             )}
           </ChartCard>
 
-          <ChartCard title="Department Performance" helper="Revenue vs expenses by department">
+          <ChartCard title="Department Performance" helper="Revenue vs expenses">
             {departmentPerformance.length === 0 ? (
-              <div style={styles.emptyState}>No transactions found for this filter.</div>
+              <div style={styles.emptyState}>No department activity.</div>
             ) : (
               <table style={styles.table}>
                 <thead>
@@ -2643,9 +2643,9 @@ export default function SalesDashboardPage() {
           </ChartCard>
 
           <div style={styles.chartGrid}>
-            <ChartCard title="Department Revenue vs Expense Chart" helper="Department comparison">
+            <ChartCard title="Revenue vs Expense Chart" helper="By department">
               {departmentChartData.length === 0 ? (
-                <div style={styles.emptyState}>No department chart data available.</div>
+                <div style={styles.emptyState}>No department chart yet.</div>
               ) : (
                 <div style={styles.chartWrap}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -2673,9 +2673,9 @@ export default function SalesDashboardPage() {
               )}
             </ChartCard>
 
-            <ChartCard title="Department Net Profit Chart" helper="Profitability by department">
+            <ChartCard title="Net Profit Chart" helper="By department">
               {departmentChartData.length === 0 ? (
-                <div style={styles.emptyState}>No net chart data available.</div>
+                <div style={styles.emptyState}>No net data yet.</div>
               ) : (
                 <div style={styles.chartWrap}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -2697,9 +2697,9 @@ export default function SalesDashboardPage() {
             </ChartCard>
           </div>
 
-          <ChartCard title="Department Revenue Bars" helper="Visual comparison across departments">
+          <ChartCard title="Revenue Bars" helper="By department">
             {departmentProfitBars.length === 0 ? (
-              <div style={styles.emptyState}>No department performance data yet.</div>
+              <div style={styles.emptyState}>No department performance yet.</div>
             ) : (
               <div style={styles.paymentMixList}>
                 {departmentProfitBars.map((row) => (
@@ -2747,7 +2747,7 @@ export default function SalesDashboardPage() {
             </div>
 
             {recentActivity.transactions.length === 0 ? (
-              <div style={styles.emptyState}>No recent transactions found.</div>
+              <div style={styles.emptyState}>No recent transactions.</div>
             ) : (
               <div style={styles.activityList}>
                 {recentActivity.transactions.map((item) => (
@@ -2783,7 +2783,7 @@ export default function SalesDashboardPage() {
             </div>
 
             {recentActivity.expenses.length === 0 ? (
-              <div style={styles.emptyState}>No recent expenses found.</div>
+              <div style={styles.emptyState}>No recent expenses.</div>
             ) : (
               <div style={styles.activityList}>
                 {recentActivity.expenses.map((item) => (

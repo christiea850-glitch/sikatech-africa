@@ -606,7 +606,7 @@ export default function RoomBoardPanel() {
               ? "Booking Detail"
               : "Room Detail"
           }
-          subtitle="Room Board drill-down"
+          subtitle="Details"
           onBack={handleBackToOverview}
         >
           {!selectedRoom ? (
@@ -856,14 +856,14 @@ export default function RoomBoardPanel() {
                 ))}
               </div>
             ) : (
-              <div style={styles.emptyState}>No front desk financial alerts right now.</div>
+              <div style={styles.emptyState}>No alerts to review.</div>
             )}
           </div>
 
           <div style={styles.insightsCard}>
             <div style={styles.sectionTitle}>Front Desk Recommended Actions</div>
             {frontDeskActions.length === 0 ? (
-              <div style={styles.emptyState}>No front desk recommendations right now.</div>
+              <div style={styles.emptyState}>No actions needed.</div>
             ) : (
               <div style={styles.recommendationList}>
                 {frontDeskActions.map((action) => (
@@ -945,11 +945,11 @@ export default function RoomBoardPanel() {
       ) : (
         <FocusedViewPanel
           title={getRoomBoardViewTitle(activeRoomBoardView)}
-          subtitle="Filtered Room Board view"
+          subtitle="Filtered rooms"
           onBack={handleBackToOverview}
         >
           <div style={styles.emptyState}>
-            Select a room below, or use Back to return to the full Room Board overview.
+            Select a room, or go back.
           </div>
         </FocusedViewPanel>
       )}
@@ -966,7 +966,7 @@ export default function RoomBoardPanel() {
           <div style={styles.sectionTitle}>{getRoomBoardViewTitle(activeRoomBoardView)}</div>
 
           {filteredRooms.length === 0 ? (
-            <div style={styles.emptyBoard}>No rooms found in this status.</div>
+            <div style={styles.emptyBoard}>No rooms in this status.</div>
           ) : (
             <div style={styles.roomGrid}>
               {filteredRooms.map((room) => {

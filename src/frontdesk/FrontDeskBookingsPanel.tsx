@@ -548,14 +548,14 @@ export default function FrontDeskBookingsPanel() {
           <div style={styles.cardHeader}>
             <div>
               <div style={styles.sectionTitle}>New Reservation</div>
-              <div style={styles.sectionSubtitle}>Open the booking form when you are ready to capture a new stay.</div>
+              <div style={styles.sectionSubtitle}>Create a booking.</div>
             </div>
             <button
               type="button"
               style={styles.primaryBtn}
               onClick={() => setShowReservationForm(true)}
             >
-              Open details
+              Create Booking
             </button>
           </div>
         </div>
@@ -564,7 +564,7 @@ export default function FrontDeskBookingsPanel() {
         <div style={styles.cardHeader}>
           <div>
             <div style={styles.sectionTitle}>New Reservation</div>
-            <div style={styles.sectionSubtitle}>Capture the booking details in a few focused groups.</div>
+            <div style={styles.sectionSubtitle}>Enter booking details.</div>
           </div>
         </div>
 
@@ -576,7 +576,7 @@ export default function FrontDeskBookingsPanel() {
                 style={styles.input}
                 value={guestName}
                 onChange={(e) => setGuestName(e.target.value)}
-                placeholder="Guest full name"
+                placeholder="Full name"
               />
             </div>
 
@@ -766,7 +766,7 @@ export default function FrontDeskBookingsPanel() {
                 style={styles.input}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Special request, arrival notes, etc."
+                placeholder="Notes"
               />
             </div>
           </FormSection>
@@ -798,7 +798,7 @@ export default function FrontDeskBookingsPanel() {
             style={styles.input}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search booking code, guest, room..."
+            placeholder="Search bookings..."
           />
         </div>
 
@@ -864,7 +864,7 @@ export default function FrontDeskBookingsPanel() {
         </div>
 
         {filteredBookings.length === 0 ? (
-          <div style={styles.empty}>No reservations found.</div>
+          <div style={styles.empty}>No bookings yet - create one.</div>
         ) : null}
 
         {selectedBooking ? (
