@@ -4,20 +4,18 @@ import { Link } from "react-router-dom";
 import { useDepartments } from "../../departments/DepartmentsContext";
 import { useExpenses } from "../../expenses/ExpenseContext";
 import { loadBookings } from "../../frontdesk/bookingsStorage";
-import {
-  filterLedgerEntries,
-  loadLedgerEntries,
-  roundLedgerMoney,
-  selectLedgerTotals,
-  type CanonicalLedgerEntry,
-} from "../../finance/financialLedger";
+import { loadLedgerEntries, roundLedgerMoney } from "../../finance/financialLedger";
 import { useSales } from "../../sales/SalesContext";
 import { useShift } from "../../shifts/ShiftContext";
 import { loadShiftClosings } from "../../shifts/shiftClosingStore";
+import {
+  getDashboardMetrics,
+  type DashboardGroupBy,
+} from "./dashboardMetrics";
 
 type AlertTone = "green" | "amber" | "red" | "blue";
 type DatePreset = "today" | "yesterday" | "week" | "month" | "custom";
-type GroupBy = "department" | "payment" | "shift" | "staff" | "room_customer";
+type GroupBy = DashboardGroupBy;
 
 type ManagerAlert = {
   title: string;
@@ -28,16 +26,6 @@ type ManagerAlert = {
 type DateRange = {
   startDate: string;
   endDate: string;
-};
-
-type GroupedRow = {
-  key: string;
-  name: string;
-  revenue: number;
-  collections: number;
-  expenses: number;
-  netProfit: number;
-  transactions: number;
 };
 
 function toDateInputValue(date: Date) {
@@ -74,20 +62,6 @@ function getPresetRange(preset: DatePreset): DateRange {
   return { startDate: value, endDate: value };
 }
 
-function inDateRange(value: string | number | undefined, range: DateRange) {
-  if (!value) return false;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return false;
-
-  const start = range.startDate ? new Date(`${range.startDate}T00:00:00`) : null;
-  const end = range.endDate ? new Date(`${range.endDate}T00:00:00`) : null;
-  if (end) end.setDate(end.getDate() + 1);
-
-  if (start && date < start) return false;
-  if (end && date >= end) return false;
-  return true;
-}
-
 function money(value: number) {
   return (Number.isFinite(value) ? value : 0).toLocaleString(undefined, {
     minimumFractionDigits: 2,
@@ -119,57 +93,6 @@ function alertStyle(tone: AlertTone): CSSProperties {
   return palette[tone];
 }
 
-function groupName(entry: CanonicalLedgerEntry, groupBy: GroupBy, departmentLabels: Map<string, string>) {
-  if (groupBy === "department") {
-    return departmentLabels.get(entry.departmentKey) || labelize(entry.departmentKey);
-  }
-  if (groupBy === "payment") return labelize(entry.paymentMethod);
-  if (groupBy === "shift") return entry.shiftId ? `Shift ${entry.shiftId}` : "No Shift";
-  if (groupBy === "staff") {
-    return entry.createdBy?.name || entry.createdBy?.employeeId || "Unassigned Staff";
-  }
-
-  if (entry.roomNo) return `Room ${entry.roomNo}`;
-  if (entry.customerName) return entry.customerName;
-  if (entry.bookingCode) return entry.bookingCode;
-  return "Walk-in / Unassigned";
-}
-
-function buildGroupedRows(
-  entries: CanonicalLedgerEntry[],
-  groupBy: GroupBy,
-  departmentLabels: Map<string, string>
-): GroupedRow[] {
-  const map = new Map<string, GroupedRow>();
-
-  entries.forEach((entry) => {
-    const name = groupName(entry, groupBy, departmentLabels);
-    const key = `${groupBy}:${name}`;
-    const current =
-      map.get(key) ||
-      {
-        key,
-        name,
-        revenue: 0,
-        collections: 0,
-        expenses: 0,
-        netProfit: 0,
-        transactions: 0,
-      };
-
-    current.revenue = roundLedgerMoney(current.revenue + (Number(entry.revenueAmount) || 0));
-    current.collections = roundLedgerMoney(
-      current.collections + (Number(entry.collectionAmount) || 0)
-    );
-    current.expenses = roundLedgerMoney(current.expenses + (Number(entry.expenseAmount) || 0));
-    current.netProfit = roundLedgerMoney(current.revenue - current.expenses);
-    current.transactions += 1;
-    map.set(key, current);
-  });
-
-  return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue || b.collections - a.collections);
-}
-
 export default function ManagerDashboard() {
   const { records } = useSales();
   const { records: expenseRecords } = useExpenses();
@@ -196,23 +119,26 @@ export default function ManagerDashboard() {
     [records, expenseRecords]
   );
 
-  const filteredLedgerEntries = useMemo(
+  const metrics = useMemo(
     () =>
-      filterLedgerEntries(ledgerEntries, {
+      getDashboardMetrics({
         startDate: activeRange.startDate,
         endDate: activeRange.endDate,
+        groupBy,
+        ledgerEntries,
+        salesRecords: records,
+        expenseRecords,
+        departmentLabels,
       }),
-    [activeRange.endDate, activeRange.startDate, ledgerEntries]
-  );
-
-  const filteredSales = useMemo(
-    () => records.filter((record) => inDateRange(record.createdAt, activeRange)),
-    [activeRange, records]
-  );
-
-  const filteredExpenses = useMemo(
-    () => expenseRecords.filter((record) => inDateRange(record.createdAt, activeRange)),
-    [activeRange, expenseRecords]
+    [
+      activeRange.endDate,
+      activeRange.startDate,
+      departmentLabels,
+      expenseRecords,
+      groupBy,
+      ledgerEntries,
+      records,
+    ]
   );
 
   const closings = useMemo(() => loadShiftClosings(), [records, expenseRecords]);
@@ -221,9 +147,16 @@ export default function ManagerDashboard() {
   const filteredClosings = useMemo(
     () =>
       closings.filter((closing) =>
-        inDateRange(closing.submitted_at || closing.created_at || closing.updated_at || "", activeRange)
+        metrics.entries.some(
+          (entry) =>
+            String(entry.shiftId || "") === String(closing.shift_id || "") &&
+            Boolean(closing.shift_id)
+        ) ||
+        (closing.submitted_at &&
+          closing.submitted_at >= `${activeRange.startDate}T00:00:00` &&
+          closing.submitted_at <= `${activeRange.endDate}T23:59:59`)
       ),
-    [activeRange, closings]
+    [activeRange.endDate, activeRange.startDate, closings, metrics.entries]
   );
 
   const openShifts = useMemo(
@@ -249,16 +182,10 @@ export default function ManagerDashboard() {
     [bookings]
   );
 
-  const totals = useMemo(() => selectLedgerTotals(filteredLedgerEntries), [filteredLedgerEntries]);
-  const groupedRows = useMemo(
-    () => buildGroupedRows(filteredLedgerEntries, groupBy, departmentLabels),
-    [departmentLabels, filteredLedgerEntries, groupBy]
-  );
-
   const departmentPerformance = useMemo(() => {
     const totalsByDepartment = new Map<string, { total: number; transactions: number }>();
 
-    filteredLedgerEntries.forEach((entry) => {
+    metrics.entries.forEach((entry) => {
       const key = entry.departmentKey || "unknown";
       const current = totalsByDepartment.get(key) || { total: 0, transactions: 0 };
       current.total = roundLedgerMoney(current.total + (Number(entry.revenueAmount) || 0));
@@ -285,7 +212,7 @@ export default function ManagerDashboard() {
         status,
       };
     });
-  }, [enabledDepartments, filteredLedgerEntries, pendingClosings]);
+  }, [enabledDepartments, metrics.entries, pendingClosings]);
 
   const quietDepartments = departmentPerformance.filter((department) => department.status === "Quiet");
 
@@ -339,10 +266,10 @@ export default function ManagerDashboard() {
   const nonGreenAlerts = alerts.filter((alert) => alert.tone !== "green").length;
 
   const kpis = [
-    { label: "Sales", value: money(totals.revenue), hint: getRangeLabel(activeRange) },
-    { label: "Collections", value: money(totals.collections), hint: "Collected in range" },
-    { label: "Transactions", value: String(filteredLedgerEntries.length || filteredSales.length), hint: "Ledger activity" },
-    { label: "Expenses", value: money(totals.expenses), hint: `${filteredExpenses.length} expense record${filteredExpenses.length === 1 ? "" : "s"}` },
+    { label: "Sales", value: money(metrics.totals.revenue), hint: getRangeLabel(activeRange) },
+    { label: "Collections", value: money(metrics.totals.collections), hint: "Collected in range" },
+    { label: "Transactions", value: String(metrics.transactions || metrics.salesCount), hint: "Ledger activity" },
+    { label: "Expenses", value: money(metrics.totals.expenses), hint: `${metrics.expenseCount} expense record${metrics.expenseCount === 1 ? "" : "s"}` },
     { label: "Active Departments", value: `${activeDepartments}/${enabledDepartments.length}`, hint: "Departments with activity" },
     { label: "Alerts", value: String(nonGreenAlerts), hint: "Items needing attention" },
   ];
@@ -364,10 +291,10 @@ export default function ManagerDashboard() {
     },
     {
       title: "Department Activity",
-      text: filteredLedgerEntries.length ? `${activeDepartments} department${activeDepartments === 1 ? "" : "s"} active in range.` : "No department activity yet.",
+      text: metrics.transactions ? `${activeDepartments} department${activeDepartments === 1 ? "" : "s"} active in range.` : "No department activity yet.",
       action: "Review Sales Summary",
       to: "/app/sales-dashboard",
-      tone: filteredLedgerEntries.length ? "blue" : "amber",
+      tone: metrics.transactions ? "blue" : "amber",
     },
     {
       title: "Cash Desk Readiness",
@@ -529,7 +456,7 @@ export default function ManagerDashboard() {
             {labelize(groupBy)} view from sales, ledger, and expenses
           </span>
         </div>
-        {groupedRows.length === 0 ? (
+        {metrics.groupedRows.length === 0 ? (
           <div style={styles.emptyState}>No data found for this date range.</div>
         ) : (
           <div style={styles.tableWrap}>
@@ -541,7 +468,7 @@ export default function ManagerDashboard() {
               <div>Net Profit</div>
               <div>Transactions</div>
             </div>
-            {groupedRows.map((row) => (
+            {metrics.groupedRows.map((row) => (
               <div key={row.key} style={styles.tableRow}>
                 <div style={styles.groupName}>{row.name}</div>
                 <div>{money(row.revenue)}</div>
