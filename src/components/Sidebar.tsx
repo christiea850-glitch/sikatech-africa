@@ -22,7 +22,7 @@ type Item = {
   key: string;
   label: string;
   path: string;
-  group: "daily" | "financial" | "business" | "system" | "departments";
+  group: "daily" | "operational" | "financial" | "business" | "system" | "departments";
 };
 
 export default function Sidebar() {
@@ -33,6 +33,7 @@ export default function Sidebar() {
 
   const [collapsed, setCollapsed] = useState(false);
   const [dailyOpen, setDailyOpen] = useState(true);
+  const [operationalOpen, setOperationalOpen] = useState(false);
   const [financialOpen, setFinancialOpen] = useState(true);
   const [departmentsOpen, setDepartmentsOpen] = useState(true);
   const [businessOpen, setBusinessOpen] = useState(true);
@@ -44,6 +45,7 @@ export default function Sidebar() {
   if (!user) return null;
 
   const privileged = canViewBroadOperations(user);
+  const primaryDailyOperator = user.role === "staff" || user.role === "front_desk";
 
   const modulePath = (key: string) => {
     if (key === "dashboard") return "/app/dashboard";
@@ -70,7 +72,7 @@ export default function Sidebar() {
       group: "daily",
     });
 
-    if (canOperateSales(user) && canShowNav(user, modules, "sales")) {
+    if (primaryDailyOperator && canOperateSales(user) && canShowNav(user, modules, "sales")) {
       items.push({
         key: "sales-entry",
         label: "Sales Entry",
@@ -98,7 +100,33 @@ export default function Sidebar() {
     }
 
     return items;
-  }, [user, modules, privileged]);
+  }, [user, modules, privileged, primaryDailyOperator]);
+
+  const operationalItems: Item[] = useMemo(() => {
+    if (primaryDailyOperator) return [];
+
+    const items: Item[] = [];
+
+    if (canOperateSales(user) && canShowNav(user, modules, "sales")) {
+      items.push({
+        key: "sales-entry",
+        label: "Sales Entry",
+        path: modulePath("sales-entry"),
+        group: "operational",
+      });
+    }
+
+    if (canOperateFrontDesk(user) && canShowNav(user, modules, "sales")) {
+      items.push({
+        key: "front-desk-room-board",
+        label: "Front Desk / Room Board",
+        path: modulePath("front-desk-room-board"),
+        group: "operational",
+      });
+    }
+
+    return items;
+  }, [user, modules, primaryDailyOperator]);
 
   const financialItems: Item[] = useMemo(() => {
     if (!privileged) return [];
@@ -223,8 +251,8 @@ export default function Sidebar() {
   }, [user, modules]);
 
   const allItems: Item[] = useMemo(
-    () => [...dailyItems, ...financialItems, ...departmentItems, ...businessItems, ...systemItems],
-    [dailyItems, financialItems, departmentItems, businessItems, systemItems]
+    () => [...dailyItems, ...operationalItems, ...financialItems, ...departmentItems, ...businessItems, ...systemItems],
+    [dailyItems, operationalItems, financialItems, departmentItems, businessItems, systemItems]
   );
 
   const query = q.trim().toLowerCase();
@@ -370,6 +398,13 @@ export default function Sidebar() {
       <nav style={styles.nav}>
         <SectionTitle title="Daily Operations" open={dailyOpen} onToggle={() => setDailyOpen((v) => !v)} />
         {renderSectionLinks(dailyItems, dailyOpen)}
+
+        {operationalItems.length > 0 ? (
+          <>
+            <SectionTitle title="Operational Access" open={operationalOpen} onToggle={() => setOperationalOpen((v) => !v)} />
+            {renderSectionLinks(operationalItems, operationalOpen)}
+          </>
+        ) : null}
 
         {financialItems.length > 0 ? (
           <>

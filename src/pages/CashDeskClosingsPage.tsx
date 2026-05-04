@@ -57,6 +57,21 @@ type ClosingRow = {
 };
 
 const API_BASE = "http://localhost:4000";
+const REQUEST_TIMEOUT_MS = 8000;
+
+async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: init?.signal ?? controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
 
 function fmtMoney(v: string | number | null | undefined) {
   const n = Number(v ?? 0);
@@ -223,9 +238,7 @@ export default function CashDeskClosingsPage() {
   const [busyId, setBusyId] = useState<string | number | null>(null);
 
   const canSeePage = useMemo(() => {
-    return (
-      canReviewFinancials(role)
-    );
+    return canApproveClosings(role) || canReviewFinancials(role);
   }, [role]);
 
   const currentBusinessId = resolveBusinessId(user?.businessId);
@@ -262,7 +275,7 @@ export default function CashDeskClosingsPage() {
       if (status) query.set("status", status);
       const localRows = loadShiftClosings();
 
-      const res = await fetch(`${API_BASE}/api/shift-closing?${query.toString()}`, {
+      const res = await fetchWithTimeout(`${API_BASE}/api/shift-closing?${query.toString()}`, {
         headers: buildAuthHeaders(role),
       });
 
@@ -287,6 +300,8 @@ export default function CashDeskClosingsPage() {
       setErr(
         localRows.length > 0
           ? "Server unavailable; showing locally captured closings."
+          : e?.name === "AbortError"
+          ? "Server request timed out; showing locally captured closings if available."
           : e?.message || "Failed to fetch"
       );
     } finally {
@@ -340,7 +355,7 @@ export default function CashDeskClosingsPage() {
 
       const note = window.prompt("Optional manager note:", "") ?? "";
 
-      const res = await fetch(`${API_BASE}/api/shift-closing/${closingId}/manager-approve`, {
+      const res = await fetchWithTimeout(`${API_BASE}/api/shift-closing/${closingId}/manager-approve`, {
         method: "PATCH",
         headers: buildAuthHeaders(role),
         body: JSON.stringify({
@@ -480,7 +495,9 @@ export default function CashDeskClosingsPage() {
         </div>
       )}
 
-      {!loading && rows.length === 0 ? (
+      {loading && rows.length === 0 ? (
+        <div style={{ marginTop: 14, opacity: 0.8 }}>Loading closings...</div>
+      ) : !loading && rows.length === 0 ? (
         <div style={{ marginTop: 14, opacity: 0.8 }}>No rows found.</div>
       ) : (
         <div style={{ marginTop: 14, overflowX: "auto" }}>
