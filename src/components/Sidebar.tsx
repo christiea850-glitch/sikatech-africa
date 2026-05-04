@@ -22,7 +22,7 @@ type Item = {
   key: string;
   label: string;
   path: string;
-  group: "daily" | "operational" | "financial" | "business" | "system" | "departments";
+  group: "dashboard" | "operations" | "operational" | "departments" | "financial" | "system";
 };
 
 export default function Sidebar() {
@@ -32,11 +32,11 @@ export default function Sidebar() {
   const navigate = useNavigate();
 
   const [collapsed, setCollapsed] = useState(false);
-  const [dailyOpen, setDailyOpen] = useState(true);
+  const [dashboardOpen, setDashboardOpen] = useState(true);
+  const [operationsOpen, setOperationsOpen] = useState(true);
   const [operationalOpen, setOperationalOpen] = useState(false);
-  const [financialOpen, setFinancialOpen] = useState(true);
   const [departmentsOpen, setDepartmentsOpen] = useState(true);
-  const [businessOpen, setBusinessOpen] = useState(true);
+  const [financialOpen, setFinancialOpen] = useState(true);
   const [systemOpen, setSystemOpen] = useState(true);
 
   const [q, setQ] = useState("");
@@ -45,8 +45,15 @@ export default function Sidebar() {
   if (!user) return null;
 
   const privileged = canViewBroadOperations(user);
+  const isOwnerOrSuperAdmin = user.role === "owner" || user.role === "super_admin";
+  const isAdmin = user.role === "admin";
   const isManager = user.role === "manager";
+  const isAccounting = user.role === "accounting";
+  const isAuditor = user.role === "auditor";
   const primaryDailyOperator = user.role === "staff" || user.role === "front_desk";
+  const showSetupLinks = isOwnerOrSuperAdmin || isAdmin;
+  const showAuditLogs = isOwnerOrSuperAdmin || isAdmin || isAuditor;
+  const showLedgerDebug = isOwnerOrSuperAdmin || isAdmin;
 
   const modulePath = (key: string) => {
     if (key === "dashboard") return "/app/dashboard";
@@ -63,22 +70,27 @@ export default function Sidebar() {
     return `/app/${key}`;
   };
 
-  const dailyItems: Item[] = useMemo(() => {
-    const items: Item[] = [];
+  const dashboardItems: Item[] = useMemo(() => {
+    if (isAccounting || isAuditor) return [];
 
-    items.push({
+    return [{
       key: "dashboard",
       label: "Dashboard",
       path: modulePath("dashboard"),
-      group: "daily",
-    });
+      group: "dashboard",
+    }];
+  }, [isAccounting, isAuditor]);
+
+  const operationsItems: Item[] = useMemo(() => {
+    const items: Item[] = [];
+    if (isAccounting || isAuditor) return items;
 
     if (primaryDailyOperator && canOperateSales(user) && canShowNav(user, modules, "sales")) {
       items.push({
         key: "sales-entry",
         label: "Sales Entry",
         path: modulePath("sales-entry"),
-        group: "daily",
+        group: "operations",
       });
 
       if (canOperateFrontDesk(user)) {
@@ -86,7 +98,7 @@ export default function Sidebar() {
           key: "front-desk-room-board",
           label: "Front Desk / Room Board",
           path: modulePath("front-desk-room-board"),
-          group: "daily",
+          group: "operations",
         });
       }
     }
@@ -96,12 +108,12 @@ export default function Sidebar() {
         key: "shift-closing",
         label: "Shift Closing",
         path: modulePath("shift-closing"),
-        group: "daily",
+        group: "operations",
       });
     }
 
     return items;
-  }, [user, modules, privileged, primaryDailyOperator]);
+  }, [user, modules, primaryDailyOperator, isAccounting, isAuditor]);
 
   const operationalItems: Item[] = useMemo(() => {
     if (primaryDailyOperator) return [];
@@ -131,6 +143,7 @@ export default function Sidebar() {
 
   const financialItems: Item[] = useMemo(() => {
     if (!privileged) return [];
+    if (isManager) return [];
 
     const items: Item[] = [];
 
@@ -152,7 +165,7 @@ export default function Sidebar() {
       });
     }
 
-    if (!isManager && canReviewFinancials(user)) {
+    if (!isAuditor && canReviewFinancials(user)) {
       items.push({
         key: "accounting-workbench",
         label: "Accounting Review",
@@ -173,15 +186,17 @@ export default function Sidebar() {
     }
 
     return items;
-  }, [user, modules, privileged, isManager]);
+  }, [user, modules, privileged, isManager, isAuditor]);
 
   const visibleDepartments = useMemo(() => {
+    if (isAccounting || isAuditor) return [];
+
     return departments
       .filter((d: any) => d.enabled)
       .filter((d: any) => canViewDepartmentRoute(user, d.key))
       .slice()
       .sort((a: any, b: any) => String(a.name).localeCompare(String(b.name)));
-  }, [departments, user]);
+  }, [departments, user, isAccounting, isAuditor]);
 
   const departmentItems: Item[] = useMemo(() => {
     return visibleDepartments.map((d: any) => ({
@@ -192,19 +207,17 @@ export default function Sidebar() {
     }));
   }, [visibleDepartments]);
 
-  const businessItems: Item[] = useMemo(() => {
-    if (!privileged) return [];
-
+  const setupItems: Item[] = useMemo(() => {
     const items: Item[] = [];
 
-    if (isManager) return items;
+    if (!showSetupLinks) return items;
 
     if (canManageDepartments && canManageSetup(user)) {
       items.push({
         key: "manage-departments",
         label: "Departments",
         path: "/app/departments/manage",
-        group: "business",
+        group: "system",
       });
     }
 
@@ -213,12 +226,12 @@ export default function Sidebar() {
         key: "manage-modules",
         label: "Manage Modules",
         path: modulePath("manage-modules"),
-        group: "business",
+        group: "system",
       });
     }
 
     return items;
-  }, [privileged, canManageDepartments, user, modules, isManager]);
+  }, [canManageDepartments, user, modules, showSetupLinks]);
 
   const systemItems: Item[] = useMemo(() => {
     const items: Item[] = [];
@@ -232,7 +245,9 @@ export default function Sidebar() {
       });
     }
 
-    if (!isManager && canReviewFinancials(user) && !canAuditReadOnly(user)) {
+    items.push(...setupItems);
+
+    if (showLedgerDebug && canReviewFinancials(user) && !canAuditReadOnly(user)) {
       items.push({
         key: "ledger-debug",
         label: "Ledger Debug",
@@ -241,7 +256,7 @@ export default function Sidebar() {
       });
     }
 
-    if (!isManager && canViewModuleKey(user, "audit-logs") && canShowNav(user, modules, "audit-logs")) {
+    if (showAuditLogs && canViewModuleKey(user, "audit-logs") && canShowNav(user, modules, "audit-logs")) {
       items.push({
         key: "audit-logs",
         label: "Audit Logs",
@@ -251,11 +266,11 @@ export default function Sidebar() {
     }
 
     return items;
-  }, [user, modules, isManager]);
+  }, [user, modules, setupItems, showAuditLogs, showLedgerDebug]);
 
   const allItems: Item[] = useMemo(
-    () => [...dailyItems, ...operationalItems, ...financialItems, ...departmentItems, ...businessItems, ...systemItems],
-    [dailyItems, operationalItems, financialItems, departmentItems, businessItems, systemItems]
+    () => [...dashboardItems, ...operationsItems, ...operationalItems, ...departmentItems, ...financialItems, ...systemItems],
+    [dashboardItems, operationsItems, operationalItems, departmentItems, financialItems, systemItems]
   );
 
   const query = q.trim().toLowerCase();
@@ -399,8 +414,19 @@ export default function Sidebar() {
       )}
 
       <nav style={styles.nav}>
-        <SectionTitle title="Daily Operations" open={dailyOpen} onToggle={() => setDailyOpen((v) => !v)} />
-        {renderSectionLinks(dailyItems, dailyOpen)}
+        {dashboardItems.length > 0 ? (
+          <>
+            <SectionTitle title="Dashboard" open={dashboardOpen} onToggle={() => setDashboardOpen((v) => !v)} />
+            {renderSectionLinks(dashboardItems, dashboardOpen)}
+          </>
+        ) : null}
+
+        {operationsItems.length > 0 ? (
+          <>
+            <SectionTitle title="Operations" open={operationsOpen} onToggle={() => setOperationsOpen((v) => !v)} />
+            {renderSectionLinks(operationsItems, operationsOpen)}
+          </>
+        ) : null}
 
         {operationalItems.length > 0 ? (
           <>
@@ -409,35 +435,22 @@ export default function Sidebar() {
           </>
         ) : null}
 
-        {financialItems.length > 0 ? (
-          <>
-            <SectionTitle title="Financial Control" open={financialOpen} onToggle={() => setFinancialOpen((v) => !v)} />
-            {renderSectionLinks(financialItems, financialOpen)}
-          </>
-        ) : null}
-
         {departmentItems.length > 0 ? (
           <>
             <SectionTitle title="Departments" open={departmentsOpen} onToggle={() => setDepartmentsOpen((v) => !v)} />
             {renderSectionLinks(departmentItems, departmentsOpen)}
           </>
-        ) : !collapsed && !privileged && businessItems.length === 0 ? (
+        ) : !collapsed && !privileged && !isAccounting && !isAuditor ? (
           <>
             <SectionTitle title="Departments" open={departmentsOpen} onToggle={() => setDepartmentsOpen((v) => !v)} />
             {departmentsOpen ? <div style={styles.mutedText}>No department assigned.</div> : null}
           </>
         ) : null}
 
-        {businessItems.length > 0 ? (
+        {financialItems.length > 0 ? (
           <>
-            <SectionTitle title="Business Setup" open={businessOpen} onToggle={() => setBusinessOpen((v) => !v)} />
-            {!collapsed && businessOpen ? (
-              <>
-                {businessItems.map((i) => (
-                  <LinkRow key={i.key} label={i.label} path={i.path} />
-                ))}
-              </>
-            ) : collapsed ? renderSectionLinks(businessItems, businessOpen) : null}
+            <SectionTitle title="Financials" open={financialOpen} onToggle={() => setFinancialOpen((v) => !v)} />
+            {renderSectionLinks(financialItems, financialOpen)}
           </>
         ) : null}
 
