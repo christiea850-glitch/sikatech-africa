@@ -44,6 +44,15 @@ type TabKey =
   | "fnb"
   | "entry";
 
+const FRONT_DESK_TABS: Array<{ key: TabKey; label: string; managerVisible: boolean }> = [
+  { key: "overview", label: "Overview", managerVisible: true },
+  { key: "bookings", label: "Bookings", managerVisible: true },
+  { key: "room", label: "Room Charges", managerVisible: true },
+  { key: "roomboard", label: "Room Board", managerVisible: true },
+  { key: "fnb", label: "Food & Service", managerVisible: false },
+  { key: "entry", label: "New Entry", managerVisible: false },
+];
+
 function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
@@ -294,6 +303,25 @@ export default function FrontDeskEntry() {
 
   const expensesTotal = 0;
   const entryMode = getEntryMode(transactionType);
+  const role = getStringField(user, "role");
+  const managerMonitoringOnly = role === "manager" || role === "assistant_manager";
+  const visibleTabs = useMemo(
+    () =>
+      FRONT_DESK_TABS.filter((item) =>
+        managerMonitoringOnly ? item.managerVisible : true
+      ),
+    [managerMonitoringOnly]
+  );
+  const visibleTabKeys = useMemo(
+    () => new Set<TabKey>(visibleTabs.map((item) => item.key)),
+    [visibleTabs]
+  );
+
+  useEffect(() => {
+    if (!visibleTabKeys.has(tab)) {
+      setTab("overview");
+    }
+  }, [tab, visibleTabKeys]);
 
   const stats = useMemo(() => {
     const activeItems = items.filter((x) => x.name.trim()).length;
@@ -687,24 +715,15 @@ export default function FrontDeskEntry() {
       </div>
 
       <div style={styles.tabRow}>
-        <TabButton active={tab === "overview"} onClick={() => setTab("overview")}>
-          Overview
-        </TabButton>
-        <TabButton active={tab === "bookings"} onClick={() => setTab("bookings")}>
-          Bookings
-        </TabButton>
-        <TabButton active={tab === "room"} onClick={() => setTab("room")}>
-          Room Charges
-        </TabButton>
-        <TabButton active={tab === "roomboard"} onClick={() => setTab("roomboard")}>
-          Room Board
-        </TabButton>
-        <TabButton active={tab === "fnb"} onClick={() => setTab("fnb")}>
-          Food & Service
-        </TabButton>
-        <TabButton active={tab === "entry"} onClick={() => setTab("entry")}>
-          New Entry
-        </TabButton>
+        {visibleTabs.map((item) => (
+          <TabButton
+            key={item.key}
+            active={tab === item.key}
+            onClick={() => setTab(item.key)}
+          >
+            {item.label}
+          </TabButton>
+        ))}
       </div>
 
       {tab === "overview" && (
