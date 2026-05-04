@@ -1,17 +1,12 @@
 // src/setup/canShowNav.ts
 import type { User } from "../auth/AuthContext";
-import { ROLE_ACCESS } from "../auth/access";
-import { canViewModuleKey, isOwnerRole } from "../auth/permissions";
+import { canViewModuleKey } from "../auth/permissions";
 
 export type ModuleConfig = {
   key: string;
   enabled?: boolean;
   viewRoles?: string[];
 };
-
-function isPrivileged(role: string): boolean {
-  return canViewModuleKey(role, "accounting") || isOwnerRole(role);
-}
 
 /**
  * If true, privileged roles can still SEE disabled modules in the sidebar.
@@ -23,17 +18,7 @@ const PRIVILEGED_BYPASS_DISABLED = false;
  * Normalize "non-module" route keys to a real permission key.
  */
 export function permissionKeyFor(rawKey: string): string {
-  switch (rawKey) {
-    case "activity":
-      return "dashboard";
-    case "sales-dashboard":
-    case "sales-summary":
-    case "sales-history":
-    case "sales-history-central":
-      return "sales";
-    default:
-      return rawKey;
-  }
+  return rawKey;
 }
 
 /**
@@ -48,23 +33,20 @@ export function canShowNav(
   if (!user) return false;
 
   const key = permissionKeyFor(rawKey);
-  const privileged = isPrivileged(user.role);
+  const capabilityAllowed = canViewModuleKey(user, key);
+  if (!capabilityAllowed) return false;
 
   const mod = modules.find((m) => m.key === key);
 
   // If module exists and is disabled, hide it (unless bypass enabled)
-  if (mod?.enabled === false && !(PRIVILEGED_BYPASS_DISABLED && privileged)) {
+  if (mod?.enabled === false && !PRIVILEGED_BYPASS_DISABLED) {
     return false;
   }
 
-  // Static (role) access
-  const allowedList = ROLE_ACCESS[user.role] as readonly string[] | undefined;
-  if (allowedList?.includes(key) === true) return true;
-  if (canViewModuleKey(user, key)) return true;
+  // Static routes without a module entry are governed by the shared capability map.
+  if (!mod) return true;
 
-  // Dynamic (module) access
-  if (!mod) return false;
-  if (!Array.isArray(mod.viewRoles)) return false;
+  if (!Array.isArray(mod.viewRoles) || mod.viewRoles.length === 0) return true;
 
   return mod.viewRoles.includes(user.role);
 }

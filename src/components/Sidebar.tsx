@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 
-import { useAuth, type User } from "../auth/AuthContext";
+import { useAuth } from "../auth/AuthContext";
 import { useModuleConfig } from "../setup/ModuleConfigContext";
 import { useDepartments } from "../departments/DepartmentsContext";
 import { canShowNav } from "../setup/canShowNav";
@@ -14,6 +14,7 @@ import {
   canOperateSales,
   canReviewFinancials,
   canViewBroadOperations,
+  canViewDepartmentRoute,
   canViewModuleKey,
 } from "../auth/permissions";
 
@@ -23,10 +24,6 @@ type Item = {
   path: string;
   group: "daily" | "financial" | "business" | "system" | "departments";
 };
-
-function getUserDepartmentKey(user: User): string | null {
-  return user.departmentKey ?? null;
-}
 
 export default function Sidebar() {
   const { user } = useAuth();
@@ -47,7 +44,6 @@ export default function Sidebar() {
   if (!user) return null;
 
   const privileged = canViewBroadOperations(user);
-  const staffDeptKey = privileged ? null : getUserDepartmentKey(user);
 
   const modulePath = (key: string) => {
     if (key === "dashboard") return "/app/dashboard";
@@ -151,23 +147,12 @@ export default function Sidebar() {
   }, [user, modules, privileged]);
 
   const visibleDepartments = useMemo(() => {
-    const canRoleView = (d: any) => {
-      const roles = d.viewRoles;
-      if (!Array.isArray(roles) || roles.length === 0) return true;
-      return roles.includes(user.role);
-    };
-
-    const base = departments
+    return departments
       .filter((d: any) => d.enabled)
-      .filter(canRoleView)
+      .filter((d: any) => canViewDepartmentRoute(user, d.key))
       .slice()
       .sort((a: any, b: any) => String(a.name).localeCompare(String(b.name)));
-
-    if (privileged) return base;
-
-    if (!staffDeptKey) return [];
-    return base.filter((d: any) => d.key === staffDeptKey);
-  }, [departments, user.role, privileged, staffDeptKey]);
+  }, [departments, user]);
 
   const departmentItems: Item[] = useMemo(() => {
     return visibleDepartments.map((d: any) => ({
