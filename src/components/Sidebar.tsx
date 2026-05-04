@@ -12,7 +12,7 @@ type Item = {
   key: string;
   label: string;
   path: string;
-  group: "top" | "departments" | "admin";
+  group: "daily" | "financial" | "business" | "system" | "departments";
 };
 
 const PRIVILEGED_ROLES = [
@@ -47,8 +47,10 @@ export default function Sidebar() {
   const navigate = useNavigate();
 
   const [collapsed, setCollapsed] = useState(false);
-  const [deptOpen, setDeptOpen] = useState(true);
-  const [adminOpen, setAdminOpen] = useState(true);
+  const [dailyOpen, setDailyOpen] = useState(true);
+  const [financialOpen, setFinancialOpen] = useState(true);
+  const [businessOpen, setBusinessOpen] = useState(true);
+  const [systemOpen, setSystemOpen] = useState(true);
 
   const [q, setQ] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -72,49 +74,88 @@ export default function Sidebar() {
     return `/app/${key}`;
   };
 
-  const topItems: Item[] = useMemo(() => {
+  const dailyItems: Item[] = useMemo(() => {
     const items: Item[] = [];
 
     items.push({
       key: "dashboard",
       label: "Dashboard",
       path: modulePath("dashboard"),
-      group: "top",
+      group: "daily",
     });
 
     if (canShowNav(user, modules, "sales")) {
-      items.push(
-        privileged
-          ? {
-              key: "sales-summary",
-              label: "Sales Summary (Central)",
-              path: modulePath("sales-summary"),
-              group: "top",
-            }
-          : {
-              key: "sales-entry",
-              label: "Sales Entry",
-              path: modulePath("sales-entry"),
-              group: "top",
-            }
-      );
+      items.push({
+        key: "sales-entry",
+        label: "Sales Entry",
+        path: modulePath("sales-entry"),
+        group: "daily",
+      });
+
+      if (privileged) {
+        items.push({
+          key: "front-desk-room-board",
+          label: "Front Desk / Room Board",
+          path: modulePath("sales-entry"),
+          group: "daily",
+        });
+      }
     }
 
-    if (privileged && (canShowNav(user, modules, "reconcile") || user.role === "admin")) {
+    if (canShowNav(user, modules, "shift-closing") || user.role === "admin") {
       items.push({
-        key: "reconcile",
-        label: "Reconciliation",
-        path: modulePath("reconcile"),
-        group: "top",
+        key: "shift-closing",
+        label: "Shift Closing",
+        path: modulePath("shift-closing"),
+        group: "daily",
       });
     }
 
-    if (canShowNav(user, modules, "notifications")) {
+    return items;
+  }, [user, modules, privileged]);
+
+  const financialItems: Item[] = useMemo(() => {
+    if (!privileged) return [];
+
+    const items: Item[] = [];
+
+    if (canShowNav(user, modules, "sales")) {
       items.push({
-        key: "notifications",
-        label: "Notifications",
-        path: modulePath("notifications"),
-        group: "top",
+        key: "sales-summary",
+        label: "Sales Summary Analytics",
+        path: modulePath("sales-summary"),
+        group: "financial",
+      });
+    }
+
+    if (canShowNav(user, modules, "reconcile") || user.role === "admin") {
+      items.push({
+        key: "reconcile",
+        label: "Reconcile Sales",
+        path: modulePath("reconcile"),
+        group: "financial",
+      });
+    }
+
+    if (user.role === "accounting" || user.role === "admin") {
+      items.push({
+        key: "accounting-workbench",
+        label: "Accounting Review",
+        path: modulePath("accounting-workbench"),
+        group: "financial",
+      });
+    }
+
+    const canSeeCDC =
+      CASH_DESK_CLOSINGS_ROLES.includes(user.role) &&
+      (canShowNav(user, modules, "cash-desk-closings") || user.role === "admin");
+
+    if (canSeeCDC) {
+      items.push({
+        key: "cash-desk-closings",
+        label: "Cash Desk Closings",
+        path: modulePath("cash-desk-closings"),
+        group: "financial",
       });
     }
 
@@ -149,7 +190,7 @@ export default function Sidebar() {
     }));
   }, [visibleDepartments]);
 
-  const adminItems: Item[] = useMemo(() => {
+  const businessItems: Item[] = useMemo(() => {
     if (!privileged) return [];
 
     const items: Item[] = [];
@@ -157,37 +198,9 @@ export default function Sidebar() {
     if (canManageDepartments) {
       items.push({
         key: "manage-departments",
-        label: "Manage Departments",
+        label: "Departments",
         path: "/app/departments/manage",
-        group: "admin",
-      });
-    }
-
-    const canSeeCDC =
-      CASH_DESK_CLOSINGS_ROLES.includes(user.role) &&
-      (canShowNav(user, modules, "cash-desk-closings") || user.role === "admin");
-
-    if (canSeeCDC) {
-      items.push({
-        key: "cash-desk-closings",
-        label: "Cash Desk Closings",
-        path: modulePath("cash-desk-closings"),
-        group: "admin",
-      });
-    }
-
-    if (user.role === "accounting" || user.role === "admin") {
-      items.push({
-        key: "accounting-workbench",
-        label: "Accounting Workbench",
-        path: modulePath("accounting-workbench"),
-        group: "admin",
-      });
-      items.push({
-        key: "ledger-debug",
-        label: "Ledger Debug",
-        path: modulePath("ledger-debug"),
-        group: "admin",
+        group: "business",
       });
     }
 
@@ -196,7 +209,31 @@ export default function Sidebar() {
         key: "manage-modules",
         label: "Manage Modules",
         path: modulePath("manage-modules"),
-        group: "admin",
+        group: "business",
+      });
+    }
+
+    return items;
+  }, [privileged, canManageDepartments, user, modules]);
+
+  const systemItems: Item[] = useMemo(() => {
+    const items: Item[] = [];
+
+    if (canShowNav(user, modules, "notifications")) {
+      items.push({
+        key: "notifications",
+        label: "Notifications",
+        path: modulePath("notifications"),
+        group: "system",
+      });
+    }
+
+    if (user.role === "accounting" || user.role === "admin") {
+      items.push({
+        key: "ledger-debug",
+        label: "Ledger Debug",
+        path: modulePath("ledger-debug"),
+        group: "system",
       });
     }
 
@@ -205,16 +242,16 @@ export default function Sidebar() {
         key: "audit-logs",
         label: "Audit Logs",
         path: modulePath("audit-logs"),
-        group: "admin",
+        group: "system",
       });
     }
 
     return items;
-  }, [privileged, canManageDepartments, user, modules]);
+  }, [user, modules]);
 
   const allItems: Item[] = useMemo(
-    () => [...topItems, ...departmentItems, ...adminItems],
-    [topItems, departmentItems, adminItems]
+    () => [...dailyItems, ...financialItems, ...departmentItems, ...businessItems, ...systemItems],
+    [dailyItems, financialItems, departmentItems, businessItems, systemItems]
   );
 
   const query = q.trim().toLowerCase();
@@ -353,33 +390,56 @@ export default function Sidebar() {
       )}
 
       <nav style={styles.nav}>
-        {topItems.map((i) => (
-          <LinkRow key={i.key} label={i.label} path={i.path} />
-        ))}
+        <SectionTitle title="Daily Operations" open={dailyOpen} onToggle={() => setDailyOpen((v) => !v)} />
+        {collapsed
+          ? null
+          : !dailyOpen
+          ? null
+          : dailyItems.map((i) => <LinkRow key={i.key} label={i.label} path={i.path} />)}
 
-        <SectionTitle title="Departments" open={deptOpen} onToggle={() => setDeptOpen((v) => !v)} />
-        {collapsed ? null : !deptOpen ? null : departmentItems.length === 0 ? (
-          <div style={styles.mutedText}>
-            {privileged
-              ? "No departments available."
-              : "No department assigned. Add departmentKey to this staff user."}
-          </div>
-        ) : (
-          departmentItems.map((i) => <LinkRow key={i.key} label={i.label} path={i.path} />)
-        )}
-
-        {privileged && (
+        {financialItems.length > 0 ? (
           <>
-            <SectionTitle title="Admin Tools" open={adminOpen} onToggle={() => setAdminOpen((v) => !v)} />
+            <SectionTitle title="Financial Control" open={financialOpen} onToggle={() => setFinancialOpen((v) => !v)} />
             {collapsed
               ? null
-              : !adminOpen
+              : !financialOpen
               ? null
-              : adminItems.map((i) => (
-                  <LinkRow key={`${i.group}-${i.key}`} label={i.label} path={i.path} />
-                ))}
+              : financialItems.map((i) => <LinkRow key={i.key} label={i.label} path={i.path} />)}
           </>
-        )}
+        ) : null}
+
+        {businessItems.length > 0 || departmentItems.length > 0 ? (
+          <>
+            <SectionTitle title="Business Setup" open={businessOpen} onToggle={() => setBusinessOpen((v) => !v)} />
+            {collapsed ? null : !businessOpen ? null : (
+              <>
+                {businessItems.map((i) => (
+                  <LinkRow key={i.key} label={i.label} path={i.path} />
+                ))}
+                {departmentItems.length === 0 ? (
+                  <div style={styles.mutedText}>
+                    {privileged
+                      ? "No departments."
+                      : "No department assigned."}
+                  </div>
+                ) : (
+                  departmentItems.map((i) => <LinkRow key={i.key} label={i.label} path={i.path} />)
+                )}
+              </>
+            )}
+          </>
+        ) : null}
+
+        {systemItems.length > 0 ? (
+          <>
+            <SectionTitle title="System" open={systemOpen} onToggle={() => setSystemOpen((v) => !v)} />
+            {collapsed
+              ? null
+              : !systemOpen
+              ? null
+              : systemItems.map((i) => <LinkRow key={i.key} label={i.label} path={i.path} />)}
+          </>
+        ) : null}
       </nav>
     </aside>
   );
