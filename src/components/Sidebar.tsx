@@ -117,6 +117,7 @@ export default function Sidebar() {
 
   const operationalItems: Item[] = useMemo(() => {
     if (primaryDailyOperator) return [];
+    if (isManager) return [];
 
     const items: Item[] = [];
 
@@ -139,7 +140,7 @@ export default function Sidebar() {
     }
 
     return items;
-  }, [user, modules, primaryDailyOperator]);
+  }, [user, modules, primaryDailyOperator, isManager]);
 
   const financialItems: Item[] = useMemo(() => {
     if (!privileged) return [];
