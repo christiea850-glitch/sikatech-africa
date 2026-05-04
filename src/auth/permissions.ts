@@ -89,6 +89,23 @@ export function canAuditReadOnly(input: Role | string | Pick<User, "role"> | nul
   return role === "auditor";
 }
 
+export function canAccessExpenses(input: Role | string | Pick<User, "role"> | null | undefined): boolean {
+  const role = roleOf(input);
+  return !!role && !canAuditReadOnly(role);
+}
+
+export function canViewDepartmentRoute(
+  input: Role | string | Pick<User, "role" | "departmentKey"> | null | undefined,
+  departmentKey?: string | null
+): boolean {
+  const role = roleOf(input);
+  if (!role) return false;
+  if (canManageSetup(role) || canReviewFinancials(role)) return true;
+
+  const userDeptKey = typeof input === "string" ? null : input?.departmentKey ?? null;
+  return !!departmentKey && !!userDeptKey && userDeptKey === departmentKey;
+}
+
 export function canViewBroadOperations(input: Role | string | Pick<User, "role"> | null | undefined): boolean {
   const role = roleOf(input);
   return !!role && role !== "staff" && role !== "front_desk";
@@ -115,11 +132,16 @@ export function canViewModuleKey(input: Role | string | Pick<User, "role"> | nul
     case "ledger-debug":
       return canReviewFinancials(role) && !canAuditReadOnly(role);
     case "reconcile":
-      return canOperateFrontDesk(role);
+      return canReviewFinancials(role);
     case "accounting":
     case "accounting-workbench":
     case "cash-desk-closings":
       return canReviewFinancials(role);
+    case "expenses":
+      return canAccessExpenses(role);
+    case "departments":
+    case "department":
+      return canManageSetup(role) || canReviewFinancials(role);
     case "manage-modules":
     case "manage-departments":
       return canManageSetup(role);

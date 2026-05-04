@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { canOperateFrontDesk } from "../auth/permissions";
+import { canReviewFinancials } from "../auth/permissions";
 import { useShift } from "../shifts/ShiftContext";
 import { getRoomFolio, getShiftSummary } from "../api/mvpClient";
 
@@ -34,7 +34,7 @@ export default function ReconcilePage() {
   const [folio, setFolio] = useState<any | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const canView = !!user && canOperateFrontDesk(user);
+  const canView = !!user && canReviewFinancials(user);
 
   const loadSummary = async () => {
     if (!user || !activeShift?.id || !canView) return;

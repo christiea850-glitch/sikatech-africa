@@ -116,7 +116,7 @@ export default function Sidebar() {
       });
     }
 
-    if (canOperateFrontDesk(user) && canShowNav(user, modules, "reconcile")) {
+    if (canReviewFinancials(user) && canShowNav(user, modules, "reconcile")) {
       items.push({
         key: "reconcile",
         label: "Reconcile Sales",

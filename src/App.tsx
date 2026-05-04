@@ -1,5 +1,5 @@
 // src/App.tsx
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useParams } from "react-router-dom";
 
 import ProtectedRoute from "./auth/ProtectedRoute";
 import Layout from "./components/Layout";
@@ -21,6 +21,17 @@ import CashDeskClosingsPage from "./pages/CashDeskClosingsPage";
 import ExpensePage from "./expenses/ExpensePage";
 import AccountingWorkbenchPage from "./pages/AccountingWorkbenchPage";
 import LedgerDebugPage from "./pages/LedgerDebugPage";
+import FrontDeskEntry from "./sales/FrontDeskEntry";
+
+function DepartmentRoute() {
+  const { deptKey } = useParams<{ deptKey: string }>();
+
+  return (
+    <ProtectedRoute capability="departmentView" departmentKey={deptKey}>
+      <DepartmentPage />
+    </ProtectedRoute>
+  );
+}
 
 export default function App() {
   return (
@@ -43,15 +54,23 @@ export default function App() {
         <Route
           path="sales"
           element={
-            <ProtectedRoute moduleKey="sales-entry">
+            <ProtectedRoute capability="operateSales" moduleKey="sales">
               <SalesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="frontdesk"
+          element={
+            <ProtectedRoute capability="operateFrontDesk" moduleKey="sales">
+              <FrontDeskEntry />
             </ProtectedRoute>
           }
         />
         <Route
           path="sales-dashboard"
           element={
-            <ProtectedRoute moduleKey="sales-summary">
+            <ProtectedRoute capability="reviewFinancials" moduleKey="sales-summary">
               <SalesDashboardPage />
             </ProtectedRoute>
           }
@@ -59,7 +78,7 @@ export default function App() {
         <Route
           path="accounting-workbench"
           element={
-            <ProtectedRoute moduleKey="accounting-workbench">
+            <ProtectedRoute capability="reviewFinancials" moduleKey="accounting-workbench">
               <AccountingWorkbenchPage />
             </ProtectedRoute>
           }
@@ -67,12 +86,19 @@ export default function App() {
         <Route
           path="ledger-debug"
           element={
-            <ProtectedRoute moduleKey="ledger-debug">
+            <ProtectedRoute capability="reviewFinancials" moduleKey="ledger-debug">
               <LedgerDebugPage />
             </ProtectedRoute>
           }
         />
-        <Route path="expenses" element={<ExpensePage />} />
+        <Route
+          path="expenses"
+          element={
+            <ProtectedRoute capability="accessExpenses">
+              <ExpensePage />
+            </ProtectedRoute>
+          }
+        />
 
         <Route
           path="shift-closing"
@@ -86,7 +112,7 @@ export default function App() {
         <Route
           path="reconcile"
           element={
-            <ProtectedRoute moduleKey="reconcile">
+            <ProtectedRoute capability="reviewFinancials" moduleKey="reconcile">
               <ReconcilePage />
             </ProtectedRoute>
           }
@@ -95,28 +121,35 @@ export default function App() {
         <Route
           path="cash-desk-closings"
           element={
-            <ProtectedRoute moduleKey="cash-desk-closings">
+            <ProtectedRoute capability="approveOrReviewClosings" moduleKey="cash-desk-closings">
               <CashDeskClosingsPage />
             </ProtectedRoute>
           }
         />
 
-        <Route path="notifications" element={<NotificationsPage />} />
+        <Route
+          path="notifications"
+          element={
+            <ProtectedRoute capability="all" moduleKey="notifications">
+              <NotificationsPage />
+            </ProtectedRoute>
+          }
+        />
 
         <Route
           path="departments/manage"
           element={
-            <ProtectedRoute moduleKey="manage-departments">
+            <ProtectedRoute capability="manageSetup" moduleKey="manage-departments">
               <DepartmentsPage />
             </ProtectedRoute>
           }
         />
-        <Route path="departments/:deptKey" element={<DepartmentPage />} />
+        <Route path="departments/:deptKey" element={<DepartmentRoute />} />
 
         <Route
           path="manage-modules"
           element={
-            <ProtectedRoute moduleKey="manage-modules">
+            <ProtectedRoute capability="manageSetup" moduleKey="manage-modules">
               <ManageModulesPage />
             </ProtectedRoute>
           }
