@@ -47,7 +47,7 @@ export default function Sidebar() {
   const privileged = canViewBroadOperations(user);
   const isOwnerOrSuperAdmin = user.role === "owner" || user.role === "super_admin";
   const isAdmin = user.role === "admin";
-  const isManager = user.role === "manager";
+  const isManager = user.role === "manager" || user.role === "assistant_manager";
   const isAccounting = user.role === "accounting";
   const isAuditor = user.role === "auditor";
   const primaryDailyOperator = user.role === "staff" || user.role === "front_desk";
