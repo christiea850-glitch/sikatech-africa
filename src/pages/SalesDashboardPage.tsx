@@ -457,6 +457,7 @@ export default function SalesDashboardPage() {
   const [selectedDepartmentKey, setSelectedDepartmentKey] = useState<string | null>(null);
   const [focusedDashboardView, setFocusedDashboardView] =
     useState<FocusedDashboardView | null>(null);
+  const [showDashboardDetails, setShowDashboardDetails] = useState(false);
   const [selectedTx, setSelectedTx] = useState<Tx | null>(null);
   const [selectedExpense, setSelectedExpense] = useState<ExpenseRow | null>(null);
   const [activeTab, setActiveTab] = useState<MainTab>("overview");
@@ -1839,6 +1840,25 @@ export default function SalesDashboardPage() {
             )}
           </ChartCard>
 
+          {!showDashboardDetails ? (
+            <div style={styles.sectionCard}>
+              <div style={styles.sectionHeader}>
+                <h2 style={styles.sectionTitle}>Detailed Analytics</h2>
+                <span style={styles.helperText}>Charts, tables, and deeper department analysis</span>
+              </div>
+              <div style={styles.emptyState}>
+                Detailed charts and tables are hidden to keep this overview easy to scan.
+              </div>
+              <button
+                type="button"
+                style={styles.exportButtonPrimary}
+                onClick={() => setShowDashboardDetails(true)}
+              >
+                View details
+              </button>
+            </div>
+          ) : (
+            <>
           {departmentRootCause && (
             <ChartCard
               title="Breakdown Panel"
@@ -2257,6 +2277,8 @@ export default function SalesDashboardPage() {
               </div>
             </div>
           </div>
+            </>
+          )}
         </>
       )}
 

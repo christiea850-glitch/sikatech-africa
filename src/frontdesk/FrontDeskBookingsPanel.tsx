@@ -129,6 +129,7 @@ export default function FrontDeskBookingsPanel() {
   const [notes, setNotes] = useState("");
   const [search, setSearch] = useState("");
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [showReservationForm, setShowReservationForm] = useState(false);
   const [folioPaymentAmount, setFolioPaymentAmount] = useState(0);
   const [folioPaymentMethod, setFolioPaymentMethod] =
     useState<FolioPaymentMethod>("cash");
@@ -542,6 +543,23 @@ export default function FrontDeskBookingsPanel() {
         <KpiCard label="Unpaid Balances" value={stats.unpaidBalances} />
       </div>
 
+      {!showReservationForm ? (
+        <div style={styles.card}>
+          <div style={styles.cardHeader}>
+            <div>
+              <div style={styles.sectionTitle}>New Reservation</div>
+              <div style={styles.sectionSubtitle}>Open the booking form when you are ready to capture a new stay.</div>
+            </div>
+            <button
+              type="button"
+              style={styles.primaryBtn}
+              onClick={() => setShowReservationForm(true)}
+            >
+              Open details
+            </button>
+          </div>
+        </div>
+      ) : (
       <div style={styles.card}>
         <div style={styles.cardHeader}>
           <div>
@@ -761,8 +779,16 @@ export default function FrontDeskBookingsPanel() {
           <button type="button" style={styles.secondaryBtn} onClick={resetForm}>
             Reset
           </button>
+          <button
+            type="button"
+            style={styles.secondaryBtn}
+            onClick={() => setShowReservationForm(false)}
+          >
+            Collapse form
+          </button>
         </div>
       </div>
+      )}
 
       <div style={styles.card}>
         <div style={styles.sectionTitle}>Reservation Board</div>
