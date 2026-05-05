@@ -6,10 +6,12 @@ type MetricsLike = {
   totals?: {
     revenue?: number;
     collections?: number;
+    cashCollections?: number;
     expenses?: number;
     netProfit?: number;
   };
   transactions?: number;
+  pendingClosings?: number;
 };
 
 type GroupedRowLike = {
@@ -77,9 +79,11 @@ export function getManagerInsights({
 
   const revenue = safeNumber(metrics.totals?.revenue);
   const collections = safeNumber(metrics.totals?.collections);
+  const cashCollections = safeNumber(metrics.totals?.cashCollections);
   const expenses = safeNumber(metrics.totals?.expenses);
   const netProfit = safeNumber(metrics.totals?.netProfit);
   const transactions = safeNumber(metrics.transactions);
+  const pendingClosings = safeNumber(metrics.pendingClosings);
   const previousRevenue = safeNumber(previousMetrics?.totals?.revenue);
 
   const activeRows = groupedRows.filter((row) => safeNumber(row.transactions) > 0);
@@ -93,6 +97,7 @@ export function getManagerInsights({
   const warningAlerts = alerts.filter((alert) => alert.type === "warning").length;
   const collectionGapRatio = revenue > 0 ? Math.max(0, (revenue - collections) / revenue) : 0;
   const collectionVarianceRatio = revenue > 0 ? Math.abs(revenue - collections) / revenue : 0;
+  const cashCollectionShare = collections > 0 ? cashCollections / collections : 0;
   const expenseRatio = revenue > 0 ? expenses / revenue : 0;
   const profitMargin = revenue > 0 ? netProfit / revenue : 0;
   const topRevenueAmount = safeNumber(topRevenue?.revenue);
@@ -170,6 +175,28 @@ export function getManagerInsights({
       type: collectionGapRatio >= 0.25 ? "risk" : "warning",
       title: "Collection Gap",
       message: `Data shows collections are ${pct(collectionGapRatio)} below revenue. Management may review unpaid balances, room postings, and reconciliation timing.`,
+    });
+  }
+
+  if (cashCollectionShare >= 0.7) {
+    addInsight({
+      id: "cash-dependency",
+      idea: "cash-dependency",
+      importance: Math.round(62 + cashCollectionShare * 35),
+      type: cashCollectionShare >= 0.85 ? "risk" : "warning",
+      title: "High Cash Dependency",
+      message: `Data shows cash represents ${pct(cashCollectionShare)} of collections. Management may tighten cash controls and encourage traceable payment methods.`,
+    });
+  }
+
+  if (pendingClosings > 0) {
+    addInsight({
+      id: "pending-closings",
+      idea: "pending-closings",
+      importance: Math.min(92, 62 + pendingClosings * 4),
+      type: pendingClosings >= 5 ? "risk" : "warning",
+      title: "Pending Closings",
+      message: `${pendingClosings} shift closing${pendingClosings === 1 ? "" : "s"} still require review before final reporting can be trusted.`,
     });
   }
 

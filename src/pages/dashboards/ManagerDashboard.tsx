@@ -26,6 +26,7 @@ type ManagerDashboardView =
   | "overview"
   | "front-desk"
   | "department-activity"
+  | "sales-summary"
   | "closings"
   | "alerts"
   | "insights";
@@ -41,6 +42,7 @@ const DASHBOARD_VIEWS: ManagerDashboardView[] = [
   "overview",
   "front-desk",
   "department-activity",
+  "sales-summary",
   "closings",
   "alerts",
   "insights",
@@ -186,6 +188,29 @@ function labelize(value: string) {
 function getRangeLabel(range: DateRange) {
   if (range.startDate === range.endDate) return range.startDate;
   return `${range.startDate || "Start"} to ${range.endDate || "End"}`;
+}
+
+function getDataConfidenceLabel(entries: Array<{ status?: string }>) {
+  if (entries.length === 0) return "Operational View";
+
+  const reviewedStatuses = new Set(["reviewed", "approved", "reconciled"]);
+  const reviewedCount = entries.filter((entry) =>
+    reviewedStatuses.has(String(entry.status || "").toLowerCase())
+  ).length;
+
+  if (reviewedCount === entries.length) return "Reviewed View";
+  if (reviewedCount > 0) return "Mixed Operational / Reviewed View";
+  return "Operational View";
+}
+
+function getDataConfidenceHint(label: string) {
+  if (label === "Reviewed View") {
+    return "All ledger entries in this range are marked reviewed, approved, or reconciled.";
+  }
+  if (label === "Mixed Operational / Reviewed View") {
+    return "Some ledger entries are reviewed, but this range still includes operational records awaiting accounting review.";
+  }
+  return "Live ledger activity before final accounting review or reconciliation.";
 }
 
 function alertStyle(tone: AlertTone): CSSProperties {
@@ -379,6 +404,8 @@ export default function ManagerDashboard() {
       triggerFrontDeskHighlight();
     } else if (view === "department-activity") {
       triggerDepartmentActivityHighlight();
+    } else if (view === "sales-summary") {
+      triggerGroupedPerformanceHighlight();
     } else if (view === "closings") {
       triggerClosingStatusHighlight();
     } else if (view === "alerts") {
@@ -402,6 +429,7 @@ export default function ManagerDashboard() {
     triggerClosingStatusHighlight,
     triggerDepartmentActivityHighlight,
     triggerFrontDeskHighlight,
+    triggerGroupedPerformanceHighlight,
     triggerInsightsHighlight,
     triggerManagerAlertsHighlight,
     triggerOverviewHighlight,
@@ -557,13 +585,16 @@ export default function ManagerDashboard() {
   const insights = useMemo(
     () =>
       getManagerInsights({
-        metrics,
+        metrics: {
+          ...metrics,
+          pendingClosings: pendingClosings.length,
+        },
         previousMetrics,
         groupedRows: metrics.groupedRows,
         alerts,
         dateLabel: getRangeLabel(activeRange),
       }),
-    [activeRange, alerts, metrics, previousMetrics]
+    [activeRange, alerts, metrics, pendingClosings.length, previousMetrics]
   );
 
   const defaultInsights = useMemo(() => {
@@ -601,13 +632,18 @@ export default function ManagerDashboard() {
   }, [alerts, selectedAlert?.id]);
 
   const activeDepartments = departmentPerformance.filter((department) => department.transactions > 0).length;
+  const receivablesTotal = metrics.totals.receivables || Math.max(0, metrics.totals.revenue - metrics.totals.collections);
+  const dataConfidenceLabel = getDataConfidenceLabel(metrics.entries);
+  const dataConfidenceHint = getDataConfidenceHint(dataConfidenceLabel);
 
   const kpis = [
-    { label: "Sales", value: money(metrics.totals.revenue), hint: getRangeLabel(activeRange) },
+    { label: "Total Sales", value: money(metrics.totals.revenue), hint: getRangeLabel(activeRange) },
     { label: "Collections", value: money(metrics.totals.collections), hint: "Collected in range" },
-    { label: "Transactions", value: String(metrics.transactions || metrics.salesCount), hint: "Ledger activity" },
     { label: "Expenses", value: money(metrics.totals.expenses), hint: `${metrics.expenseCount} expense record${metrics.expenseCount === 1 ? "" : "s"}` },
+    { label: "Net Profit", value: money(metrics.totals.netProfit), hint: "Revenue less expenses" },
+    { label: "Receivables", value: money(receivablesTotal), hint: `${unpaidBookings.length} unpaid room balance${unpaidBookings.length === 1 ? "" : "s"}` },
     { label: "Active Departments", value: `${activeDepartments}/${enabledDepartments.length}`, hint: "Departments with activity" },
+    { label: "Open Shifts", value: String(openShifts.length), hint: `${pendingClosings.length} pending closing${pendingClosings.length === 1 ? "" : "s"}` },
     { label: "Alerts", value: String(alerts.length), hint: "Items needing attention" },
   ];
 
@@ -673,7 +709,7 @@ export default function ManagerDashboard() {
       path.startsWith("/app/sales-dashboard") ||
       path.startsWith("/app/departments/")
     ) {
-      return dashboardPathFor("department-activity");
+      return dashboardPathFor(path.startsWith("/app/sales-dashboard") ? "sales-summary" : "department-activity");
     }
 
     if (path.startsWith("/app/frontdesk")) {
@@ -752,6 +788,10 @@ export default function ManagerDashboard() {
           <p style={styles.subtitle}>
             Track daily performance, department activity, and shift readiness.
           </p>
+        </div>
+        <div style={styles.statusPanel}>
+          <div style={styles.statusLabel}>{dataConfidenceLabel}</div>
+          <div style={styles.statusText}>{dataConfidenceHint}</div>
         </div>
       </header>
 
@@ -1011,7 +1051,7 @@ export default function ManagerDashboard() {
         <div style={styles.sectionHeader}>
           <h2 style={styles.sectionTitle}>Grouped Performance</h2>
           <span style={styles.sectionMeta}>
-            Grouped by: {metrics.groupLabel}
+            Grouped by: {metrics.groupLabel} | {dataConfidenceLabel}
           </span>
         </div>
         {metrics.groupedRows.length === 0 ? (
@@ -1179,6 +1219,13 @@ export default function ManagerDashboard() {
             <button
               type="button"
               style={styles.quickActionButton}
+              onClick={() => openDashboardView("sales-summary")}
+            >
+              Review Sales Summary
+            </button>
+            <button
+              type="button"
+              style={styles.quickActionButton}
               onClick={() => openDashboardView("front-desk")}
             >
               Review Front Desk Overview
@@ -1221,6 +1268,25 @@ const styles: Record<string, CSSProperties> = {
     margin: "8px 0 0",
     color: "#587083",
     fontSize: 15,
+  },
+  statusPanel: {
+    maxWidth: 340,
+    background: "#ffffff",
+    border: "1px solid #dce5ec",
+    borderRadius: 8,
+    padding: 12,
+    boxShadow: "0 8px 20px rgba(15, 38, 55, 0.04)",
+  },
+  statusLabel: {
+    color: "#17364b",
+    fontSize: 13,
+    fontWeight: 900,
+  },
+  statusText: {
+    marginTop: 4,
+    color: "#607486",
+    fontSize: 12,
+    lineHeight: 1.35,
   },
   filterBar: {
     display: "grid",
