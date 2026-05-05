@@ -16,7 +16,7 @@ export const OWNER_ROLES: Role[] = ["owner", "super_admin"];
 
 export function roleOf(input: Role | string | Pick<User, "role"> | null | undefined): Role | null {
   const raw = typeof input === "string" ? input : input?.role;
-  const role = String(raw ?? "").trim().toLowerCase();
+  const role = String(raw ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
   return (ALL_ROLES as string[]).includes(role) ? (role as Role) : null;
 }
 
@@ -91,7 +91,12 @@ export function canAuditReadOnly(input: Role | string | Pick<User, "role"> | nul
 
 export function canAccessExpenses(input: Role | string | Pick<User, "role"> | null | undefined): boolean {
   const role = roleOf(input);
-  return !!role && !canAuditReadOnly(role);
+  return (
+    role === "owner" ||
+    role === "super_admin" ||
+    role === "admin" ||
+    role === "accounting"
+  );
 }
 
 export function canViewDepartmentRoute(

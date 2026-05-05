@@ -62,7 +62,7 @@ export default function App() {
         <Route
           path="frontdesk"
           element={
-            <ProtectedRoute capability="operateFrontDesk" moduleKey="sales">
+            <ProtectedRoute capability="operateFrontDesk" moduleKey="front-desk-room-board">
               <FrontDeskEntry />
             </ProtectedRoute>
           }
@@ -94,7 +94,7 @@ export default function App() {
         <Route
           path="expenses"
           element={
-            <ProtectedRoute capability="accessExpenses">
+            <ProtectedRoute capability="accessExpenses" moduleKey="expenses">
               <ExpensePage />
             </ProtectedRoute>
           }
