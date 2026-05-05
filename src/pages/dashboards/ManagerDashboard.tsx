@@ -304,7 +304,7 @@ export default function ManagerDashboard() {
     flash: overviewFlash,
     trigger: triggerOverviewHighlight,
   } = useScrollHighlight<HTMLElement>({
-    durationMs: 1000,
+    durationMs: 2000,
     block: "start",
   });
   const {
@@ -312,14 +312,14 @@ export default function ManagerDashboard() {
     flash: insightsFlash,
     trigger: triggerInsightsHighlight,
   } = useScrollHighlight<HTMLElement>({
-    durationMs: 1000,
+    durationMs: 2000,
     block: "start",
   });
   const {
     ref: operationsRef,
     flash: operationsFlash,
   } = useScrollHighlight<HTMLElement>({
-    durationMs: 1000,
+    durationMs: 2000,
     block: "start",
   });
   const {
@@ -327,15 +327,15 @@ export default function ManagerDashboard() {
     flash: frontDeskFlash,
     trigger: triggerFrontDeskHighlight,
   } = useScrollHighlight<HTMLElement>({
-    durationMs: 1000,
-    block: "center",
+    durationMs: 2000,
+    block: "start",
   });
   const {
     ref: departmentActivityRef,
     flash: departmentActivityFlash,
     trigger: triggerDepartmentActivityHighlight,
   } = useScrollHighlight<HTMLElement>({
-    durationMs: 1000,
+    durationMs: 2000,
     block: "start",
   });
   const {
@@ -343,7 +343,7 @@ export default function ManagerDashboard() {
     flash: groupedPerformanceFlash,
     trigger: triggerGroupedPerformanceHighlight,
   } = useScrollHighlight<HTMLElement>({
-    durationMs: 1000,
+    durationMs: 2000,
     block: "start",
   });
   const {
@@ -351,7 +351,7 @@ export default function ManagerDashboard() {
     flash: managerAlertsFlash,
     trigger: triggerManagerAlertsHighlight,
   } = useScrollHighlight<HTMLDivElement>({
-    durationMs: 1000,
+    durationMs: 2000,
     block: "start",
   });
   const {
@@ -359,8 +359,8 @@ export default function ManagerDashboard() {
     flash: closingStatusFlash,
     trigger: triggerClosingStatusHighlight,
   } = useScrollHighlight<HTMLElement>({
-    durationMs: 1000,
-    block: "center",
+    durationMs: 2000,
+    block: "start",
   });
 
   const activeRange = datePreset === "custom" ? customRange : getPresetRange(datePreset);
@@ -860,6 +860,7 @@ export default function ManagerDashboard() {
 
       <section
         ref={overviewRef}
+        className={overviewFlash ? "active-section" : undefined}
         style={{
           ...styles.kpiGrid,
           ...(overviewFlash ? styles.sectionFlash : {}),
@@ -877,6 +878,7 @@ export default function ManagerDashboard() {
 
       <section
         ref={insightsRef}
+        className={insightsFlash ? "active-section" : undefined}
         style={{
           ...styles.section,
           ...(insightsFlash ? styles.sectionFlash : {}),
@@ -949,6 +951,7 @@ export default function ManagerDashboard() {
 
       <section
         ref={operationsRef}
+        className={operationsFlash ? "active-section" : undefined}
         style={{
           ...styles.section,
           ...(operationsFlash ? styles.sectionFlash : {}),
@@ -961,6 +964,12 @@ export default function ManagerDashboard() {
           {snapshot.map((item) => (
             <article
               key={item.title}
+              className={
+                (item.title === "Cash Desk Readiness" && closingStatusFlash) ||
+                (item.title === "Front Desk Status" && frontDeskFlash)
+                  ? "active-section"
+                  : undefined
+              }
               ref={
                 item.title === "Cash Desk Readiness"
                   ? closingStatusRef
@@ -997,6 +1006,7 @@ export default function ManagerDashboard() {
 
       <section
         ref={departmentActivityRef}
+        className={departmentActivityFlash ? "active-section" : undefined}
         style={{
           ...styles.section,
           ...(departmentActivityFlash ? styles.sectionFlash : {}),
@@ -1043,6 +1053,7 @@ export default function ManagerDashboard() {
 
       <section
         ref={groupedPerformanceRef}
+        className={groupedPerformanceFlash ? "active-section" : undefined}
         style={{
           ...styles.section,
           ...(groupedPerformanceFlash ? styles.sectionFlash : {}),
@@ -1085,6 +1096,7 @@ export default function ManagerDashboard() {
       <section style={styles.twoColumn}>
         <div
           ref={managerAlertsRef}
+          className={managerAlertsFlash ? "active-section" : undefined}
           style={{
             ...styles.section,
             ...(managerAlertsFlash ? styles.sectionFlash : {}),
