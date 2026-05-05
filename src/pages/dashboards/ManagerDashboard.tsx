@@ -1203,43 +1203,15 @@ export default function ManagerDashboard() {
 
         <div style={styles.section}>
           <div style={styles.sectionHeader}>
-            <h2 style={styles.sectionTitle}>Quick Actions</h2>
+            <h2 style={styles.sectionTitle}>Manager Review Shortcuts</h2>
           </div>
           <div style={styles.quickActions}>
-            <button
-              type="button"
-              style={styles.quickActionButton}
-              onClick={() => openDashboardView("closings")}
-            >
-              View Closing Status
-            </button>
-            <button
-              type="button"
-              style={styles.quickActionButton}
-              onClick={() => openDashboardView("department-activity")}
-            >
-              Review Department Activity
-            </button>
             <button
               type="button"
               style={styles.quickActionButton}
               onClick={() => openDashboardView("sales-summary")}
             >
               Review Sales Summary
-            </button>
-            <button
-              type="button"
-              style={styles.quickActionButton}
-              onClick={() => openDashboardView("front-desk")}
-            >
-              Review Front Desk Overview
-            </button>
-            <button
-              type="button"
-              style={styles.quickActionButton}
-              onClick={() => openDashboardView("closings")}
-            >
-              View Closing Status
             </button>
           </div>
         </div>
