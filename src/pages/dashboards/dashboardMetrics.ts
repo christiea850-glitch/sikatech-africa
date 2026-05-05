@@ -15,6 +15,7 @@ export type DashboardGroupedRow = {
   name: string;
   revenue: number;
   collections: number;
+  cashCollections: number;
   expenses: number;
   netProfit: number;
   transactions: number;
@@ -118,6 +119,7 @@ function buildGroupedRows(
         name: identity.name,
         revenue: 0,
         collections: 0,
+        cashCollections: 0,
         expenses: 0,
         netProfit: 0,
         transactions: 0,
@@ -127,6 +129,11 @@ function buildGroupedRows(
     current.collections = roundLedgerMoney(
       current.collections + (Number(entry.collectionAmount) || 0)
     );
+    if (entry.paymentMethod === "cash") {
+      current.cashCollections = roundLedgerMoney(
+        current.cashCollections + (Number(entry.collectionAmount) || 0)
+      );
+    }
     current.expenses = roundLedgerMoney(current.expenses + (Number(entry.expenseAmount) || 0));
     current.netProfit = roundLedgerMoney(current.revenue - current.expenses);
     current.transactions += 1;
@@ -152,6 +159,10 @@ export function getDashboardMetrics({
     endDate,
   });
   const totals = selectLedgerTotals(entries);
+  const cashCollections = entries.reduce((sum, entry) => {
+    if (entry.paymentMethod !== "cash") return sum;
+    return roundLedgerMoney(sum + (Number(entry.collectionAmount) || 0));
+  }, 0);
   const groupedRows = buildGroupedRows(entries, groupBy, departmentLabels);
   const salesCount = salesRecords.filter((record) =>
     inDateRange(record.createdAt, startDate, endDate)
@@ -164,6 +175,7 @@ export function getDashboardMetrics({
     entries,
     totals: {
       ...totals,
+      cashCollections,
       netProfit: roundLedgerMoney(totals.revenue - totals.expenses),
     },
     groupedRows,
