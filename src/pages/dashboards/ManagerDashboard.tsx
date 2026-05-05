@@ -28,6 +28,11 @@ type ManagerDashboardView =
   | "closings"
   | "alerts"
   | "insights";
+type OperationsSnapshotTarget =
+  | "overview"
+  | "front-desk"
+  | "department-activity"
+  | "closings";
 
 type DateRange = {
   startDate: string;
@@ -730,33 +735,45 @@ export default function ManagerDashboard() {
     navigate(safePath);
   }
 
+  function scrollToOperationsSnapshotTarget(target: OperationsSnapshotTarget) {
+    if (target === "overview") {
+      triggerOverviewHighlight();
+    } else if (target === "front-desk") {
+      triggerFrontDeskHighlight();
+    } else if (target === "department-activity") {
+      triggerDepartmentActivityHighlight();
+    } else if (target === "closings") {
+      triggerClosingStatusHighlight();
+    }
+  }
+
   const snapshot = [
     {
       title: "Shift Status",
       text: openShifts.length ? `${openShifts.length} shift${openShifts.length === 1 ? "" : "s"} open.` : "No shift activity yet.",
       action: "View Closing Status",
-      view: "closings",
+      target: "overview",
       tone: openShifts.length ? "amber" : "green",
     },
     {
       title: "Front Desk Status",
       text: unpaidBookings.length ? `${unpaidBookings.length} unpaid room balance${unpaidBookings.length === 1 ? "" : "s"}.` : "Room balances look settled.",
       action: "Review Front Desk Overview",
-      view: "front-desk",
+      target: "front-desk",
       tone: unpaidBookings.length ? "red" : "green",
     },
     {
       title: "Department Activity",
       text: metrics.transactions ? `${activeDepartments} department${activeDepartments === 1 ? "" : "s"} active in range.` : "No department activity yet.",
       action: "Review Department Activity",
-      view: "department-activity",
+      target: "department-activity",
       tone: metrics.transactions ? "blue" : "amber",
     },
     {
       title: "Cash Desk Readiness",
       text: pendingClosings.length ? `${pendingClosings.length} closing${pendingClosings.length === 1 ? "" : "s"} pending.` : "No pending closings.",
       action: "View Closing Status",
-      view: "closings",
+      target: "closings",
       tone: pendingClosings.length ? "amber" : "green",
     },
   ] as const;
@@ -980,7 +997,7 @@ export default function ManagerDashboard() {
               <button
                 type="button"
                 style={styles.actionButton}
-                onClick={() => openDashboardView(item.view)}
+                onClick={() => scrollToOperationsSnapshotTarget(item.target)}
               >
                 {item.action}
               </button>
