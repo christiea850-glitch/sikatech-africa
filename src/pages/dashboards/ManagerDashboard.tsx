@@ -9,6 +9,7 @@ import { useScrollHighlight } from "../../hooks/useScrollHighlight";
 import { useSales } from "../../sales/SalesContext";
 import { useShift } from "../../shifts/ShiftContext";
 import { loadShiftClosings } from "../../shifts/shiftClosingStore";
+import { getManagerInsights } from "../../utils/managerInsights";
 import { getSmartAlerts, type SmartAlert } from "../../utils/smartAlerts";
 import {
   dashboardDateInRange,
@@ -137,6 +138,19 @@ function DetailMetric({ label, value }: { label: string; value: string }) {
       <div style={styles.detailMetricValue}>{value}</div>
     </div>
   );
+}
+
+function insightStyle(type: string): CSSProperties {
+  if (type === "positive") {
+    return { borderColor: "#bbf7d0", background: "#f0fdf4" };
+  }
+  if (type === "risk") {
+    return { borderColor: "#fecaca", background: "#fff7f7" };
+  }
+  if (type === "warning") {
+    return { borderColor: "#fde68a", background: "#fffbeb" };
+  }
+  return { borderColor: "#bfdbfe", background: "#eff6ff" };
 }
 
 export default function ManagerDashboard() {
@@ -341,6 +355,18 @@ export default function ManagerDashboard() {
     [departmentPerformance, metrics, pendingClosings.length, previousMetrics]
   );
 
+  const insights = useMemo(
+    () =>
+      getManagerInsights({
+        metrics,
+        previousMetrics,
+        groupedRows: metrics.groupedRows,
+        alerts,
+        dateLabel: getRangeLabel(activeRange),
+      }),
+    [activeRange, alerts, metrics, previousMetrics]
+  );
+
   useEffect(() => {
     if (!selectedAlert) return;
     const nextSelected = alerts.find((alert) => alert.id === selectedAlert.id) || null;
@@ -478,6 +504,30 @@ export default function ManagerDashboard() {
             <div style={styles.kpiHint}>{kpi.hint}</div>
           </div>
         ))}
+      </section>
+
+      <section style={styles.section}>
+        <div style={styles.sectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>Manager Insights</h2>
+            <p style={styles.sectionSubtitle}>
+              Plain-language intelligence from selected dashboard data.
+            </p>
+          </div>
+        </div>
+        {insights.length === 0 ? (
+          <div style={styles.emptyState}>No major insights detected for this range.</div>
+        ) : (
+          <div style={styles.insightGrid}>
+            {insights.map((insight) => (
+              <article key={insight.id} style={{ ...styles.insightCard, ...insightStyle(insight.type) }}>
+                <div style={styles.insightType}>{labelize(insight.type)}</div>
+                <h3 style={styles.insightTitle}>{insight.title}</h3>
+                <p style={styles.insightText}>{insight.message}</p>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <section style={styles.section}>
@@ -819,10 +869,42 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 18,
     color: "#17364b",
   },
+  sectionSubtitle: {
+    margin: "4px 0 0",
+    color: "#6b7f90",
+    fontSize: 13,
+  },
   sectionMeta: {
     color: "#6b7f90",
     fontSize: 13,
     fontWeight: 700,
+  },
+  insightGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 12,
+  },
+  insightCard: {
+    border: "1px solid",
+    borderRadius: 8,
+    padding: 14,
+  },
+  insightType: {
+    color: "#607486",
+    fontSize: 12,
+    fontWeight: 900,
+    textTransform: "uppercase",
+  },
+  insightTitle: {
+    margin: "8px 0 6px",
+    color: "#17364b",
+    fontSize: 15,
+  },
+  insightText: {
+    margin: 0,
+    color: "#354b5d",
+    fontSize: 13,
+    lineHeight: 1.45,
   },
   snapshotGrid: {
     display: "grid",
