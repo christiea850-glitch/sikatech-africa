@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
-import { useAuth } from "../../auth/AuthContext";
-import { canViewModuleKey } from "../../auth/permissions";
 import { useDepartments } from "../../departments/DepartmentsContext";
 import { useExpenses } from "../../expenses/ExpenseContext";
 import { loadBookings } from "../../frontdesk/bookingsStorage";
@@ -275,7 +273,6 @@ function insightGroupLabel(type: string) {
 export default function ManagerDashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user } = useAuth();
   const { records } = useSales();
   const { records: expenseRecords } = useExpenses();
   const { departments } = useDepartments();
@@ -350,6 +347,14 @@ export default function ManagerDashboard() {
     ref: managerAlertsRef,
     flash: managerAlertsFlash,
     trigger: triggerManagerAlertsHighlight,
+  } = useScrollHighlight<HTMLDivElement>({
+    durationMs: 2000,
+    block: "start",
+  });
+  const {
+    ref: alertDetailRef,
+    flash: alertDetailFlash,
+    trigger: triggerAlertDetailHighlight,
   } = useScrollHighlight<HTMLDivElement>({
     durationMs: 2000,
     block: "start",
@@ -631,6 +636,14 @@ export default function ManagerDashboard() {
     setSelectedAlert(nextSelected);
   }, [alerts, selectedAlert?.id]);
 
+  useEffect(() => {
+    if (!selectedAlert) return;
+
+    window.requestAnimationFrame(() => {
+      triggerAlertDetailHighlight();
+    });
+  }, [selectedAlert?.id, triggerAlertDetailHighlight]);
+
   const activeDepartments = departmentPerformance.filter((department) => department.transactions > 0).length;
   const receivablesTotal = metrics.totals.receivables || Math.max(0, metrics.totals.revenue - metrics.totals.collections);
   const dataConfidenceLabel = getDataConfidenceLabel(metrics.entries);
@@ -658,19 +671,6 @@ export default function ManagerDashboard() {
     return `/app/dashboard?${params.toString()}`;
   };
 
-  const shiftClosingPath = useMemo(() => {
-    const returnTo = dashboardPathFor(activeView);
-    return `/app/shift-closing?returnTo=${encodeURIComponent(returnTo)}`;
-  }, [
-    activeRange.endDate,
-    activeRange.startDate,
-    activeView,
-    datePreset,
-    groupBy,
-    searchParams,
-  ]);
-  const canOpenShiftClosing = !!user && canViewModuleKey(user, "shift-closing");
-
   function openDashboardView(view: ManagerDashboardView) {
     const next = buildDashboardParams({
       source: searchParams,
@@ -684,15 +684,6 @@ export default function ManagerDashboard() {
     handledViewRef.current = view;
     setSearchParams(next);
     triggerDashboardView(view);
-  }
-
-  function openShiftClosingReview() {
-    if (canOpenShiftClosing) {
-      navigate(shiftClosingPath);
-      return;
-    }
-
-    openDashboardView("closings");
   }
 
   function managerSafeReviewPath(path?: string | null) {
@@ -772,12 +763,6 @@ export default function ManagerDashboard() {
 
   function handleAlertClick(alert: SmartAlert) {
     setSelectedAlert(alert);
-    if (alert.reviewPath) {
-      openManagerSafeReviewPath(alert.reviewPath);
-      return;
-    }
-
-    openDashboardView("alerts");
   }
 
   return (
@@ -1136,7 +1121,14 @@ export default function ManagerDashboard() {
           </div>
 
           {selectedAlert ? (
-            <div style={styles.alertDetailPanel}>
+            <div
+              ref={alertDetailRef}
+              className={alertDetailFlash ? "active-section" : undefined}
+              style={{
+                ...styles.alertDetailPanel,
+                ...(alertDetailFlash ? styles.sectionFlash : {}),
+              }}
+            >
               <div style={styles.rowBetween}>
                 <div>
                   <div style={styles.detailEyebrow}>Alert Detail</div>
@@ -1202,7 +1194,7 @@ export default function ManagerDashboard() {
                   style={styles.reviewSourceButton}
                   onClick={() => openManagerSafeReviewPath(selectedAlert.reviewPath)}
                 >
-                  {selectedAlert.reviewLabel || "Review Source"}
+                  {selectedAlert.reviewLabel || "Review Related Section"}
                 </button>
               ) : null}
             </div>
@@ -1217,9 +1209,9 @@ export default function ManagerDashboard() {
             <button
               type="button"
               style={styles.quickActionButton}
-              onClick={openShiftClosingReview}
+              onClick={() => openDashboardView("closings")}
             >
-              Go to Shift Closing
+              View Closing Status
             </button>
             <button
               type="button"
