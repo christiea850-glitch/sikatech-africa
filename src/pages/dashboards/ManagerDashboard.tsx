@@ -20,6 +20,7 @@ import {
 type AlertTone = "green" | "amber" | "red" | "blue";
 type DatePreset = "today" | "yesterday" | "week" | "month" | "custom";
 type GroupBy = DashboardGroupBy;
+type ManagerDashboardView = "overview" | "department-activity" | "closings";
 
 type DateRange = {
   startDate: string;
@@ -28,6 +29,8 @@ type DateRange = {
 
 const DATE_PRESETS: DatePreset[] = ["today", "yesterday", "week", "month", "custom"];
 const GROUP_BY_OPTIONS: GroupBy[] = ["department", "payment", "shift", "staff", "room_customer"];
+const DASHBOARD_VIEWS: ManagerDashboardView[] = ["overview", "department-activity", "closings"];
+const MANAGER_DASHBOARD_FILTER_STORAGE_KEY = "sikatech.managerDashboard.filters";
 
 function toDateInputValue(date: Date) {
   const year = date.getFullYear();
@@ -69,6 +72,62 @@ function readDatePreset(value: string | null): DatePreset {
 
 function readGroupBy(value: string | null): GroupBy {
   return GROUP_BY_OPTIONS.includes(value as GroupBy) ? (value as GroupBy) : "department";
+}
+
+function readDashboardView(value: string | null): ManagerDashboardView {
+  return DASHBOARD_VIEWS.includes(value as ManagerDashboardView)
+    ? (value as ManagerDashboardView)
+    : "overview";
+}
+
+function readStoredDashboardParams() {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(MANAGER_DASHBOARD_FILTER_STORAGE_KEY);
+    return raw ? new URLSearchParams(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredDashboardParams(params: URLSearchParams) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.sessionStorage.setItem(
+      MANAGER_DASHBOARD_FILTER_STORAGE_KEY,
+      params.toString()
+    );
+  } catch {
+    // Session storage is a convenience for restoring dashboard filters.
+  }
+}
+
+function hasDashboardFilterParams(params: URLSearchParams) {
+  return (
+    params.has("dateFilter") ||
+    params.has("startDate") ||
+    params.has("endDate") ||
+    params.has("groupBy") ||
+    params.has("view")
+  );
+}
+
+function buildDashboardParams(input: {
+  source: URLSearchParams;
+  datePreset: DatePreset;
+  activeRange: DateRange;
+  groupBy: GroupBy;
+  view: ManagerDashboardView;
+}) {
+  const params = new URLSearchParams(input.source);
+  params.set("dateFilter", input.datePreset);
+  params.set("startDate", input.activeRange.startDate);
+  params.set("endDate", input.activeRange.endDate);
+  params.set("groupBy", input.groupBy);
+  params.set("view", input.view);
+  return params;
 }
 
 function getPreviousRange(range: DateRange): DateRange {
@@ -181,22 +240,35 @@ export default function ManagerDashboard() {
   const { departments } = useDepartments();
   const { shifts } = useShift();
 
-  const initialDatePreset = readDatePreset(searchParams.get("dateFilter"));
+  const initialParams =
+    !hasDashboardFilterParams(searchParams) && readStoredDashboardParams()
+      ? readStoredDashboardParams()!
+      : searchParams;
+  const initialDatePreset = readDatePreset(initialParams.get("dateFilter"));
   const initialRange = getPresetRange(initialDatePreset);
   const [datePreset, setDatePreset] = useState<DatePreset>(initialDatePreset);
   const [customRange, setCustomRange] = useState<DateRange>(() => ({
-    startDate: searchParams.get("startDate") || initialRange.startDate,
-    endDate: searchParams.get("endDate") || initialRange.endDate,
+    startDate: initialParams.get("startDate") || initialRange.startDate,
+    endDate: initialParams.get("endDate") || initialRange.endDate,
   }));
-  const [groupBy, setGroupBy] = useState<GroupBy>(() => readGroupBy(searchParams.get("groupBy")));
+  const [groupBy, setGroupBy] = useState<GroupBy>(() => readGroupBy(initialParams.get("groupBy")));
   const [selectedAlert, setSelectedAlert] = useState<SmartAlert | null>(null);
   const [showAllInsights, setShowAllInsights] = useState(false);
   const previousGroupByRef = useRef<GroupBy>(groupBy);
-  const handledClosingViewRef = useRef(false);
+  const handledViewRef = useRef<ManagerDashboardView | null>(null);
+  const activeView = readDashboardView(searchParams.get("view") || initialParams.get("view"));
   const {
     ref: groupedPerformanceRef,
     flash: groupedPerformanceFlash,
     trigger: triggerGroupedPerformanceHighlight,
+  } = useScrollHighlight<HTMLElement>({
+    durationMs: 1000,
+    block: "start",
+  });
+  const {
+    ref: departmentActivityRef,
+    flash: departmentActivityFlash,
+    trigger: triggerDepartmentActivityHighlight,
   } = useScrollHighlight<HTMLElement>({
     durationMs: 1000,
     block: "start",
@@ -214,11 +286,15 @@ export default function ManagerDashboard() {
   const previousRange = useMemo(() => getPreviousRange(activeRange), [activeRange]);
 
   useEffect(() => {
-    const next = new URLSearchParams(searchParams);
-    next.set("dateFilter", datePreset);
-    next.set("startDate", activeRange.startDate);
-    next.set("endDate", activeRange.endDate);
-    next.set("groupBy", groupBy);
+    const next = buildDashboardParams({
+      source: searchParams,
+      datePreset,
+      activeRange,
+      groupBy,
+      view: activeView,
+    });
+
+    writeStoredDashboardParams(next);
 
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true });
@@ -226,6 +302,7 @@ export default function ManagerDashboard() {
   }, [
     activeRange.endDate,
     activeRange.startDate,
+    activeView,
     datePreset,
     groupBy,
     searchParams,
@@ -240,15 +317,22 @@ export default function ManagerDashboard() {
   }, [groupBy, triggerGroupedPerformanceHighlight]);
 
   useEffect(() => {
-    if (searchParams.get("view") !== "closings") {
-      handledClosingViewRef.current = false;
-      return;
-    }
+    if (handledViewRef.current === activeView) return;
 
-    if (handledClosingViewRef.current) return;
-    handledClosingViewRef.current = true;
-    triggerClosingStatusHighlight();
-  }, [searchParams, triggerClosingStatusHighlight]);
+    handledViewRef.current = activeView;
+
+    if (activeView === "department-activity") {
+      triggerDepartmentActivityHighlight();
+    } else if (activeView === "closings") {
+      triggerClosingStatusHighlight();
+    } else if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [
+    activeView,
+    triggerClosingStatusHighlight,
+    triggerDepartmentActivityHighlight,
+  ]);
 
   const enabledDepartments = useMemo(
     () => departments.filter((department) => department.enabled),
@@ -454,43 +538,88 @@ export default function ManagerDashboard() {
     { label: "Alerts", value: String(alerts.length), hint: "Items needing attention" },
   ];
 
-  const closingStatusPath = useMemo(() => {
-    const params = new URLSearchParams(searchParams);
-    params.set("dateFilter", datePreset);
-    params.set("startDate", activeRange.startDate);
-    params.set("endDate", activeRange.endDate);
-    params.set("groupBy", groupBy);
-    params.set("view", "closings");
+  const dashboardPathFor = (view: ManagerDashboardView) => {
+    const params = buildDashboardParams({
+      source: searchParams,
+      datePreset,
+      activeRange,
+      groupBy,
+      view,
+    });
     return `/app/dashboard?${params.toString()}`;
-  }, [activeRange.endDate, activeRange.startDate, datePreset, groupBy, searchParams]);
+  };
+
+  const shiftClosingPath = useMemo(() => {
+    const returnTo = dashboardPathFor(activeView);
+    return `/app/shift-closing?returnTo=${encodeURIComponent(returnTo)}`;
+  }, [
+    activeRange.endDate,
+    activeRange.startDate,
+    activeView,
+    datePreset,
+    groupBy,
+    searchParams,
+  ]);
+
+  function managerSafeReviewPath(path?: string | null) {
+    if (!path) return dashboardPathFor(activeView);
+
+    if (
+      path.startsWith("/app/cash-desk-closings") ||
+      path.startsWith("/app/accounting-workbench")
+    ) {
+      return dashboardPathFor("closings");
+    }
+
+    if (
+      path.startsWith("/app/sales-dashboard") ||
+      path.startsWith("/app/departments/")
+    ) {
+      return dashboardPathFor("department-activity");
+    }
+
+    if (path.startsWith("/app/frontdesk")) {
+      return dashboardPathFor("overview");
+    }
+
+    if (path.startsWith("/app/dashboard")) {
+      const existing = new URLSearchParams(path.split("?")[1] || "");
+      const view = existing.has("view")
+        ? readDashboardView(existing.get("view"))
+        : "department-activity";
+      return dashboardPathFor(view);
+    }
+
+    return path;
+  }
 
   const snapshot = [
     {
       title: "Shift Status",
       text: openShifts.length ? `${openShifts.length} shift${openShifts.length === 1 ? "" : "s"} open.` : "No shift activity yet.",
       action: "View Shift Closing",
-      to: "/app/shift-closing",
+      to: shiftClosingPath,
       tone: openShifts.length ? "amber" : "green",
     },
     {
       title: "Front Desk Status",
       text: unpaidBookings.length ? `${unpaidBookings.length} unpaid room balance${unpaidBookings.length === 1 ? "" : "s"}.` : "Room balances look settled.",
-      action: "View Front Desk",
-      to: "/app/frontdesk",
+      action: "Review Front Desk Overview",
+      to: dashboardPathFor("overview"),
       tone: unpaidBookings.length ? "red" : "green",
     },
     {
       title: "Department Activity",
       text: metrics.transactions ? `${activeDepartments} department${activeDepartments === 1 ? "" : "s"} active in range.` : "No department activity yet.",
-      action: "Review Sales Summary",
-      to: "/app/sales-dashboard",
+      action: "Review Department Activity",
+      to: dashboardPathFor("department-activity"),
       tone: metrics.transactions ? "blue" : "amber",
     },
     {
       title: "Cash Desk Readiness",
       text: pendingClosings.length ? `${pendingClosings.length} closing${pendingClosings.length === 1 ? "" : "s"} pending.` : "No pending closings.",
       action: "View Closing Status",
-      to: closingStatusPath,
+      to: dashboardPathFor("closings"),
       tone: pendingClosings.length ? "amber" : "green",
     },
   ] as const;
@@ -498,7 +627,7 @@ export default function ManagerDashboard() {
   function handleAlertClick(alert: SmartAlert) {
     setSelectedAlert(alert);
     if (alert.reviewPath) {
-      navigate(alert.reviewPath);
+      navigate(managerSafeReviewPath(alert.reviewPath));
     }
   }
 
@@ -681,7 +810,13 @@ export default function ManagerDashboard() {
         </div>
       </section>
 
-      <section style={styles.section}>
+      <section
+        ref={departmentActivityRef}
+        style={{
+          ...styles.section,
+          ...(departmentActivityFlash ? styles.sectionFlash : {}),
+        }}
+      >
         <div style={styles.sectionHeader}>
           <h2 style={styles.sectionTitle}>Department Performance Preview</h2>
           <span style={styles.sectionMeta}>{getRangeLabel(activeRange)}</span>
@@ -862,7 +997,7 @@ export default function ManagerDashboard() {
                 <button
                   type="button"
                   style={styles.reviewSourceButton}
-                  onClick={() => navigate(selectedAlert.reviewPath || "/app/dashboard")}
+                  onClick={() => navigate(managerSafeReviewPath(selectedAlert.reviewPath))}
                 >
                   {selectedAlert.reviewLabel || "Review Source"}
                 </button>
@@ -876,17 +1011,17 @@ export default function ManagerDashboard() {
             <h2 style={styles.sectionTitle}>Quick Actions</h2>
           </div>
           <div style={styles.quickActions}>
-            <Link to="/app/shift-closing" style={styles.quickAction}>
+            <Link to={shiftClosingPath} style={styles.quickAction}>
               Go to Shift Closing
             </Link>
-            <Link to="/app/sales-dashboard" style={styles.quickAction}>
-              View Sales Summary
+            <Link to={dashboardPathFor("department-activity")} style={styles.quickAction}>
+              Review Department Activity
             </Link>
-            <Link to="/app/frontdesk" style={styles.quickAction}>
-              View Front Desk / Room Board
+            <Link to={dashboardPathFor("overview")} style={styles.quickAction}>
+              Review Front Desk Overview
             </Link>
-            <Link to="/app/cash-desk-closings" style={styles.quickAction}>
-              Review Cash Desk Closings
+            <Link to={dashboardPathFor("closings")} style={styles.quickAction}>
+              View Closing Status
             </Link>
           </div>
         </div>
