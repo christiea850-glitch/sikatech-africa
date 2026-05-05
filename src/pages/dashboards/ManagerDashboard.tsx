@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useDepartments } from "../../departments/DepartmentsContext";
 import { useExpenses } from "../../expenses/ExpenseContext";
@@ -24,6 +24,9 @@ type DateRange = {
   startDate: string;
   endDate: string;
 };
+
+const DATE_PRESETS: DatePreset[] = ["today", "yesterday", "week", "month", "custom"];
+const GROUP_BY_OPTIONS: GroupBy[] = ["department", "payment", "shift", "staff", "room_customer"];
 
 function toDateInputValue(date: Date) {
   const year = date.getFullYear();
@@ -57,6 +60,14 @@ function getPresetRange(preset: DatePreset): DateRange {
 
   const value = toDateInputValue(today);
   return { startDate: value, endDate: value };
+}
+
+function readDatePreset(value: string | null): DatePreset {
+  return DATE_PRESETS.includes(value as DatePreset) ? (value as DatePreset) : "today";
+}
+
+function readGroupBy(value: string | null): GroupBy {
+  return GROUP_BY_OPTIONS.includes(value as GroupBy) ? (value as GroupBy) : "department";
 }
 
 function getPreviousRange(range: DateRange): DateRange {
@@ -130,14 +141,20 @@ function DetailMetric({ label, value }: { label: string; value: string }) {
 
 export default function ManagerDashboard() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { records } = useSales();
   const { records: expenseRecords } = useExpenses();
   const { departments } = useDepartments();
   const { shifts } = useShift();
 
-  const [datePreset, setDatePreset] = useState<DatePreset>("today");
-  const [customRange, setCustomRange] = useState<DateRange>(() => getPresetRange("today"));
-  const [groupBy, setGroupBy] = useState<GroupBy>("department");
+  const initialDatePreset = readDatePreset(searchParams.get("dateFilter"));
+  const initialRange = getPresetRange(initialDatePreset);
+  const [datePreset, setDatePreset] = useState<DatePreset>(initialDatePreset);
+  const [customRange, setCustomRange] = useState<DateRange>(() => ({
+    startDate: searchParams.get("startDate") || initialRange.startDate,
+    endDate: searchParams.get("endDate") || initialRange.endDate,
+  }));
+  const [groupBy, setGroupBy] = useState<GroupBy>(() => readGroupBy(searchParams.get("groupBy")));
   const [selectedAlert, setSelectedAlert] = useState<SmartAlert | null>(null);
   const previousGroupByRef = useRef<GroupBy>(groupBy);
   const {
@@ -151,6 +168,25 @@ export default function ManagerDashboard() {
 
   const activeRange = datePreset === "custom" ? customRange : getPresetRange(datePreset);
   const previousRange = useMemo(() => getPreviousRange(activeRange), [activeRange]);
+
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    next.set("dateFilter", datePreset);
+    next.set("startDate", activeRange.startDate);
+    next.set("endDate", activeRange.endDate);
+    next.set("groupBy", groupBy);
+
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [
+    activeRange.endDate,
+    activeRange.startDate,
+    datePreset,
+    groupBy,
+    searchParams,
+    setSearchParams,
+  ]);
 
   useEffect(() => {
     if (previousGroupByRef.current === groupBy) return;
