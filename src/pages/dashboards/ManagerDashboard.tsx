@@ -192,6 +192,7 @@ export default function ManagerDashboard() {
   const [selectedAlert, setSelectedAlert] = useState<SmartAlert | null>(null);
   const [showAllInsights, setShowAllInsights] = useState(false);
   const previousGroupByRef = useRef<GroupBy>(groupBy);
+  const handledClosingViewRef = useRef(false);
   const {
     ref: groupedPerformanceRef,
     flash: groupedPerformanceFlash,
@@ -199,6 +200,14 @@ export default function ManagerDashboard() {
   } = useScrollHighlight<HTMLElement>({
     durationMs: 1000,
     block: "start",
+  });
+  const {
+    ref: closingStatusRef,
+    flash: closingStatusFlash,
+    trigger: triggerClosingStatusHighlight,
+  } = useScrollHighlight<HTMLElement>({
+    durationMs: 1000,
+    block: "center",
   });
 
   const activeRange = datePreset === "custom" ? customRange : getPresetRange(datePreset);
@@ -229,6 +238,17 @@ export default function ManagerDashboard() {
     previousGroupByRef.current = groupBy;
     triggerGroupedPerformanceHighlight();
   }, [groupBy, triggerGroupedPerformanceHighlight]);
+
+  useEffect(() => {
+    if (searchParams.get("view") !== "closings") {
+      handledClosingViewRef.current = false;
+      return;
+    }
+
+    if (handledClosingViewRef.current) return;
+    handledClosingViewRef.current = true;
+    triggerClosingStatusHighlight();
+  }, [searchParams, triggerClosingStatusHighlight]);
 
   const enabledDepartments = useMemo(
     () => departments.filter((department) => department.enabled),
@@ -434,6 +454,16 @@ export default function ManagerDashboard() {
     { label: "Alerts", value: String(alerts.length), hint: "Items needing attention" },
   ];
 
+  const closingStatusPath = useMemo(() => {
+    const params = new URLSearchParams(searchParams);
+    params.set("dateFilter", datePreset);
+    params.set("startDate", activeRange.startDate);
+    params.set("endDate", activeRange.endDate);
+    params.set("groupBy", groupBy);
+    params.set("view", "closings");
+    return `/app/dashboard?${params.toString()}`;
+  }, [activeRange.endDate, activeRange.startDate, datePreset, groupBy, searchParams]);
+
   const snapshot = [
     {
       title: "Shift Status",
@@ -459,8 +489,8 @@ export default function ManagerDashboard() {
     {
       title: "Cash Desk Readiness",
       text: pendingClosings.length ? `${pendingClosings.length} closing${pendingClosings.length === 1 ? "" : "s"} pending.` : "No pending closings.",
-      action: "Review Closings",
-      to: "/app/cash-desk-closings",
+      action: "View Closing Status",
+      to: closingStatusPath,
       tone: pendingClosings.length ? "amber" : "green",
     },
   ] as const;
@@ -628,7 +658,16 @@ export default function ManagerDashboard() {
         </div>
         <div style={styles.snapshotGrid}>
           {snapshot.map((item) => (
-            <article key={item.title} style={styles.card}>
+            <article
+              key={item.title}
+              ref={item.title === "Cash Desk Readiness" ? closingStatusRef : undefined}
+              style={{
+                ...styles.card,
+                ...(item.title === "Cash Desk Readiness" && closingStatusFlash
+                  ? styles.sectionFlash
+                  : {}),
+              }}
+            >
               <span style={{ ...styles.badge, ...alertStyle(item.tone as AlertTone) }}>
                 {labelize(item.tone)}
               </span>
