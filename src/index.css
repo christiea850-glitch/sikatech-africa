@@ -4,26 +4,32 @@
    SikaTech Theme Tokens
 ------------------------------ */
 :root {
-  --sk-gold: #d1a21b;
-  --sk-gold-dark: #b58413;
-  --sk-navy: #0b2a3a;
-  --sk-navy-soft: #123b4f;
+  --sk-gold: #d6a51f;
+  --sk-gold-dark: #a87310;
+  --sk-gold-soft: #f6e8b8;
+  --sk-teal: #0b3a3f;
+  --sk-teal-deep: #06292d;
+  --sk-navy: #0b3a3f;
+  --sk-navy-soft: #12515a;
 
-  --sk-text: #0f1720;
-  --sk-text-soft: #5b6b79;
+  --sk-text: #173234;
+  --sk-text-soft: #66736b;
 
   --sk-white: #ffffff;
-  --sk-bg: #f3f6fb;
-  --sk-card: #ffffff;
-  --sk-border: rgba(15, 23, 32, 0.08);
+  --sk-bg: #f7efd9;
+  --sk-bg-warm: #fbf6e8;
+  --sk-card: #fffdf7;
+  --sk-card-strong: #ffffff;
+  --sk-border: rgba(92, 64, 18, 0.14);
+  --sk-border-strong: rgba(92, 64, 18, 0.22);
 
   --sk-radius-xl: 24px;
   --sk-radius-lg: 18px;
   --sk-radius-md: 14px;
   --sk-radius-sm: 10px;
 
-  --sk-shadow-sm: 0 2px 6px rgba(15, 23, 32, 0.04);
-  --sk-shadow-md: 0 14px 36px rgba(15, 23, 32, 0.08);
+  --sk-shadow-sm: 0 2px 8px rgba(69, 49, 17, 0.06);
+  --sk-shadow-md: 0 16px 38px rgba(69, 49, 17, 0.10);
 
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     Roboto, Arial, sans-serif;
@@ -58,9 +64,10 @@ body {
   min-height: 100vh;
   background: radial-gradient(
       1200px 480px at 10% -10%,
-      rgba(209, 162, 27, 0.08),
+      rgba(214, 165, 31, 0.16),
       transparent 60%
     ),
+    linear-gradient(180deg, var(--sk-bg-warm) 0%, var(--sk-bg) 100%),
     var(--sk-bg);
   color: var(--sk-text);
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
@@ -76,7 +83,7 @@ body {
 .sk-app-bg {
   min-height: 100vh;
   width: 100%;
-  background: var(--sk-bg);
+  background: linear-gradient(180deg, var(--sk-bg-warm) 0%, var(--sk-bg) 100%);
   color: var(--sk-text);
 }
 
@@ -151,14 +158,14 @@ textarea {
   color: var(--sk-text);
   border-radius: 12px;
   border: 1px solid var(--sk-border);
-  background: #fff;
+  background: var(--sk-card-strong);
   padding: 10px 12px;
 }
 
 input:focus,
 select:focus,
 textarea:focus {
-  outline: 2px solid rgba(11, 42, 58, 0.12);
+  outline: 2px solid rgba(214, 165, 31, 0.34);
   outline-offset: 1px;
 }
 
@@ -166,7 +173,7 @@ textarea:focus {
 table {
   border-collapse: collapse;
   width: 100%;
-  background: #fff;
+  background: var(--sk-card-strong);
   border-radius: 14px;
   overflow: hidden;
   border: 1px solid var(--sk-border);
@@ -179,7 +186,7 @@ td {
 }
 
 th {
-  background: #f8fafc;
+  background: #fbf2d8;
   color: var(--sk-navy);
   font-weight: 700;
   text-align: left;

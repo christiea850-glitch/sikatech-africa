@@ -32,7 +32,7 @@ const styles: Record<string, CSSProperties> = {
   shell: {
     display: "flex",
     minHeight: "100vh",
-    background: "var(--sk-bg)",
+    background: "linear-gradient(180deg, var(--sk-bg-warm) 0%, var(--sk-bg) 100%)",
   },
 
   right: {
@@ -40,7 +40,7 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     minWidth: 0,
-    background: "var(--sk-bg)",
+    background: "linear-gradient(180deg, var(--sk-bg-warm) 0%, var(--sk-bg) 100%)",
   },
 
   main: {
@@ -61,6 +61,6 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: 20,
     padding: 24,
     boxShadow: "var(--sk-shadow-md)",
-    border: "1px solid var(--sk-border)",
+    border: "1px solid var(--sk-border-strong)",
   },
 };

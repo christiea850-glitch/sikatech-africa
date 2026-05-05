@@ -2,18 +2,18 @@
 
 export const UI = {
   colors: {
-    bg: "#f5f7fa",
-    surface: "#ffffff",
-    border: "rgba(15, 23, 42, 0.08)",
-    text: "#0f2f3f",
-    subtext: "#64748b",
-    primary: "#0f2f3f", // your navy
-    accent: "#1597b8",  // HHC-style blue
+    bg: "#f7efd9",
+    surface: "#fffdf7",
+    border: "rgba(92, 64, 18, 0.14)",
+    text: "#173234",
+    subtext: "#66736b",
+    primary: "#0b3a3f",
+    accent: "#d6a51f",
   },
 
   layout: {
     page: {
-      background: "#f5f7fa",
+      background: "#f7efd9",
       padding: 20,
       minHeight: "100vh",
     },
@@ -25,21 +25,21 @@ export const UI = {
   },
 
   card: {
-    background: "#ffffff",
-    border: "1px solid rgba(15,23,42,0.08)",
+    background: "#fffdf7",
+    border: "1px solid rgba(92,64,18,0.14)",
     borderRadius: 16,
     padding: 16,
-    boxShadow: "0 4px 10px rgba(0,0,0,0.03)", // lighter
+    boxShadow: "0 4px 10px rgba(69,49,17,0.05)",
   },
 
   sectionTitle: {
     fontSize: 20,
     fontWeight: 700,
-    color: "#0f2f3f",
+    color: "#0b3a3f",
   },
 
   sectionSub: {
-    color: "#64748b",
+    color: "#66736b",
     fontSize: 14,
   },
 
@@ -48,7 +48,7 @@ export const UI = {
     container: {
       display: "flex",
       gap: 12,
-      borderBottom: "1px solid rgba(15,23,42,0.08)",
+      borderBottom: "1px solid rgba(92,64,18,0.14)",
       paddingBottom: 6,
       marginTop: 10,
     },
@@ -58,19 +58,19 @@ export const UI = {
       border: "none",
       padding: "8px 12px",
       fontWeight: 600,
-      color: "#64748b",
+      color: "#66736b",
       cursor: "pointer",
     },
 
     active: {
-      color: "#0f2f3f",
-      borderBottom: "2px solid #1597b8",
+      color: "#0b3a3f",
+      borderBottom: "2px solid #d6a51f",
     },
   },
 
   button: {
     primary: {
-      background: "#0f2f3f",
+      background: "#0b3a3f",
       color: "#fff",
       borderRadius: 10,
       padding: "10px 14px",
@@ -79,8 +79,8 @@ export const UI = {
     },
 
     light: {
-      background: "#fff",
-      border: "1px solid rgba(15,23,42,0.08)",
+      background: "#fffdf7",
+      border: "1px solid rgba(92,64,18,0.14)",
       borderRadius: 10,
       padding: "10px 14px",
       cursor: "pointer",

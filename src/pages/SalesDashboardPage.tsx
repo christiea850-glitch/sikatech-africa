@@ -1012,7 +1012,7 @@ export default function SalesDashboardPage() {
     { key: "activity", label: "Activity" },
   ];
 
-  const pieColors = ["#0F172A", "#2563EB", "#8B5CF6", "#10B981", "#F59E0B"];
+  const pieColors = ["#0B3A3F", "#D6A51F", "#12515A", "#16A34A", "#A87310"];
 
   const focusedViewDepartment = useMemo(() => {
     if (focusedDashboardView?.type !== "department") return null;
@@ -1636,7 +1636,7 @@ export default function SalesDashboardPage() {
           title="Collections"
           value={money(summary.collections)}
           note="Ledger collections"
-          accent="#2563EB"
+          accent="#0B3A3F"
           active={selectedFocus === "collections"}
           onClick={() => {
             setSelectedFocus("collections");
@@ -1647,7 +1647,7 @@ export default function SalesDashboardPage() {
           title="Receivables"
           value={money(summary.receivables)}
           note="Ledger receivables"
-          accent="#F59E0B"
+          accent="#D6A51F"
           active={selectedFocus === "receivables"}
           onClick={() => {
             setSelectedFocus("receivables");
@@ -2126,7 +2126,7 @@ export default function SalesDashboardPage() {
                       <Bar
                         dataKey="revenue"
                         name="Revenue"
-                        fill="#0F172A"
+                        fill="#0B3A3F"
                         radius={[6, 6, 0, 0]}
                       />
                       <Bar
@@ -2190,7 +2190,7 @@ export default function SalesDashboardPage() {
                       type="monotone"
                       dataKey="sales"
                       name="Sales"
-                      stroke="#0F172A"
+                      stroke="#0B3A3F"
                       strokeWidth={3}
                       dot={{ r: 3 }}
                       activeDot={{ r: 5 }}
@@ -2483,7 +2483,7 @@ export default function SalesDashboardPage() {
                     <Bar
                       dataKey="today"
                       name="Today"
-                      fill="#0F172A"
+                      fill="#0B3A3F"
                       radius={[6, 6, 0, 0]}
                     />
                     <Bar
@@ -2618,7 +2618,7 @@ export default function SalesDashboardPage() {
                         <td
                           style={{
                             ...styles.tdRight,
-                            color: row.receivables > 0 ? "#B45309" : "#0F172A",
+                            color: row.receivables > 0 ? "#A87310" : "#0B3A3F",
                             fontWeight: row.receivables > 0 ? 800 : 700,
                           }}
                         >
@@ -2628,7 +2628,7 @@ export default function SalesDashboardPage() {
                         <td
                           style={{
                             ...styles.tdRight,
-                            color: row.net < 0 ? "#B91C1C" : "#0F172A",
+                            color: row.net < 0 ? "#B91C1C" : "#0B3A3F",
                             fontWeight: 800,
                           }}
                         >
@@ -2658,7 +2658,7 @@ export default function SalesDashboardPage() {
                       <Bar
                         dataKey="revenue"
                         name="Revenue"
-                        fill="#0F172A"
+                        fill="#0B3A3F"
                         radius={[6, 6, 0, 0]}
                       />
                       <Bar
@@ -2924,7 +2924,7 @@ export default function SalesDashboardPage() {
 const styles: Record<string, React.CSSProperties> = {
   page: {
     padding: 24,
-    background: "#F6F8FB",
+    background: "linear-gradient(180deg, #FBF6E8 0%, #F7EFD9 100%)",
     minHeight: "100vh",
   },
   headerBlock: {
@@ -2939,12 +2939,12 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
     fontSize: 22,
     fontWeight: 800,
-    color: "#0F172A",
+    color: "#0B3A3F",
   },
   subtitle: {
     margin: "6px 0 0",
     fontSize: 14,
-    color: "#64748B",
+    color: "#66736B",
     fontWeight: 500,
   },
   exportActions: {
@@ -2953,9 +2953,9 @@ const styles: Record<string, React.CSSProperties> = {
     flexWrap: "wrap",
   },
   exportButton: {
-    border: "1px solid #D1D5DB",
-    background: "#FFFFFF",
-    color: "#0F172A",
+    border: "1px solid rgba(92, 64, 18, 0.18)",
+    background: "#FFFDF7",
+    color: "#0B3A3F",
     borderRadius: 10,
     padding: "10px 14px",
     fontSize: 13,
@@ -2963,8 +2963,8 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
   },
   exportButtonPrimary: {
-    border: "1px solid #0F172A",
-    background: "#0F172A",
+    border: "1px solid #0B3A3F",
+    background: "#0B3A3F",
     color: "#FFFFFF",
     borderRadius: 10,
     padding: "10px 14px",
@@ -2973,17 +2973,17 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
   },
   printSummaryCard: {
-    background: "#FFFFFF",
-    border: "1px solid #E5EAF3",
+    background: "#FFFDF7",
+    border: "1px solid rgba(92, 64, 18, 0.16)",
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
-    boxShadow: "0 2px 10px rgba(15, 23, 42, 0.03)",
+    boxShadow: "0 4px 14px rgba(69, 49, 17, 0.05)",
   },
   printSummaryTitle: {
     fontSize: 15,
     fontWeight: 800,
-    color: "#0F172A",
+    color: "#0B3A3F",
     marginBottom: 12,
   },
   printSummaryGrid: {
@@ -2992,8 +2992,8 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 12,
   },
   printSummaryItem: {
-    background: "#F8FAFC",
-    border: "1px solid #E9EEF5",
+    background: "#FBF6E8",
+    border: "1px solid rgba(92, 64, 18, 0.12)",
     borderRadius: 12,
     padding: 12,
     display: "grid",
@@ -3002,12 +3002,12 @@ const styles: Record<string, React.CSSProperties> = {
   printSummaryLabel: {
     fontSize: 12,
     fontWeight: 700,
-    color: "#64748B",
+    color: "#66736B",
   },
   printSummaryValue: {
     fontSize: 14,
     fontWeight: 800,
-    color: "#0F172A",
+    color: "#0B3A3F",
   },
   filtersRow: {
     display: "grid",
@@ -3018,20 +3018,22 @@ const styles: Record<string, React.CSSProperties> = {
   searchInput: {
     height: 44,
     borderRadius: 12,
-    border: "1px solid #DBE3EF",
+    border: "1px solid rgba(92, 64, 18, 0.16)",
     padding: "0 14px",
     fontSize: 14,
     outline: "none",
     background: "#FFFFFF",
+    color: "#0B3A3F",
   },
   select: {
     height: 44,
     borderRadius: 12,
-    border: "1px solid #DBE3EF",
+    border: "1px solid rgba(92, 64, 18, 0.16)",
     padding: "0 12px",
     fontSize: 14,
     outline: "none",
     background: "#FFFFFF",
+    color: "#0B3A3F",
   },
   dateRangeControls: {
     display: "grid",
@@ -3046,17 +3048,17 @@ const styles: Record<string, React.CSSProperties> = {
   dateLabel: {
     fontSize: 11,
     fontWeight: 800,
-    color: "#64748B",
+    color: "#66736B",
   },
   dateInput: {
     height: 44,
     borderRadius: 12,
-    border: "1px solid #DBE3EF",
+    border: "1px solid rgba(92, 64, 18, 0.16)",
     padding: "0 12px",
     fontSize: 14,
     outline: "none",
     background: "#FFFFFF",
-    color: "#0F172A",
+    color: "#0B3A3F",
   },
   chipsRow: {
     display: "flex",
@@ -3066,17 +3068,18 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 16,
   },
   chip: {
-    background: "#F7F1DE",
-    color: "#1F2937",
-    border: "1px solid #EADFB7",
+    background: "#F6E8B8",
+    color: "#0B3A3F",
+    border: "1px solid rgba(214, 165, 31, 0.46)",
     borderRadius: 999,
     padding: "8px 12px",
     fontSize: 13,
     fontWeight: 700,
   },
   clearButton: {
-    border: "1px solid #DBE3EF",
-    background: "#FFFFFF",
+    border: "1px solid rgba(92, 64, 18, 0.16)",
+    background: "#FFFDF7",
+    color: "#0B3A3F",
     borderRadius: 999,
     padding: "8px 12px",
     cursor: "pointer",
@@ -3090,11 +3093,11 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 16,
   },
   metricCard: {
-    background: "#FFFFFF",
+    background: "#FFFDF7",
     borderRadius: 16,
     padding: 16,
-    border: "1px solid #E5EAF3",
-    boxShadow: "0 2px 10px rgba(15, 23, 42, 0.03)",
+    border: "1px solid rgba(92, 64, 18, 0.16)",
+    boxShadow: "0 4px 14px rgba(69, 49, 17, 0.05)",
   },
   metricCardButton: {
     width: "100%",
@@ -3103,33 +3106,33 @@ const styles: Record<string, React.CSSProperties> = {
     font: "inherit",
   },
   metricCardActive: {
-    outline: "2px solid #0F172A",
+    outline: "2px solid #D6A51F",
     outlineOffset: 2,
   },
   metricTitle: {
     fontSize: 14,
     fontWeight: 700,
-    color: "#64748B",
+    color: "#66736B",
     marginBottom: 10,
   },
   metricValue: {
     fontSize: 24,
     fontWeight: 800,
-    color: "#0F172A",
+    color: "#0B3A3F",
     marginBottom: 6,
   },
   metricNote: {
     fontSize: 13,
-    color: "#475569",
+    color: "#52645E",
     fontWeight: 500,
   },
   sectionCard: {
-    background: "#FFFFFF",
+    background: "#FFFDF7",
     borderRadius: 18,
-    border: "1px solid #E5EAF3",
+    border: "1px solid rgba(92, 64, 18, 0.16)",
     padding: 16,
     marginBottom: 16,
-    boxShadow: "0 2px 10px rgba(15, 23, 42, 0.03)",
+    boxShadow: "0 4px 14px rgba(69, 49, 17, 0.05)",
   },
   sectionHeader: {
     display: "flex",
@@ -3137,21 +3140,23 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     marginBottom: 12,
     gap: 12,
+    paddingBottom: 10,
+    borderBottom: "1px solid rgba(214, 165, 31, 0.26)",
   },
   sectionTitle: {
     margin: 0,
     fontSize: 16,
     fontWeight: 800,
-    color: "#0F172A",
+    color: "#0B3A3F",
   },
   helperText: {
     fontSize: 12,
-    color: "#94A3B8",
+    color: "#8B7650",
     fontWeight: 700,
   },
   emptyState: {
     padding: "16px 0",
-    color: "#64748B",
+    color: "#66736B",
     fontSize: 14,
     fontWeight: 500,
   },
@@ -3173,8 +3178,8 @@ const styles: Record<string, React.CSSProperties> = {
   actionCard: {
     borderRadius: 14,
     padding: 14,
-    border: "1px solid #E5EAF3",
-    background: "#FFFFFF",
+    border: "1px solid rgba(92, 64, 18, 0.14)",
+    background: "#FFFDF7",
   },
   alertDanger: {
     background: "#FEF2F2",
@@ -3199,13 +3204,13 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 10,
     fontSize: 14,
     fontWeight: 800,
-    color: "#0F172A",
+    color: "#0B3A3F",
     marginBottom: 6,
   },
   alertBadge: {
     borderRadius: 999,
     padding: "3px 8px",
-    border: "1px solid rgba(15, 23, 42, 0.1)",
+    border: "1px solid rgba(92, 64, 18, 0.14)",
     fontSize: 11,
     fontWeight: 800,
     textTransform: "uppercase",
@@ -3215,7 +3220,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#FFFFFF",
   },
   alertBadgeWarning: {
-    background: "#F59E0B",
+    background: "#D6A51F",
     color: "#111827",
   },
   alertBadgeSuccess: {
@@ -3223,7 +3228,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#FFFFFF",
   },
   alertBadgeInfo: {
-    background: "#2563EB",
+    background: "#0B3A3F",
     color: "#FFFFFF",
   },
   actionBadgeHigh: {
@@ -3231,23 +3236,23 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#FFFFFF",
   },
   actionBadgeMedium: {
-    background: "#F59E0B",
+    background: "#D6A51F",
     color: "#111827",
   },
   actionBadgeLow: {
-    background: "#2563EB",
+    background: "#0B3A3F",
     color: "#FFFFFF",
   },
   alertMessage: {
     fontSize: 13,
-    color: "#475569",
+    color: "#52645E",
     fontWeight: 600,
     lineHeight: 1.45,
   },
   alertAction: {
     marginTop: 8,
     fontSize: 12,
-    color: "#0F172A",
+    color: "#0B3A3F",
     fontWeight: 800,
   },
   focusedMode: {
@@ -3277,26 +3282,26 @@ const styles: Record<string, React.CSSProperties> = {
     height: 340,
   },
   insightCard: {
-    background: "#F8FAFC",
-    border: "1px solid #E9EEF5",
+    background: "#FBF6E8",
+    border: "1px solid rgba(92, 64, 18, 0.12)",
     borderRadius: 14,
     padding: 16,
   },
   insightLabel: {
     fontSize: 15,
     fontWeight: 800,
-    color: "#0F172A",
+    color: "#0B3A3F",
     marginBottom: 8,
   },
   insightValue: {
     fontSize: 28,
     fontWeight: 900,
-    color: "#0F172A",
+    color: "#0B3A3F",
     marginBottom: 6,
   },
   insightSub: {
     fontSize: 13,
-    color: "#475569",
+    color: "#52645E",
     fontWeight: 600,
   },
   breakdownGrid: {
@@ -3310,7 +3315,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: 12,
     fontSize: 13,
-    color: "#334155",
+    color: "#365451",
     fontWeight: 600,
     marginTop: 8,
   },
@@ -3324,8 +3329,8 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 12,
   },
   deptCompareCard: {
-    background: "#F8FAFC",
-    border: "1px solid #E9EEF5",
+    background: "#FBF6E8",
+    border: "1px solid rgba(92, 64, 18, 0.12)",
     borderRadius: 14,
     padding: 14,
   },
@@ -3339,12 +3344,12 @@ const styles: Record<string, React.CSSProperties> = {
   deptCompareTitle: {
     fontSize: 15,
     fontWeight: 800,
-    color: "#0F172A",
+    color: "#0B3A3F",
     marginBottom: 4,
   },
   deptCompareMeta: {
     fontSize: 13,
-    color: "#64748B",
+    color: "#66736B",
     fontWeight: 600,
   },
   deptCompareBadge: {
@@ -3374,8 +3379,8 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 12,
   },
   leaderboardCard: {
-    background: "#F8FAFC",
-    border: "1px solid #E9EEF5",
+    background: "#FBF6E8",
+    border: "1px solid rgba(92, 64, 18, 0.12)",
     borderRadius: 14,
     padding: 14,
     width: "100%",
@@ -3399,7 +3404,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 34,
     height: 34,
     borderRadius: 999,
-    background: "#0F172A",
+    background: "#0B3A3F",
     color: "#FFFFFF",
     display: "flex",
     alignItems: "center",
@@ -3411,12 +3416,12 @@ const styles: Record<string, React.CSSProperties> = {
   leaderboardDept: {
     fontSize: 15,
     fontWeight: 800,
-    color: "#0F172A",
+    color: "#0B3A3F",
     marginBottom: 4,
   },
   leaderboardMeta: {
     fontSize: 13,
-    color: "#64748B",
+    color: "#66736B",
     fontWeight: 600,
   },
   leaderboardRight: {
@@ -3453,7 +3458,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 12,
     flexWrap: "wrap",
     fontSize: 12,
-    color: "#475569",
+    color: "#52645E",
     fontWeight: 700,
   },
   activityGrid: {
@@ -3475,8 +3480,8 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
   },
   activityCard: {
-    background: "#F8FAFC",
-    border: "1px solid #E9EEF5",
+    background: "#FBF6E8",
+    border: "1px solid rgba(92, 64, 18, 0.12)",
     borderRadius: 14,
     padding: 14,
   },
@@ -3522,12 +3527,12 @@ const styles: Record<string, React.CSSProperties> = {
   activityTitle: {
     fontSize: 15,
     fontWeight: 800,
-    color: "#0F172A",
+    color: "#0B3A3F",
     marginBottom: 6,
   },
   activitySub: {
     fontSize: 13,
-    color: "#475569",
+    color: "#52645E",
     fontWeight: 600,
     marginBottom: 10,
   },
@@ -3536,7 +3541,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "space-between",
     gap: 10,
     fontSize: 12,
-    color: "#64748B",
+    color: "#66736B",
     fontWeight: 700,
     flexWrap: "wrap",
   },
@@ -3547,9 +3552,9 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 16,
   },
   panelTab: {
-    border: "1px solid #D1D5DB",
-    background: "#FFFFFF",
-    color: "#0F172A",
+    border: "1px solid rgba(92, 64, 18, 0.18)",
+    background: "#FFFDF7",
+    color: "#0B3A3F",
     borderRadius: 999,
     padding: "8px 14px",
     fontSize: 13,
@@ -3557,9 +3562,9 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
   },
   panelTabActive: {
-    background: "#0F172A",
+    background: "#0B3A3F",
     color: "#FFFFFF",
-    border: "1px solid #0F172A",
+    border: "1px solid #0B3A3F",
     boxShadow: "none",
   },
   paymentMixList: {
@@ -3574,13 +3579,13 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     justifyContent: "space-between",
     fontSize: 14,
-    color: "#334155",
+    color: "#365451",
     fontWeight: 700,
   },
   progressTrack: {
     height: 10,
     borderRadius: 999,
-    background: "#EEF2F7",
+    background: "#F3E5BB",
     overflow: "hidden",
   },
   progressFill: {
@@ -3588,7 +3593,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 999,
   },
   progressFillProfit: {
-    background: "#0F172A",
+    background: "#0B3A3F",
   },
   progressFillLoss: {
     background: "#DC2626",
@@ -3601,42 +3606,42 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: "left",
     padding: "12px 10px",
     fontSize: 13,
-    color: "#475569",
-    borderBottom: "1px solid #E9EEF5",
+    color: "#52645E",
+    borderBottom: "1px solid rgba(92, 64, 18, 0.14)",
   },
   thRight: {
     textAlign: "right",
     padding: "12px 10px",
     fontSize: 13,
-    color: "#475569",
-    borderBottom: "1px solid #E9EEF5",
+    color: "#52645E",
+    borderBottom: "1px solid rgba(92, 64, 18, 0.14)",
   },
   tdLeft: {
     textAlign: "left",
     padding: "14px 10px",
     fontSize: 14,
-    color: "#0F172A",
-    borderBottom: "1px solid #F1F5F9",
+    color: "#0B3A3F",
+    borderBottom: "1px solid rgba(92, 64, 18, 0.10)",
   },
   tdRight: {
     textAlign: "right",
     padding: "14px 10px",
     fontSize: 14,
-    color: "#0F172A",
-    borderBottom: "1px solid #F1F5F9",
+    color: "#0B3A3F",
+    borderBottom: "1px solid rgba(92, 64, 18, 0.10)",
   },
   tableRow: {
     cursor: "default",
   },
   tableRowActive: {
-    background: "#F8FAFC",
+    background: "#FBF6E8",
   },
   detailCard: {
-    background: "#FFFFFF",
+    background: "#FFFDF7",
     borderRadius: 18,
-    border: "1px solid #E5EAF3",
+    border: "1px solid rgba(92, 64, 18, 0.16)",
     padding: 16,
-    boxShadow: "0 2px 10px rgba(15, 23, 42, 0.03)",
+    boxShadow: "0 4px 14px rgba(69, 49, 17, 0.05)",
     marginBottom: 16,
   },
   detailHeader: {
@@ -3649,11 +3654,12 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
     fontSize: 16,
     fontWeight: 800,
-    color: "#0F172A",
+    color: "#0B3A3F",
   },
   closeButton: {
-    border: "1px solid #DBE3EF",
+    border: "1px solid rgba(92, 64, 18, 0.16)",
     background: "#FFFFFF",
+    color: "#0B3A3F",
     borderRadius: 10,
     padding: "8px 12px",
     cursor: "pointer",
@@ -3665,20 +3671,20 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 12,
   },
   detailItem: {
-    background: "#F8FAFC",
-    border: "1px solid #E9EEF5",
+    background: "#FBF6E8",
+    border: "1px solid rgba(92, 64, 18, 0.12)",
     borderRadius: 12,
     padding: 12,
   },
   detailLabel: {
     fontSize: 12,
-    color: "#64748B",
+    color: "#66736B",
     fontWeight: 700,
     marginBottom: 6,
   },
   detailValue: {
     fontSize: 14,
-    color: "#0F172A",
+    color: "#0B3A3F",
     fontWeight: 700,
   },
   itemBreakdown: {
@@ -3687,16 +3693,16 @@ const styles: Record<string, React.CSSProperties> = {
   itemBreakdownTitle: {
     fontSize: 14,
     fontWeight: 800,
-    color: "#0F172A",
+    color: "#0B3A3F",
     marginBottom: 8,
   },
   itemBreakdownEmpty: {
     marginTop: 16,
     padding: 12,
-    border: "1px solid #E9EEF5",
+    border: "1px solid rgba(92, 64, 18, 0.12)",
     borderRadius: 12,
-    background: "#F8FAFC",
-    color: "#64748B",
+    background: "#FBF6E8",
+    color: "#66736B",
     fontSize: 13,
     fontWeight: 700,
   },
@@ -3710,30 +3716,30 @@ const styles: Record<string, React.CSSProperties> = {
   itemBreakdownThLeft: {
     textAlign: "left",
     padding: "10px",
-    borderBottom: "1px solid #E9EEF5",
-    color: "#475569",
+    borderBottom: "1px solid rgba(92, 64, 18, 0.14)",
+    color: "#52645E",
     fontSize: 12,
   },
   itemBreakdownThRight: {
     textAlign: "right",
     padding: "10px",
-    borderBottom: "1px solid #E9EEF5",
-    color: "#475569",
+    borderBottom: "1px solid rgba(92, 64, 18, 0.14)",
+    color: "#52645E",
     fontSize: 12,
   },
   itemBreakdownTdLeft: {
     textAlign: "left",
     padding: "10px",
-    borderBottom: "1px solid #F1F5F9",
-    color: "#0F172A",
+    borderBottom: "1px solid rgba(92, 64, 18, 0.10)",
+    color: "#0B3A3F",
     fontSize: 13,
     fontWeight: 700,
   },
   itemBreakdownTdRight: {
     textAlign: "right",
     padding: "10px",
-    borderBottom: "1px solid #F1F5F9",
-    color: "#0F172A",
+    borderBottom: "1px solid rgba(92, 64, 18, 0.10)",
+    color: "#0B3A3F",
     fontSize: 13,
     fontWeight: 700,
   },

@@ -478,15 +478,15 @@ export default function Sidebar() {
 const styles: Record<string, CSSProperties> = {
   sidebar: {
     background:
-      "linear-gradient(180deg, #0d3145 0%, #0a2635 55%, #071c27 100%)",
-    color: "#e8f1f5",
+      "linear-gradient(180deg, #0b3a3f 0%, #082f34 52%, #062529 100%)",
+    color: "#eef8f4",
     position: "sticky",
     top: 0,
     height: "100vh",
     overflowY: "auto",
-    borderRight: "1px solid rgba(255,255,255,0.1)",
+    borderRight: "1px solid rgba(214,165,31,0.30)",
     boxShadow:
-      "inset -1px 0 0 rgba(255,255,255,0.04), 8px 0 20px rgba(6, 17, 24, 0.25)",
+      "inset -1px 0 0 rgba(214,165,31,0.16), 10px 0 24px rgba(6, 31, 34, 0.26)",
   },
   brandRow: {
     display: "flex",
@@ -506,11 +506,11 @@ const styles: Record<string, CSSProperties> = {
     marginTop: 4,
     fontSize: 12,
     fontWeight: 600,
-    color: "rgba(232,241,245,0.7)",
+    color: "rgba(238,248,244,0.72)",
   },
   collapseBtn: {
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(255,255,255,0.12)",
+    border: "1px solid rgba(214,165,31,0.28)",
+    background: "rgba(255,255,255,0.10)",
     color: "#ffffff",
     fontSize: 14,
     fontWeight: 900,
@@ -523,8 +523,8 @@ const styles: Record<string, CSSProperties> = {
     width: "100%",
     padding: "11px 12px",
     borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.18)",
-    background: "rgba(255,255,255,0.12)",
+    border: "1px solid rgba(214,165,31,0.25)",
+    background: "rgba(255,255,255,0.11)",
     color: "#ffffff",
     outline: "none",
     fontWeight: 600,
@@ -534,8 +534,8 @@ const styles: Record<string, CSSProperties> = {
     top: 48,
     left: 0,
     right: 0,
-    background: "#102f40",
-    border: "1px solid rgba(255,255,255,0.10)",
+    background: "#0d3b42",
+    border: "1px solid rgba(214,165,31,0.22)",
     borderRadius: 12,
     overflow: "hidden",
     zIndex: 50,
@@ -556,7 +556,7 @@ const styles: Record<string, CSSProperties> = {
     cursor: "pointer",
   },
   suggestItemActive: {
-    background: "rgba(255,255,255,0.08)",
+    background: "rgba(214,165,31,0.18)",
   },
   suggestMeta: {
     fontSize: 11,
@@ -581,7 +581,7 @@ const styles: Record<string, CSSProperties> = {
   },
   sectionToggle: {
     border: "none",
-    background: "rgba(255,255,255,0.08)",
+    background: "rgba(214,165,31,0.16)",
     color: "#ffffff",
     fontWeight: 900,
     borderRadius: 8,
@@ -593,7 +593,7 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 800,
     letterSpacing: 1.2,
     textTransform: "uppercase",
-    color: "rgba(232,241,245,0.65)",
+    color: "rgba(246,232,184,0.80)",
     flex: 1,
   },
   mutedText: {
@@ -604,7 +604,7 @@ const styles: Record<string, CSSProperties> = {
   },
   link: {
     textDecoration: "none",
-    color: "rgba(232,241,245,0.95)",
+    color: "rgba(238,248,244,0.95)",
     padding: "11px 12px",
     borderRadius: 12,
     fontWeight: 700,
@@ -617,9 +617,9 @@ const styles: Record<string, CSSProperties> = {
     textAlign: "center",
   },
   linkActive: {
-    background: "rgba(255,255,255,0.16)",
+    background: "rgba(214,165,31,0.24)",
     color: "#ffffff",
-    boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.18)",
+    boxShadow: "inset 3px 0 0 #d6a51f, inset 0 0 0 1px rgba(214,165,31,0.26)",
   },
   dotBullet: {
     fontWeight: 900,
