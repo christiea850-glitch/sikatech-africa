@@ -153,6 +153,26 @@ function insightStyle(type: string): CSSProperties {
   return { borderColor: "#bfdbfe", background: "#eff6ff" };
 }
 
+function insightAction(type: string) {
+  if (type === "risk") {
+    return "Review source records and assign follow-up before close of shift.";
+  }
+  if (type === "warning") {
+    return "Monitor the pattern and review supporting transactions.";
+  }
+  if (type === "positive") {
+    return "Preserve the current operating pattern and compare against future periods.";
+  }
+  return "Keep monitoring this range as more activity is recorded.";
+}
+
+function insightGroupLabel(type: string) {
+  if (type === "risk") return "Risks";
+  if (type === "warning") return "Warnings";
+  if (type === "positive") return "Positives";
+  return "Context";
+}
+
 export default function ManagerDashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -170,6 +190,7 @@ export default function ManagerDashboard() {
   }));
   const [groupBy, setGroupBy] = useState<GroupBy>(() => readGroupBy(searchParams.get("groupBy")));
   const [selectedAlert, setSelectedAlert] = useState<SmartAlert | null>(null);
+  const [showAllInsights, setShowAllInsights] = useState(false);
   const previousGroupByRef = useRef<GroupBy>(groupBy);
   const {
     ref: groupedPerformanceRef,
@@ -367,6 +388,34 @@ export default function ManagerDashboard() {
     [activeRange, alerts, metrics, previousMetrics]
   );
 
+  const defaultInsights = useMemo(() => {
+    const hasRisk = insights.some((insight) => insight.type === "risk");
+    const focusedInsights = hasRisk
+      ? insights.filter((insight) => insight.type !== "positive")
+      : insights;
+
+    return (focusedInsights.length ? focusedInsights : insights).slice(0, 3);
+  }, [insights]);
+
+  const visibleInsights = showAllInsights ? insights : defaultInsights;
+  const featuredInsight = visibleInsights[0];
+  const groupedInsights = useMemo(() => {
+    const groups = [
+      { key: "risk", label: "Risks", items: [] as typeof insights },
+      { key: "warning", label: "Warnings", items: [] as typeof insights },
+      { key: "positive", label: "Positives", items: [] as typeof insights },
+      { key: "neutral", label: "Context", items: [] as typeof insights },
+    ];
+
+    visibleInsights.slice(1).forEach((insight) => {
+      const group = groups.find((item) => item.key === insight.type) || groups[3];
+      group.items.push(insight);
+    });
+
+    return groups.filter((group) => group.items.length > 0);
+  }, [insights, visibleInsights]);
+  const hasMoreInsights = insights.length > defaultInsights.length;
+
   useEffect(() => {
     if (!selectedAlert) return;
     const nextSelected = alerts.find((alert) => alert.id === selectedAlert.id) || null;
@@ -518,14 +567,56 @@ export default function ManagerDashboard() {
         {insights.length === 0 ? (
           <div style={styles.emptyState}>No major insights detected for this range.</div>
         ) : (
-          <div style={styles.insightGrid}>
-            {insights.map((insight) => (
-              <article key={insight.id} style={{ ...styles.insightCard, ...insightStyle(insight.type) }}>
-                <div style={styles.insightType}>{labelize(insight.type)}</div>
-                <h3 style={styles.insightTitle}>{insight.title}</h3>
-                <p style={styles.insightText}>{insight.message}</p>
+          <div style={styles.insightStack}>
+            {featuredInsight ? (
+              <article
+                style={{
+                  ...styles.insightCard,
+                  ...styles.featuredInsightCard,
+                  ...insightStyle(featuredInsight.type),
+                }}
+              >
+                <div style={styles.insightType}>
+                  Top Priority · {insightGroupLabel(featuredInsight.type)}
+                </div>
+                <h3 style={styles.featuredInsightTitle}>{featuredInsight.title}</h3>
+                <p style={styles.insightText}>{featuredInsight.message}</p>
+                <div style={styles.insightAction}>
+                  <b>Recommended Action:</b> {insightAction(featuredInsight.type)}
+                </div>
               </article>
+            ) : null}
+
+            {groupedInsights.map((group) => (
+              <div key={group.key} style={styles.insightGroup}>
+                <div style={styles.insightGroupTitle}>{group.label}</div>
+                <div style={styles.insightGrid}>
+                  {group.items.map((insight) => (
+                    <article
+                      key={insight.id}
+                      style={{ ...styles.insightCard, ...insightStyle(insight.type) }}
+                    >
+                      <div style={styles.insightType}>{labelize(insight.type)}</div>
+                      <h3 style={styles.insightTitle}>{insight.title}</h3>
+                      <p style={styles.insightText}>{insight.message}</p>
+                      <div style={styles.insightAction}>
+                        <b>Recommended Action:</b> {insightAction(insight.type)}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
             ))}
+
+            {hasMoreInsights ? (
+              <button
+                type="button"
+                style={styles.showMoreButton}
+                onClick={() => setShowAllInsights((current) => !current)}
+              >
+                {showAllInsights ? "Show fewer insights" : `Show more insights (${insights.length - defaultInsights.length})`}
+              </button>
+            ) : null}
           </div>
         )}
       </section>
@@ -879,6 +970,10 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 13,
     fontWeight: 700,
   },
+  insightStack: {
+    display: "grid",
+    gap: 12,
+  },
   insightGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
@@ -888,6 +983,20 @@ const styles: Record<string, CSSProperties> = {
     border: "1px solid",
     borderRadius: 8,
     padding: 14,
+  },
+  featuredInsightCard: {
+    padding: 18,
+    boxShadow: "0 12px 28px rgba(15, 38, 55, 0.1)",
+  },
+  insightGroup: {
+    display: "grid",
+    gap: 8,
+  },
+  insightGroupTitle: {
+    color: "#607486",
+    fontSize: 12,
+    fontWeight: 900,
+    textTransform: "uppercase",
   },
   insightType: {
     color: "#607486",
@@ -900,11 +1009,33 @@ const styles: Record<string, CSSProperties> = {
     color: "#17364b",
     fontSize: 15,
   },
+  featuredInsightTitle: {
+    margin: "8px 0 8px",
+    color: "#17364b",
+    fontSize: 20,
+  },
   insightText: {
     margin: 0,
     color: "#354b5d",
     fontSize: 13,
     lineHeight: 1.45,
+  },
+  insightAction: {
+    marginTop: 10,
+    color: "#24394a",
+    fontSize: 13,
+    lineHeight: 1.4,
+  },
+  showMoreButton: {
+    justifySelf: "flex-start",
+    minHeight: 36,
+    border: "1px solid #cfdbe4",
+    borderRadius: 8,
+    background: "#ffffff",
+    color: "#17364b",
+    fontWeight: 800,
+    padding: "0 12px",
+    cursor: "pointer",
   },
   snapshotGrid: {
     display: "grid",
