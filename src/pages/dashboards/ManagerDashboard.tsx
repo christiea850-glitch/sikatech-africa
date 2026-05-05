@@ -29,7 +29,7 @@ type ManagerDashboardView =
   | "alerts"
   | "insights";
 type OperationsSnapshotTarget =
-  | "overview"
+  | "shift-status"
   | "front-desk"
   | "department-activity"
   | "closings";
@@ -320,6 +320,14 @@ export default function ManagerDashboard() {
   const {
     ref: operationsRef,
     flash: operationsFlash,
+  } = useScrollHighlight<HTMLElement>({
+    durationMs: 2000,
+    block: "start",
+  });
+  const {
+    ref: shiftStatusRef,
+    flash: shiftStatusFlash,
+    trigger: triggerShiftStatusHighlight,
   } = useScrollHighlight<HTMLElement>({
     durationMs: 2000,
     block: "start",
@@ -736,8 +744,8 @@ export default function ManagerDashboard() {
   }
 
   function scrollToOperationsSnapshotTarget(target: OperationsSnapshotTarget) {
-    if (target === "overview") {
-      triggerOverviewHighlight();
+    if (target === "shift-status") {
+      triggerShiftStatusHighlight();
     } else if (target === "front-desk") {
       triggerFrontDeskHighlight();
     } else if (target === "department-activity") {
@@ -752,7 +760,7 @@ export default function ManagerDashboard() {
       title: "Shift Status",
       text: openShifts.length ? `${openShifts.length} shift${openShifts.length === 1 ? "" : "s"} open.` : "No shift activity yet.",
       action: "View Closing Status",
-      target: "overview",
+      target: "shift-status",
       tone: openShifts.length ? "amber" : "green",
     },
     {
@@ -967,13 +975,16 @@ export default function ManagerDashboard() {
             <article
               key={item.title}
               className={
+                (item.title === "Shift Status" && shiftStatusFlash) ||
                 (item.title === "Cash Desk Readiness" && closingStatusFlash) ||
                 (item.title === "Front Desk Status" && frontDeskFlash)
                   ? "active-section"
                   : undefined
               }
               ref={
-                item.title === "Cash Desk Readiness"
+                item.title === "Shift Status"
+                  ? shiftStatusRef
+                  : item.title === "Cash Desk Readiness"
                   ? closingStatusRef
                   : item.title === "Front Desk Status"
                     ? frontDeskRef
@@ -981,6 +992,9 @@ export default function ManagerDashboard() {
               }
               style={{
                 ...styles.card,
+                ...(item.title === "Shift Status" && shiftStatusFlash
+                  ? styles.sectionFlash
+                  : {}),
                 ...(item.title === "Cash Desk Readiness" && closingStatusFlash
                   ? styles.sectionFlash
                   : {}),
