@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
+import { useAuth } from "../../auth/AuthContext";
+import { canViewModuleKey } from "../../auth/permissions";
 import { useDepartments } from "../../departments/DepartmentsContext";
 import { useExpenses } from "../../expenses/ExpenseContext";
 import { loadBookings } from "../../frontdesk/bookingsStorage";
@@ -20,7 +22,13 @@ import {
 type AlertTone = "green" | "amber" | "red" | "blue";
 type DatePreset = "today" | "yesterday" | "week" | "month" | "custom";
 type GroupBy = DashboardGroupBy;
-type ManagerDashboardView = "overview" | "department-activity" | "closings";
+type ManagerDashboardView =
+  | "overview"
+  | "front-desk"
+  | "department-activity"
+  | "closings"
+  | "alerts"
+  | "insights";
 
 type DateRange = {
   startDate: string;
@@ -29,7 +37,14 @@ type DateRange = {
 
 const DATE_PRESETS: DatePreset[] = ["today", "yesterday", "week", "month", "custom"];
 const GROUP_BY_OPTIONS: GroupBy[] = ["department", "payment", "shift", "staff", "room_customer"];
-const DASHBOARD_VIEWS: ManagerDashboardView[] = ["overview", "department-activity", "closings"];
+const DASHBOARD_VIEWS: ManagerDashboardView[] = [
+  "overview",
+  "front-desk",
+  "department-activity",
+  "closings",
+  "alerts",
+  "insights",
+];
 const MANAGER_DASHBOARD_FILTER_STORAGE_KEY = "sikatech.managerDashboard.filters";
 
 function toDateInputValue(date: Date) {
@@ -235,6 +250,7 @@ function insightGroupLabel(type: string) {
 export default function ManagerDashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuth();
   const { records } = useSales();
   const { records: expenseRecords } = useExpenses();
   const { departments } = useDepartments();
@@ -256,7 +272,47 @@ export default function ManagerDashboard() {
   const [showAllInsights, setShowAllInsights] = useState(false);
   const previousGroupByRef = useRef<GroupBy>(groupBy);
   const handledViewRef = useRef<ManagerDashboardView | null>(null);
+  const shouldScrollViewRef = useRef(searchParams.has("view"));
   const activeView = readDashboardView(searchParams.get("view") || initialParams.get("view"));
+  const {
+    ref: overviewRef,
+    flash: overviewFlash,
+    trigger: triggerOverviewHighlight,
+  } = useScrollHighlight<HTMLElement>({
+    durationMs: 1000,
+    block: "start",
+  });
+  const {
+    ref: insightsRef,
+    flash: insightsFlash,
+    trigger: triggerInsightsHighlight,
+  } = useScrollHighlight<HTMLElement>({
+    durationMs: 1000,
+    block: "start",
+  });
+  const {
+    ref: operationsRef,
+    flash: operationsFlash,
+  } = useScrollHighlight<HTMLElement>({
+    durationMs: 1000,
+    block: "start",
+  });
+  const {
+    ref: frontDeskRef,
+    flash: frontDeskFlash,
+    trigger: triggerFrontDeskHighlight,
+  } = useScrollHighlight<HTMLElement>({
+    durationMs: 1000,
+    block: "center",
+  });
+  const {
+    ref: departmentActivityRef,
+    flash: departmentActivityFlash,
+    trigger: triggerDepartmentActivityHighlight,
+  } = useScrollHighlight<HTMLElement>({
+    durationMs: 1000,
+    block: "start",
+  });
   const {
     ref: groupedPerformanceRef,
     flash: groupedPerformanceFlash,
@@ -266,10 +322,10 @@ export default function ManagerDashboard() {
     block: "start",
   });
   const {
-    ref: departmentActivityRef,
-    flash: departmentActivityFlash,
-    trigger: triggerDepartmentActivityHighlight,
-  } = useScrollHighlight<HTMLElement>({
+    ref: managerAlertsRef,
+    flash: managerAlertsFlash,
+    trigger: triggerManagerAlertsHighlight,
+  } = useScrollHighlight<HTMLDivElement>({
     durationMs: 1000,
     block: "start",
   });
@@ -316,22 +372,39 @@ export default function ManagerDashboard() {
     triggerGroupedPerformanceHighlight();
   }, [groupBy, triggerGroupedPerformanceHighlight]);
 
+  function triggerDashboardView(view: ManagerDashboardView) {
+    if (view === "overview") {
+      triggerOverviewHighlight();
+    } else if (view === "front-desk") {
+      triggerFrontDeskHighlight();
+    } else if (view === "department-activity") {
+      triggerDepartmentActivityHighlight();
+    } else if (view === "closings") {
+      triggerClosingStatusHighlight();
+    } else if (view === "alerts") {
+      triggerManagerAlertsHighlight();
+    } else if (view === "insights") {
+      triggerInsightsHighlight();
+    }
+  }
+
   useEffect(() => {
     if (handledViewRef.current === activeView) return;
 
     handledViewRef.current = activeView;
+    if (!shouldScrollViewRef.current && !searchParams.has("view")) return;
 
-    if (activeView === "department-activity") {
-      triggerDepartmentActivityHighlight();
-    } else if (activeView === "closings") {
-      triggerClosingStatusHighlight();
-    } else if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
+    shouldScrollViewRef.current = true;
+    triggerDashboardView(activeView);
   }, [
     activeView,
+    searchParams,
     triggerClosingStatusHighlight,
     triggerDepartmentActivityHighlight,
+    triggerFrontDeskHighlight,
+    triggerInsightsHighlight,
+    triggerManagerAlertsHighlight,
+    triggerOverviewHighlight,
   ]);
 
   const enabledDepartments = useMemo(
@@ -560,6 +633,31 @@ export default function ManagerDashboard() {
     groupBy,
     searchParams,
   ]);
+  const canOpenShiftClosing = !!user && canViewModuleKey(user, "shift-closing");
+
+  function openDashboardView(view: ManagerDashboardView) {
+    const next = buildDashboardParams({
+      source: searchParams,
+      datePreset,
+      activeRange,
+      groupBy,
+      view,
+    });
+
+    shouldScrollViewRef.current = true;
+    handledViewRef.current = view;
+    setSearchParams(next);
+    triggerDashboardView(view);
+  }
+
+  function openShiftClosingReview() {
+    if (canOpenShiftClosing) {
+      navigate(shiftClosingPath);
+      return;
+    }
+
+    openDashboardView("closings");
+  }
 
   function managerSafeReviewPath(path?: string | null) {
     if (!path) return dashboardPathFor(activeView);
@@ -579,7 +677,7 @@ export default function ManagerDashboard() {
     }
 
     if (path.startsWith("/app/frontdesk")) {
-      return dashboardPathFor("overview");
+      return dashboardPathFor("front-desk");
     }
 
     if (path.startsWith("/app/dashboard")) {
@@ -593,33 +691,45 @@ export default function ManagerDashboard() {
     return path;
   }
 
+  function openManagerSafeReviewPath(path?: string | null) {
+    const safePath = managerSafeReviewPath(path);
+
+    if (safePath.startsWith("/app/dashboard")) {
+      const next = new URLSearchParams(safePath.split("?")[1] || "");
+      openDashboardView(readDashboardView(next.get("view")));
+      return;
+    }
+
+    navigate(safePath);
+  }
+
   const snapshot = [
     {
       title: "Shift Status",
       text: openShifts.length ? `${openShifts.length} shift${openShifts.length === 1 ? "" : "s"} open.` : "No shift activity yet.",
-      action: "View Shift Closing",
-      to: shiftClosingPath,
+      action: "View Closing Status",
+      view: "closings",
       tone: openShifts.length ? "amber" : "green",
     },
     {
       title: "Front Desk Status",
       text: unpaidBookings.length ? `${unpaidBookings.length} unpaid room balance${unpaidBookings.length === 1 ? "" : "s"}.` : "Room balances look settled.",
       action: "Review Front Desk Overview",
-      to: dashboardPathFor("overview"),
+      view: "front-desk",
       tone: unpaidBookings.length ? "red" : "green",
     },
     {
       title: "Department Activity",
       text: metrics.transactions ? `${activeDepartments} department${activeDepartments === 1 ? "" : "s"} active in range.` : "No department activity yet.",
       action: "Review Department Activity",
-      to: dashboardPathFor("department-activity"),
+      view: "department-activity",
       tone: metrics.transactions ? "blue" : "amber",
     },
     {
       title: "Cash Desk Readiness",
       text: pendingClosings.length ? `${pendingClosings.length} closing${pendingClosings.length === 1 ? "" : "s"} pending.` : "No pending closings.",
       action: "View Closing Status",
-      to: dashboardPathFor("closings"),
+      view: "closings",
       tone: pendingClosings.length ? "amber" : "green",
     },
   ] as const;
@@ -627,8 +737,11 @@ export default function ManagerDashboard() {
   function handleAlertClick(alert: SmartAlert) {
     setSelectedAlert(alert);
     if (alert.reviewPath) {
-      navigate(managerSafeReviewPath(alert.reviewPath));
+      openManagerSafeReviewPath(alert.reviewPath);
+      return;
     }
+
+    openDashboardView("alerts");
   }
 
   return (
@@ -705,7 +818,14 @@ export default function ManagerDashboard() {
         </div>
       </section>
 
-      <section style={styles.kpiGrid} aria-label="Manager KPI summary">
+      <section
+        ref={overviewRef}
+        style={{
+          ...styles.kpiGrid,
+          ...(overviewFlash ? styles.sectionFlash : {}),
+        }}
+        aria-label="Manager KPI summary"
+      >
         {kpis.map((kpi) => (
           <div key={kpi.label} style={styles.kpiCard}>
             <div style={styles.kpiLabel}>{kpi.label}</div>
@@ -715,7 +835,13 @@ export default function ManagerDashboard() {
         ))}
       </section>
 
-      <section style={styles.section}>
+      <section
+        ref={insightsRef}
+        style={{
+          ...styles.section,
+          ...(insightsFlash ? styles.sectionFlash : {}),
+        }}
+      >
         <div style={styles.sectionHeader}>
           <div>
             <h2 style={styles.sectionTitle}>Manager Insights</h2>
@@ -781,7 +907,13 @@ export default function ManagerDashboard() {
         )}
       </section>
 
-      <section style={styles.section}>
+      <section
+        ref={operationsRef}
+        style={{
+          ...styles.section,
+          ...(operationsFlash ? styles.sectionFlash : {}),
+        }}
+      >
         <div style={styles.sectionHeader}>
           <h2 style={styles.sectionTitle}>Operations Snapshot</h2>
         </div>
@@ -789,10 +921,19 @@ export default function ManagerDashboard() {
           {snapshot.map((item) => (
             <article
               key={item.title}
-              ref={item.title === "Cash Desk Readiness" ? closingStatusRef : undefined}
+              ref={
+                item.title === "Cash Desk Readiness"
+                  ? closingStatusRef
+                  : item.title === "Front Desk Status"
+                    ? frontDeskRef
+                    : undefined
+              }
               style={{
                 ...styles.card,
                 ...(item.title === "Cash Desk Readiness" && closingStatusFlash
+                  ? styles.sectionFlash
+                  : {}),
+                ...(item.title === "Front Desk Status" && frontDeskFlash
                   ? styles.sectionFlash
                   : {}),
               }}
@@ -802,9 +943,13 @@ export default function ManagerDashboard() {
               </span>
               <h3 style={styles.cardTitle}>{item.title}</h3>
               <p style={styles.cardText}>{item.text}</p>
-              <Link to={item.to} style={styles.actionLink}>
+              <button
+                type="button"
+                style={styles.actionButton}
+                onClick={() => openDashboardView(item.view)}
+              >
                 {item.action}
-              </Link>
+              </button>
             </article>
           ))}
         </div>
@@ -898,7 +1043,13 @@ export default function ManagerDashboard() {
       </section>
 
       <section style={styles.twoColumn}>
-        <div style={styles.section}>
+        <div
+          ref={managerAlertsRef}
+          style={{
+            ...styles.section,
+            ...(managerAlertsFlash ? styles.sectionFlash : {}),
+          }}
+        >
           <div style={styles.sectionHeader}>
             <h2 style={styles.sectionTitle}>Manager Alerts</h2>
           </div>
@@ -997,7 +1148,7 @@ export default function ManagerDashboard() {
                 <button
                   type="button"
                   style={styles.reviewSourceButton}
-                  onClick={() => navigate(managerSafeReviewPath(selectedAlert.reviewPath))}
+                  onClick={() => openManagerSafeReviewPath(selectedAlert.reviewPath)}
                 >
                   {selectedAlert.reviewLabel || "Review Source"}
                 </button>
@@ -1011,18 +1162,34 @@ export default function ManagerDashboard() {
             <h2 style={styles.sectionTitle}>Quick Actions</h2>
           </div>
           <div style={styles.quickActions}>
-            <Link to={shiftClosingPath} style={styles.quickAction}>
+            <button
+              type="button"
+              style={styles.quickActionButton}
+              onClick={openShiftClosingReview}
+            >
               Go to Shift Closing
-            </Link>
-            <Link to={dashboardPathFor("department-activity")} style={styles.quickAction}>
+            </button>
+            <button
+              type="button"
+              style={styles.quickActionButton}
+              onClick={() => openDashboardView("department-activity")}
+            >
               Review Department Activity
-            </Link>
-            <Link to={dashboardPathFor("overview")} style={styles.quickAction}>
+            </button>
+            <button
+              type="button"
+              style={styles.quickActionButton}
+              onClick={() => openDashboardView("front-desk")}
+            >
               Review Front Desk Overview
-            </Link>
-            <Link to={dashboardPathFor("closings")} style={styles.quickAction}>
+            </button>
+            <button
+              type="button"
+              style={styles.quickActionButton}
+              onClick={() => openDashboardView("closings")}
+            >
               View Closing Status
-            </Link>
+            </button>
           </div>
         </div>
       </section>
@@ -1240,18 +1407,20 @@ const styles: Record<string, CSSProperties> = {
     color: "#5d7182",
     lineHeight: 1.4,
   },
-  actionLink: {
+  actionButton: {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     minHeight: 36,
     padding: "0 12px",
+    border: 0,
     borderRadius: 8,
     background: "#0f5e7a",
     color: "#ffffff",
+    font: "inherit",
     fontWeight: 800,
-    textDecoration: "none",
     fontSize: 13,
+    cursor: "pointer",
   },
   badge: {
     display: "inline-flex",
@@ -1442,7 +1611,7 @@ const styles: Record<string, CSSProperties> = {
     display: "grid",
     gap: 10,
   },
-  quickAction: {
+  quickActionButton: {
     display: "flex",
     alignItems: "center",
     minHeight: 42,
@@ -1451,8 +1620,10 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: 8,
     background: "#ffffff",
     color: "#17364b",
+    font: "inherit",
     fontWeight: 800,
-    textDecoration: "none",
+    textAlign: "left",
     boxShadow: "0 8px 20px rgba(15, 38, 55, 0.04)",
+    cursor: "pointer",
   },
 };
