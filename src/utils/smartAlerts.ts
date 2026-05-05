@@ -30,6 +30,20 @@ export type SmartAlert = {
   title: string;
   message: string;
   recommendation?: string;
+  relatedGroup?: string;
+  relatedMetric?: string;
+  relatedValues?: {
+    revenue?: number;
+    collections?: number;
+    expenses?: number;
+    netProfit?: number;
+    transactions?: number;
+    cashCollections?: number;
+    previousRevenue?: number;
+    previousExpenses?: number;
+    pendingClosings?: number;
+    percent?: number;
+  };
 };
 
 function safeNumber(value: unknown) {
@@ -56,6 +70,17 @@ function alertPriority(type: SmartAlertType) {
   if (type === "critical") return 0;
   if (type === "warning") return 1;
   return 2;
+}
+
+function groupValues(row: GroupedDataLike[number]) {
+  return {
+    revenue: safeNumber(row.revenue),
+    collections: safeNumber(row.collections),
+    expenses: safeNumber(row.expenses),
+    netProfit: safeNumber(row.netProfit),
+    transactions: safeNumber(row.transactions),
+    cashCollections: safeNumber(row.cashCollections),
+  };
 }
 
 // Rule-based business intelligence from live metrics; this is not an AI model yet.
@@ -86,6 +111,13 @@ export function getSmartAlerts({
       type: drop >= 0.35 ? "critical" : "warning",
       title: "Revenue Drop",
       message: `Revenue is down ${pct(drop)} compared with the previous matching period.`,
+      relatedMetric: "Revenue",
+      relatedValues: {
+        revenue,
+        previousRevenue,
+        percent: drop,
+        transactions: safeNumber(metrics.transactions),
+      },
     });
   }
 
@@ -98,6 +130,12 @@ export function getSmartAlerts({
       type: increase >= 0.6 ? "critical" : "warning",
       title: "Expense Spike",
       message: `Expenses increased ${pct(increase)} compared with the previous matching period.`,
+      relatedMetric: "Expenses",
+      relatedValues: {
+        expenses,
+        previousExpenses,
+        percent: increase,
+      },
     });
   }
 
@@ -114,6 +152,11 @@ export function getSmartAlerts({
       title: "Inactive Department",
       message: `${names}${suffix} recorded no transactions in this period.`,
       recommendation: "Confirm operational status or check for missing entries.",
+      relatedGroup: names,
+      relatedMetric: "Transactions",
+      relatedValues: {
+        transactions: 0,
+      },
     });
   }
 
@@ -127,6 +170,12 @@ export function getSmartAlerts({
       title: "High Cash Dependency",
       message: `Cash represents ${pct(cashShare)} of collections. High cash usage may increase reconciliation risk.`,
       recommendation: "Encourage digital payments and strengthen cash control procedures.",
+      relatedMetric: "Cash Collections",
+      relatedValues: {
+        collections,
+        cashCollections,
+        percent: cashShare,
+      },
     });
   }
 
@@ -139,6 +188,13 @@ export function getSmartAlerts({
       title: "Cash Imbalance",
       message: `Collections differ from revenue by ${pct(imbalanceRatio)}. This requires reconciliation review.`,
       recommendation: "Compare cash desk totals with ledger entries and verify manual adjustments.",
+      relatedMetric: "Revenue vs Collections",
+      relatedValues: {
+        revenue,
+        collections,
+        cashCollections,
+        percent: imbalanceRatio,
+      },
     });
   }
 
@@ -151,6 +207,13 @@ export function getSmartAlerts({
       title: "Collection Gap Detected",
       message: `Revenue is higher than collections by ${money(collectionGap)}. This may indicate unpaid balances, room postings, or pending reconciliation.`,
       recommendation: "Review unpaid room balances, POS payments, and shift closing records.",
+      relatedMetric: "Collection Gap",
+      relatedValues: {
+        revenue,
+        collections,
+        cashCollections,
+        percent: collectionGapRatio,
+      },
     });
   }
 
@@ -162,6 +225,10 @@ export function getSmartAlerts({
       title: "Pending Closings",
       message: `${pendingClosings} shift closings are pending review.`,
       recommendation: "Complete and verify all shift closing processes.",
+      relatedMetric: "Pending Closings",
+      relatedValues: {
+        pendingClosings,
+      },
     });
   }
 
@@ -184,6 +251,9 @@ export function getSmartAlerts({
         type: "critical",
         title: "Loss Detected",
         message: `${groupName} generated revenue but is operating at a loss of ${money(Math.abs(groupNetProfit))}.`,
+        relatedGroup: groupName,
+        relatedMetric: "Net Profit",
+        relatedValues: groupValues(row),
       });
     }
 
@@ -193,6 +263,12 @@ export function getSmartAlerts({
         type: "warning",
         title: "Low Profit Margin",
         message: `${groupName} profit margin is below 15%.`,
+        relatedGroup: groupName,
+        relatedMetric: "Profit Margin",
+        relatedValues: {
+          ...groupValues(row),
+          percent: groupRevenue > 0 ? groupNetProfit / groupRevenue : 0,
+        },
       });
     }
 
@@ -202,6 +278,9 @@ export function getSmartAlerts({
         type: "critical",
         title: "Expenses Exceed Revenue",
         message: `${groupName} expenses are higher than revenue.`,
+        relatedGroup: groupName,
+        relatedMetric: "Expenses vs Revenue",
+        relatedValues: groupValues(row),
       });
     }
 
@@ -211,6 +290,9 @@ export function getSmartAlerts({
         type: groupCollections / groupRevenue < 0.55 ? "critical" : "warning",
         title: "Department Collection Gap",
         message: `${groupName} has revenue of ${money(groupRevenue)} but collections of ${money(groupCollections)}.`,
+        relatedGroup: groupName,
+        relatedMetric: "Department Collections",
+        relatedValues: groupValues(row),
       });
     }
 
@@ -221,6 +303,9 @@ export function getSmartAlerts({
         title: "Cash Leakage Risk",
         message: `${groupName} collected cash but shows negative net profit. This may indicate cost or reconciliation issues.`,
         recommendation: "Review expenses, discounts, voided sales, and operational records.",
+        relatedGroup: groupName,
+        relatedMetric: "Cash Collections and Net Profit",
+        relatedValues: groupValues(row),
       });
     }
   });
@@ -250,6 +335,12 @@ export function getSmartAlerts({
         title: "Staff Cash Concentration",
         message: `${staffName} handled a high share of cash collections in this period.`,
         recommendation: "Review shift logs, approvals, and workload distribution.",
+        relatedGroup: staffName,
+        relatedMetric: "Staff Cash Collections",
+        relatedValues: {
+          ...groupValues(topStaff),
+          percent: safeNumber(topStaff.cashCollections) / staffCashTotal,
+        },
       });
     }
   }
@@ -263,6 +354,9 @@ export function getSmartAlerts({
       type: "info",
       title: "Top Performer",
       message: `${groupName} contributed the highest net profit in this period.`,
+      relatedGroup: groupName,
+      relatedMetric: "Net Profit",
+      relatedValues: groupValues(topPerformer),
     });
   }
 

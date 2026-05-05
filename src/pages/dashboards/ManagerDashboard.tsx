@@ -119,6 +119,15 @@ function smartAlertTone(type: SmartAlert["type"]): AlertTone {
   return "blue";
 }
 
+function DetailMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={styles.detailMetric}>
+      <div style={styles.detailMetricLabel}>{label}</div>
+      <div style={styles.detailMetricValue}>{value}</div>
+    </div>
+  );
+}
+
 export default function ManagerDashboard() {
   const { records } = useSales();
   const { records: expenseRecords } = useExpenses();
@@ -128,6 +137,7 @@ export default function ManagerDashboard() {
   const [datePreset, setDatePreset] = useState<DatePreset>("today");
   const [customRange, setCustomRange] = useState<DateRange>(() => getPresetRange("today"));
   const [groupBy, setGroupBy] = useState<GroupBy>("department");
+  const [selectedAlert, setSelectedAlert] = useState<SmartAlert | null>(null);
   const previousGroupByRef = useRef<GroupBy>(groupBy);
   const {
     ref: groupedPerformanceRef,
@@ -293,6 +303,12 @@ export default function ManagerDashboard() {
       }),
     [departmentPerformance, metrics, pendingClosings.length, previousMetrics]
   );
+
+  useEffect(() => {
+    if (!selectedAlert) return;
+    const nextSelected = alerts.find((alert) => alert.id === selectedAlert.id) || null;
+    setSelectedAlert(nextSelected);
+  }, [alerts, selectedAlert?.id]);
 
   const activeDepartments = departmentPerformance.filter((department) => department.transactions > 0).length;
 
@@ -534,7 +550,16 @@ export default function ManagerDashboard() {
               </article>
             ) : (
               alerts.map((alert) => (
-                <article key={alert.id} style={{ ...styles.alertCard, ...alertStyle(smartAlertTone(alert.type)) }}>
+                <button
+                  key={alert.id}
+                  type="button"
+                  onClick={() => setSelectedAlert(alert)}
+                  style={{
+                    ...styles.alertButton,
+                    ...alertStyle(smartAlertTone(alert.type)),
+                    ...(selectedAlert?.id === alert.id ? styles.alertButtonActive : {}),
+                  }}
+                >
                   <div style={styles.alertTitle}>{alert.title}</div>
                   <div style={styles.alertText}>{alert.message}</div>
                   {alert.recommendation ? (
@@ -542,10 +567,73 @@ export default function ManagerDashboard() {
                       <b>Suggested Review:</b> {alert.recommendation}
                     </div>
                   ) : null}
-                </article>
+                </button>
               ))
             )}
           </div>
+
+          {selectedAlert ? (
+            <div style={styles.alertDetailPanel}>
+              <div style={styles.rowBetween}>
+                <div>
+                  <div style={styles.detailEyebrow}>Alert Detail</div>
+                  <h3 style={styles.detailTitle}>{selectedAlert.title}</h3>
+                </div>
+                <button
+                  type="button"
+                  style={styles.closeButton}
+                  onClick={() => setSelectedAlert(null)}
+                >
+                  Close
+                </button>
+              </div>
+
+              <div style={styles.detailBlock}>
+                <div style={styles.detailLabel}>What the data shows</div>
+                <div style={styles.detailText}>{selectedAlert.message}</div>
+              </div>
+
+              {selectedAlert.recommendation ? (
+                <div style={styles.detailBlock}>
+                  <div style={styles.detailLabel}>Suggested Review</div>
+                  <div style={styles.detailText}>{selectedAlert.recommendation}</div>
+                </div>
+              ) : null}
+
+              <div style={styles.detailGrid}>
+                {selectedAlert.relatedGroup ? (
+                  <DetailMetric label="Related Group" value={selectedAlert.relatedGroup} />
+                ) : null}
+                {selectedAlert.relatedMetric ? (
+                  <DetailMetric label="Related Metric" value={selectedAlert.relatedMetric} />
+                ) : null}
+                {selectedAlert.relatedValues?.revenue !== undefined ? (
+                  <DetailMetric label="Revenue" value={money(selectedAlert.relatedValues.revenue)} />
+                ) : null}
+                {selectedAlert.relatedValues?.collections !== undefined ? (
+                  <DetailMetric label="Collections" value={money(selectedAlert.relatedValues.collections)} />
+                ) : null}
+                {selectedAlert.relatedValues?.expenses !== undefined ? (
+                  <DetailMetric label="Expenses" value={money(selectedAlert.relatedValues.expenses)} />
+                ) : null}
+                {selectedAlert.relatedValues?.netProfit !== undefined ? (
+                  <DetailMetric label="Net Profit" value={money(selectedAlert.relatedValues.netProfit)} />
+                ) : null}
+                {selectedAlert.relatedValues?.cashCollections !== undefined ? (
+                  <DetailMetric label="Cash Collections" value={money(selectedAlert.relatedValues.cashCollections)} />
+                ) : null}
+                {selectedAlert.relatedValues?.transactions !== undefined ? (
+                  <DetailMetric label="Transactions" value={String(selectedAlert.relatedValues.transactions)} />
+                ) : null}
+                {selectedAlert.relatedValues?.pendingClosings !== undefined ? (
+                  <DetailMetric label="Pending Closings" value={String(selectedAlert.relatedValues.pendingClosings)} />
+                ) : null}
+                {selectedAlert.relatedValues?.percent !== undefined ? (
+                  <DetailMetric label="Indicator" value={`${Math.round(selectedAlert.relatedValues.percent * 100)}%`} />
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div style={styles.section}>
@@ -807,6 +895,17 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: 8,
     padding: 14,
   },
+  alertButton: {
+    border: "1px solid",
+    borderRadius: 8,
+    padding: 14,
+    textAlign: "left",
+    cursor: "pointer",
+    font: "inherit",
+  },
+  alertButtonActive: {
+    boxShadow: "0 0 0 3px rgba(15, 94, 122, 0.18)",
+  },
   alertTitle: {
     fontWeight: 900,
     marginBottom: 5,
@@ -819,6 +918,72 @@ const styles: Record<string, CSSProperties> = {
     marginTop: 8,
     fontSize: 13,
     lineHeight: 1.4,
+  },
+  alertDetailPanel: {
+    marginTop: 14,
+    background: "#ffffff",
+    border: "1px solid #dce5ec",
+    borderRadius: 8,
+    padding: 16,
+    boxShadow: "0 10px 24px rgba(15, 38, 55, 0.08)",
+  },
+  detailEyebrow: {
+    color: "#607486",
+    fontSize: 12,
+    fontWeight: 900,
+    textTransform: "uppercase",
+  },
+  detailTitle: {
+    margin: "4px 0 0",
+    color: "#17364b",
+    fontSize: 18,
+  },
+  closeButton: {
+    border: "1px solid #cfdbe4",
+    borderRadius: 8,
+    background: "#ffffff",
+    color: "#17364b",
+    fontWeight: 800,
+    minHeight: 34,
+    padding: "0 12px",
+    cursor: "pointer",
+  },
+  detailBlock: {
+    marginTop: 14,
+  },
+  detailLabel: {
+    color: "#607486",
+    fontSize: 12,
+    fontWeight: 900,
+    marginBottom: 4,
+  },
+  detailText: {
+    color: "#24394a",
+    fontSize: 14,
+    lineHeight: 1.45,
+  },
+  detailGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+    gap: 10,
+    marginTop: 14,
+  },
+  detailMetric: {
+    border: "1px solid #edf2f6",
+    borderRadius: 8,
+    padding: 10,
+    background: "#f8fafc",
+  },
+  detailMetricLabel: {
+    color: "#607486",
+    fontSize: 12,
+    fontWeight: 800,
+  },
+  detailMetricValue: {
+    marginTop: 4,
+    color: "#102033",
+    fontSize: 14,
+    fontWeight: 900,
   },
   quickActions: {
     display: "grid",
