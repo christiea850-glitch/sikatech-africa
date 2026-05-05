@@ -1,6 +1,5 @@
 import type { ExpenseRecord } from "../../expenses/ExpenseContext";
 import {
-  filterLedgerEntries,
   loadLedgerEntries,
   roundLedgerMoney,
   selectLedgerTotals,
@@ -47,17 +46,56 @@ function labelize(value: string) {
     .join(" ") || "Unassigned";
 }
 
-function inDateRange(value: string | number | undefined, startDate: string, endDate: string) {
-  if (!value) return false;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return false;
+function parseDateValue(value: string | number | undefined, boundary?: "start" | "end") {
+  if (value === undefined || value === null || value === "") return null;
 
-  const start = startDate ? new Date(`${startDate}T00:00:00`) : null;
-  const end = endDate ? new Date(`${endDate}T00:00:00`) : null;
-  if (end) end.setDate(end.getDate() + 1);
+  if (typeof value === "number") {
+    const date = new Date(value < 10_000_000_000 ? value * 1000 : value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  if (/^\d+$/.test(raw)) {
+    const n = Number(raw);
+    const date = new Date(n < 10_000_000_000 ? n * 1000 : n);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymd) {
+    const [, year, month, day] = ymd;
+    const date = new Date(Number(year), Number(month) - 1, Number(day));
+    if (boundary === "end") date.setHours(23, 59, 59, 999);
+    return date;
+  }
+
+  const mdy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (mdy) {
+    const [, month, day, year] = mdy;
+    const date = new Date(Number(year), Number(month) - 1, Number(day));
+    if (boundary === "end") date.setHours(23, 59, 59, 999);
+    return date;
+  }
+
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function dashboardDateInRange(
+  value: string | number | undefined,
+  startDate: string,
+  endDate: string
+) {
+  const date = parseDateValue(value);
+  if (!date) return false;
+
+  const start = parseDateValue(startDate, "start");
+  const end = parseDateValue(endDate, "end");
 
   if (start && date < start) return false;
-  if (end && date >= end) return false;
+  if (end && date > end) return false;
   return true;
 }
 
@@ -154,10 +192,10 @@ export function getDashboardMetrics({
   expenseRecords = [],
   departmentLabels = new Map<string, string>(),
 }: DashboardMetricsInput) {
-  const entries = filterLedgerEntries(ledgerEntries ?? loadLedgerEntries(), {
-    startDate,
-    endDate,
-  });
+  const sourceEntries = ledgerEntries ?? loadLedgerEntries();
+  const entries = sourceEntries.filter((entry) =>
+    dashboardDateInRange(entry.occurredAt, startDate, endDate)
+  );
   const totals = selectLedgerTotals(entries);
   const cashCollections = entries.reduce((sum, entry) => {
     if (entry.paymentMethod !== "cash") return sum;
@@ -165,10 +203,10 @@ export function getDashboardMetrics({
   }, 0);
   const groupedRows = buildGroupedRows(entries, groupBy, departmentLabels);
   const salesCount = salesRecords.filter((record) =>
-    inDateRange(record.createdAt, startDate, endDate)
+    dashboardDateInRange(record.createdAt, startDate, endDate)
   ).length;
   const expenseCount = expenseRecords.filter((record) =>
-    inDateRange(record.createdAt, startDate, endDate)
+    dashboardDateInRange(record.createdAt, startDate, endDate)
   ).length;
 
   return {

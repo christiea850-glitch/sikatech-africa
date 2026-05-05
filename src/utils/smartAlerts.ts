@@ -29,6 +29,7 @@ export type SmartAlert = {
   type: SmartAlertType;
   title: string;
   message: string;
+  recommendation?: string;
 };
 
 function safeNumber(value: unknown) {
@@ -112,6 +113,7 @@ export function getSmartAlerts({
       type: "info",
       title: "Inactive Department",
       message: `${names}${suffix} recorded no transactions in this period.`,
+      recommendation: "Confirm operational status or check for missing entries.",
     });
   }
 
@@ -123,7 +125,8 @@ export function getSmartAlerts({
       id: "high-cash-dependency",
       type: "warning",
       title: "High Cash Dependency",
-      message: `Cash represents ${pct(cashShare)} of collections. Review cash handling and closing records.`,
+      message: `Cash represents ${pct(cashShare)} of collections. High cash usage may increase reconciliation risk.`,
+      recommendation: "Encourage digital payments and strengthen cash control procedures.",
     });
   }
 
@@ -134,7 +137,8 @@ export function getSmartAlerts({
       id: "cash-imbalance",
       type: imbalanceRatio >= 0.25 ? "critical" : "warning",
       title: "Cash Imbalance",
-      message: `Collections differ from revenue by ${pct(imbalanceRatio)}. Review cash desk and room folio activity.`,
+      message: `Collections differ from revenue by ${pct(imbalanceRatio)}. This requires reconciliation review.`,
+      recommendation: "Compare cash desk totals with ledger entries and verify manual adjustments.",
     });
   }
 
@@ -145,7 +149,8 @@ export function getSmartAlerts({
       id: "collection-gap-detected",
       type: collectionGapRatio >= 0.4 ? "critical" : "warning",
       title: "Collection Gap Detected",
-      message: `Revenue is higher than collections by ${money(collectionGap)}. Review unpaid balances, room postings, and cash desk activity.`,
+      message: `Revenue is higher than collections by ${money(collectionGap)}. This may indicate unpaid balances, room postings, or pending reconciliation.`,
+      recommendation: "Review unpaid room balances, POS payments, and shift closing records.",
     });
   }
 
@@ -155,7 +160,8 @@ export function getSmartAlerts({
       id: "pending-closings",
       type: pendingClosings > 10 ? "critical" : "warning",
       title: "Pending Closings",
-      message: `${pendingClosings} cash desk closings are pending review.`,
+      message: `${pendingClosings} shift closings are pending review.`,
+      recommendation: "Complete and verify all shift closing processes.",
     });
   }
 
@@ -213,7 +219,8 @@ export function getSmartAlerts({
         id: `cash-leakage-risk:${groupKey}`,
         type: "critical",
         title: "Cash Leakage Risk",
-        message: `${groupName} collected cash but still shows a loss. Review expenses, discounts, voids, and closing records.`,
+        message: `${groupName} collected cash but shows negative net profit. This may indicate cost or reconciliation issues.`,
+        recommendation: "Review expenses, discounts, voided sales, and operational records.",
       });
     }
   });
@@ -241,7 +248,8 @@ export function getSmartAlerts({
         id: `staff-cash-concentration:${staffKey}`,
         type: "warning",
         title: "Staff Cash Concentration",
-        message: `${staffName} handled a high share of cash collections. Review shift closing and audit trail.`,
+        message: `${staffName} handled a high share of cash collections in this period.`,
+        recommendation: "Review shift logs, approvals, and workload distribution.",
       });
     }
   }

@@ -11,6 +11,7 @@ import { useShift } from "../../shifts/ShiftContext";
 import { loadShiftClosings } from "../../shifts/shiftClosingStore";
 import { getSmartAlerts, type SmartAlert } from "../../utils/smartAlerts";
 import {
+  dashboardDateInRange,
   getDashboardMetrics,
   type DashboardGroupBy,
 } from "./dashboardMetrics";
@@ -216,9 +217,11 @@ export default function ManagerDashboard() {
             String(entry.shiftId || "") === String(closing.shift_id || "") &&
             Boolean(closing.shift_id)
         ) ||
-        (closing.submitted_at &&
-          closing.submitted_at >= `${activeRange.startDate}T00:00:00` &&
-          closing.submitted_at <= `${activeRange.endDate}T23:59:59`)
+        dashboardDateInRange(
+          closing.submitted_at || closing.created_at || closing.updated_at || "",
+          activeRange.startDate,
+          activeRange.endDate
+        )
       ),
     [activeRange.endDate, activeRange.startDate, closings, metrics.entries]
   );
@@ -534,6 +537,11 @@ export default function ManagerDashboard() {
                 <article key={alert.id} style={{ ...styles.alertCard, ...alertStyle(smartAlertTone(alert.type)) }}>
                   <div style={styles.alertTitle}>{alert.title}</div>
                   <div style={styles.alertText}>{alert.message}</div>
+                  {alert.recommendation ? (
+                    <div style={styles.alertRecommendation}>
+                      <b>Suggested Review:</b> {alert.recommendation}
+                    </div>
+                  ) : null}
                 </article>
               ))
             )}
@@ -804,6 +812,11 @@ const styles: Record<string, CSSProperties> = {
     marginBottom: 5,
   },
   alertText: {
+    fontSize: 13,
+    lineHeight: 1.4,
+  },
+  alertRecommendation: {
+    marginTop: 8,
     fontSize: 13,
     lineHeight: 1.4,
   },
