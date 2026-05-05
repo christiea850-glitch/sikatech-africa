@@ -28,11 +28,6 @@ type ManagerDashboardView =
   | "closings"
   | "alerts"
   | "insights";
-type OperationsSnapshotTarget =
-  | "shift-status"
-  | "front-desk"
-  | "department-activity"
-  | "closings";
 
 type DateRange = {
   startDate: string;
@@ -320,14 +315,6 @@ export default function ManagerDashboard() {
   const {
     ref: operationsRef,
     flash: operationsFlash,
-  } = useScrollHighlight<HTMLElement>({
-    durationMs: 2000,
-    block: "start",
-  });
-  const {
-    ref: shiftStatusRef,
-    flash: shiftStatusFlash,
-    trigger: triggerShiftStatusHighlight,
   } = useScrollHighlight<HTMLElement>({
     durationMs: 2000,
     block: "start",
@@ -743,45 +730,25 @@ export default function ManagerDashboard() {
     navigate(safePath);
   }
 
-  function scrollToOperationsSnapshotTarget(target: OperationsSnapshotTarget) {
-    if (target === "shift-status") {
-      triggerShiftStatusHighlight();
-    } else if (target === "front-desk") {
-      triggerFrontDeskHighlight();
-    } else if (target === "department-activity") {
-      triggerDepartmentActivityHighlight();
-    } else if (target === "closings") {
-      triggerClosingStatusHighlight();
-    }
-  }
-
   const snapshot = [
     {
       title: "Shift Status",
       text: openShifts.length ? `${openShifts.length} shift${openShifts.length === 1 ? "" : "s"} open.` : "No shift activity yet.",
-      action: "View Closing Status",
-      target: "shift-status",
       tone: openShifts.length ? "amber" : "green",
     },
     {
       title: "Front Desk Status",
       text: unpaidBookings.length ? `${unpaidBookings.length} unpaid room balance${unpaidBookings.length === 1 ? "" : "s"}.` : "Room balances look settled.",
-      action: "Review Front Desk Overview",
-      target: "front-desk",
       tone: unpaidBookings.length ? "red" : "green",
     },
     {
       title: "Department Activity",
       text: metrics.transactions ? `${activeDepartments} department${activeDepartments === 1 ? "" : "s"} active in range.` : "No department activity yet.",
-      action: "Review Department Activity",
-      target: "department-activity",
       tone: metrics.transactions ? "blue" : "amber",
     },
     {
       title: "Cash Desk Readiness",
       text: pendingClosings.length ? `${pendingClosings.length} closing${pendingClosings.length === 1 ? "" : "s"} pending.` : "No pending closings.",
-      action: "View Closing Status",
-      target: "closings",
       tone: pendingClosings.length ? "amber" : "green",
     },
   ] as const;
@@ -975,16 +942,13 @@ export default function ManagerDashboard() {
             <article
               key={item.title}
               className={
-                (item.title === "Shift Status" && shiftStatusFlash) ||
                 (item.title === "Cash Desk Readiness" && closingStatusFlash) ||
                 (item.title === "Front Desk Status" && frontDeskFlash)
                   ? "active-section"
                   : undefined
               }
               ref={
-                item.title === "Shift Status"
-                  ? shiftStatusRef
-                  : item.title === "Cash Desk Readiness"
+                item.title === "Cash Desk Readiness"
                   ? closingStatusRef
                   : item.title === "Front Desk Status"
                     ? frontDeskRef
@@ -992,9 +956,6 @@ export default function ManagerDashboard() {
               }
               style={{
                 ...styles.card,
-                ...(item.title === "Shift Status" && shiftStatusFlash
-                  ? styles.sectionFlash
-                  : {}),
                 ...(item.title === "Cash Desk Readiness" && closingStatusFlash
                   ? styles.sectionFlash
                   : {}),
@@ -1008,13 +969,6 @@ export default function ManagerDashboard() {
               </span>
               <h3 style={styles.cardTitle}>{item.title}</h3>
               <p style={styles.cardText}>{item.text}</p>
-              <button
-                type="button"
-                style={styles.actionButton}
-                onClick={() => scrollToOperationsSnapshotTarget(item.target)}
-              >
-                {item.action}
-              </button>
             </article>
           ))}
         </div>
@@ -1243,6 +1197,20 @@ export default function ManagerDashboard() {
               onClick={() => openDashboardView("sales-summary")}
             >
               Review Sales Summary
+            </button>
+            <button
+              type="button"
+              style={styles.quickActionButton}
+              onClick={() => openDashboardView("alerts")}
+            >
+              Review Alerts
+            </button>
+            <button
+              type="button"
+              style={styles.quickActionButton}
+              onClick={() => openDashboardView("insights")}
+            >
+              Review Insights
             </button>
           </div>
         </div>
@@ -1479,21 +1447,6 @@ const styles: Record<string, CSSProperties> = {
     margin: "0 0 14px",
     color: "#5d7182",
     lineHeight: 1.4,
-  },
-  actionButton: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 36,
-    padding: "0 12px",
-    border: 0,
-    borderRadius: 8,
-    background: "#0f5e7a",
-    color: "#ffffff",
-    font: "inherit",
-    fontWeight: 800,
-    fontSize: 13,
-    cursor: "pointer",
   },
   badge: {
     display: "inline-flex",
