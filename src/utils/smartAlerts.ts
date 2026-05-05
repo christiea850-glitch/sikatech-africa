@@ -90,10 +90,12 @@ export function getSmartAlerts({
   metrics,
   previousMetrics,
   groupedData,
+  departmentData,
 }: {
   metrics: MetricsLike;
   previousMetrics?: MetricsLike;
   groupedData: GroupedDataLike;
+  departmentData?: GroupedDataLike;
 }): SmartAlert[] {
   const alerts: SmartAlert[] = [];
   const seen = new Set<string>();
@@ -141,7 +143,8 @@ export function getSmartAlerts({
     });
   }
 
-  const inactiveDepartments = groupedData.filter((row) => safeNumber(row.transactions) === 0);
+  const departmentRows = departmentData ?? groupedData;
+  const inactiveDepartments = departmentRows.filter((row) => safeNumber(row.transactions) === 0);
   if (inactiveDepartments.length > 0) {
     const names = inactiveDepartments
       .map(groupLabel)

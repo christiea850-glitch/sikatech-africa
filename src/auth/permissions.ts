@@ -56,8 +56,6 @@ export function canReviewFinancials(input: Role | string | Pick<User, "role"> | 
     role === "owner" ||
     role === "super_admin" ||
     role === "admin" ||
-    role === "manager" ||
-    role === "assistant_manager" ||
     role === "accounting" ||
     role === "auditor"
   );
@@ -68,8 +66,7 @@ export function canManageSetup(input: Role | string | Pick<User, "role"> | null 
   return (
     role === "owner" ||
     role === "super_admin" ||
-    role === "admin" ||
-    role === "manager"
+    role === "admin"
   );
 }
 
@@ -134,12 +131,15 @@ export function canViewModuleKey(input: Role | string | Pick<User, "role"> | nul
     case "sales-dashboard":
     case "sales-history":
     case "sales-history-central":
-    case "ledger-debug":
       return canReviewFinancials(role) && !canAuditReadOnly(role);
+    case "ledger-debug":
+      return isOwnerRole(role) || role === "admin";
     case "reconcile":
       return canReviewFinancials(role);
     case "accounting":
+      return canReviewFinancials(role);
     case "accounting-workbench":
+      return canReviewFinancials(role) && !canAuditReadOnly(role);
     case "cash-desk-closings":
       return canReviewFinancials(role);
     case "expenses":
@@ -153,9 +153,9 @@ export function canViewModuleKey(input: Role | string | Pick<User, "role"> | nul
     case "audit-logs":
     case "activity":
     case "executive-overview":
-      return isOwnerRole(role) || role === "admin" || role === "manager" || role === "assistant_manager" || role === "auditor";
+      return isOwnerRole(role) || role === "admin" || role === "auditor";
     case "shift-closing":
-      return canOperateSales(role) || role === "accounting" || canApproveClosings(role);
+      return canOperateSales(role) || canApproveClosings(role);
     default:
       return canViewBroadOperations(role);
   }

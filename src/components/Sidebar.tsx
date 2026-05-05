@@ -97,15 +97,19 @@ export default function Sidebar() {
         path: modulePath("sales-entry"),
         group: "operations",
       });
+    }
 
-      if (canOperateFrontDesk(user)) {
-        items.push({
-          key: "front-desk-room-board",
-          label: "Front Desk / Room Board",
-          path: modulePath("front-desk-room-board"),
-          group: "operations",
-        });
-      }
+    if (
+      primaryDailyOperator &&
+      canOperateFrontDesk(user) &&
+      canShowNav(user, modules, "front-desk-room-board")
+    ) {
+      items.push({
+        key: "front-desk-room-board",
+        label: "Front Desk / Room Board",
+        path: modulePath("front-desk-room-board"),
+        group: "operations",
+      });
     }
 
     if (canViewModuleKey(user, "shift-closing") && canShowNav(user, modules, "shift-closing")) {
@@ -135,7 +139,7 @@ export default function Sidebar() {
       });
     }
 
-    if (canOperateFrontDesk(user) && canShowNav(user, modules, "sales")) {
+    if (canOperateFrontDesk(user) && canShowNav(user, modules, "front-desk-room-board")) {
       items.push({
         key: "front-desk-room-board",
         label: "Front Desk / Room Board",

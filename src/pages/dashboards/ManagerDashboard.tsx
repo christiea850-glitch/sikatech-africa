@@ -371,7 +371,8 @@ export default function ManagerDashboard() {
           pendingClosings: pendingClosings.length,
         },
         previousMetrics,
-        groupedData: departmentPerformance,
+        groupedData: metrics.groupedRows,
+        departmentData: departmentPerformance,
       }),
     [departmentPerformance, metrics, pendingClosings.length, previousMetrics]
   );
