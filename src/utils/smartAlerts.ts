@@ -30,6 +30,8 @@ export type SmartAlert = {
   title: string;
   message: string;
   recommendation?: string;
+  reviewPath?: string;
+  reviewLabel?: string;
   relatedGroup?: string;
   relatedMetric?: string;
   relatedValues?: {
@@ -152,6 +154,8 @@ export function getSmartAlerts({
       title: "Inactive Department",
       message: `${names}${suffix} recorded no transactions in this period.`,
       recommendation: "Confirm operational status or check for missing entries.",
+      reviewPath: "/app/dashboard",
+      reviewLabel: "Review Department Performance",
       relatedGroup: names,
       relatedMetric: "Transactions",
       relatedValues: {
@@ -170,6 +174,8 @@ export function getSmartAlerts({
       title: "High Cash Dependency",
       message: `Cash represents ${pct(cashShare)} of collections. High cash usage may increase reconciliation risk.`,
       recommendation: "Encourage digital payments and strengthen cash control procedures.",
+      reviewPath: "/app/sales-dashboard",
+      reviewLabel: "Review Payment and Cash Activity",
       relatedMetric: "Cash Collections",
       relatedValues: {
         collections,
@@ -188,6 +194,8 @@ export function getSmartAlerts({
       title: "Cash Imbalance",
       message: `Collections differ from revenue by ${pct(imbalanceRatio)}. This requires reconciliation review.`,
       recommendation: "Compare cash desk totals with ledger entries and verify manual adjustments.",
+      reviewPath: "/app/sales-dashboard",
+      reviewLabel: "Review Sales Summary",
       relatedMetric: "Revenue vs Collections",
       relatedValues: {
         revenue,
@@ -207,6 +215,8 @@ export function getSmartAlerts({
       title: "Collection Gap Detected",
       message: `Revenue is higher than collections by ${money(collectionGap)}. This may indicate unpaid balances, room postings, or pending reconciliation.`,
       recommendation: "Review unpaid room balances, POS payments, and shift closing records.",
+      reviewPath: "/app/frontdesk",
+      reviewLabel: "Review Front Desk / Room Balances",
       relatedMetric: "Collection Gap",
       relatedValues: {
         revenue,
@@ -225,6 +235,8 @@ export function getSmartAlerts({
       title: "Pending Closings",
       message: `${pendingClosings} shift closings are pending review.`,
       recommendation: "Complete and verify all shift closing processes.",
+      reviewPath: "/app/cash-desk-closings",
+      reviewLabel: "Review Cash Desk Closings",
       relatedMetric: "Pending Closings",
       relatedValues: {
         pendingClosings,
@@ -251,6 +263,8 @@ export function getSmartAlerts({
         type: "critical",
         title: "Loss Detected",
         message: `${groupName} generated revenue but is operating at a loss of ${money(Math.abs(groupNetProfit))}.`,
+        reviewPath: "/app/sales-dashboard",
+        reviewLabel: "Review Financial Performance",
         relatedGroup: groupName,
         relatedMetric: "Net Profit",
         relatedValues: groupValues(row),
@@ -263,6 +277,8 @@ export function getSmartAlerts({
         type: "warning",
         title: "Low Profit Margin",
         message: `${groupName} profit margin is below 15%.`,
+        reviewPath: "/app/sales-dashboard",
+        reviewLabel: "Review Financial Performance",
         relatedGroup: groupName,
         relatedMetric: "Profit Margin",
         relatedValues: {
@@ -278,6 +294,8 @@ export function getSmartAlerts({
         type: "critical",
         title: "Expenses Exceed Revenue",
         message: `${groupName} expenses are higher than revenue.`,
+        reviewPath: "/app/sales-dashboard",
+        reviewLabel: "Review Financial Performance",
         relatedGroup: groupName,
         relatedMetric: "Expenses vs Revenue",
         relatedValues: groupValues(row),
@@ -303,6 +321,8 @@ export function getSmartAlerts({
         title: "Cash Leakage Risk",
         message: `${groupName} collected cash but shows negative net profit. This may indicate cost or reconciliation issues.`,
         recommendation: "Review expenses, discounts, voided sales, and operational records.",
+        reviewPath: "/app/sales-dashboard",
+        reviewLabel: "Review Payment and Cash Activity",
         relatedGroup: groupName,
         relatedMetric: "Cash Collections and Net Profit",
         relatedValues: groupValues(row),
@@ -335,6 +355,8 @@ export function getSmartAlerts({
         title: "Staff Cash Concentration",
         message: `${staffName} handled a high share of cash collections in this period.`,
         recommendation: "Review shift logs, approvals, and workload distribution.",
+        reviewPath: "/app/sales-dashboard",
+        reviewLabel: "Review Payment and Cash Activity",
         relatedGroup: staffName,
         relatedMetric: "Staff Cash Collections",
         relatedValues: {

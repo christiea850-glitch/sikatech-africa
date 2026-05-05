@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { useDepartments } from "../../departments/DepartmentsContext";
 import { useExpenses } from "../../expenses/ExpenseContext";
@@ -129,6 +129,7 @@ function DetailMetric({ label, value }: { label: string; value: string }) {
 }
 
 export default function ManagerDashboard() {
+  const navigate = useNavigate();
   const { records } = useSales();
   const { records: expenseRecords } = useExpenses();
   const { departments } = useDepartments();
@@ -352,6 +353,13 @@ export default function ManagerDashboard() {
     },
   ] as const;
 
+  function handleAlertClick(alert: SmartAlert) {
+    setSelectedAlert(alert);
+    if (alert.reviewPath) {
+      navigate(alert.reviewPath);
+    }
+  }
+
   return (
     <main style={styles.page}>
       <header style={styles.header}>
@@ -553,7 +561,7 @@ export default function ManagerDashboard() {
                 <button
                   key={alert.id}
                   type="button"
-                  onClick={() => setSelectedAlert(alert)}
+                  onClick={() => handleAlertClick(alert)}
                   style={{
                     ...styles.alertButton,
                     ...alertStyle(smartAlertTone(alert.type)),
@@ -632,6 +640,16 @@ export default function ManagerDashboard() {
                   <DetailMetric label="Indicator" value={`${Math.round(selectedAlert.relatedValues.percent * 100)}%`} />
                 ) : null}
               </div>
+
+              {selectedAlert.reviewPath ? (
+                <button
+                  type="button"
+                  style={styles.reviewSourceButton}
+                  onClick={() => navigate(selectedAlert.reviewPath || "/app/dashboard")}
+                >
+                  {selectedAlert.reviewLabel || "Review Source"}
+                </button>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -984,6 +1002,17 @@ const styles: Record<string, CSSProperties> = {
     color: "#102033",
     fontSize: 14,
     fontWeight: 900,
+  },
+  reviewSourceButton: {
+    marginTop: 14,
+    minHeight: 38,
+    border: "1px solid #0f5e7a",
+    borderRadius: 8,
+    background: "#0f5e7a",
+    color: "#ffffff",
+    fontWeight: 900,
+    padding: "0 14px",
+    cursor: "pointer",
   },
   quickActions: {
     display: "grid",
