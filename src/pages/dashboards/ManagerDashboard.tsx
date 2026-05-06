@@ -292,6 +292,9 @@ export default function ManagerDashboard() {
   const [groupBy, setGroupBy] = useState<GroupBy>(() => readGroupBy(initialParams.get("groupBy")));
   const [selectedAlert, setSelectedAlert] = useState<SmartAlert | null>(null);
   const [showAllInsights, setShowAllInsights] = useState(false);
+  const [showAllAlerts, setShowAllAlerts] = useState(false);
+  const [showAllDepartments, setShowAllDepartments] = useState(false);
+  const [showGroupedPerformance, setShowGroupedPerformance] = useState(false);
   const previousGroupByRef = useRef<GroupBy>(groupBy);
   const handledViewRef = useRef<ManagerDashboardView | null>(null);
   const shouldScrollViewRef = useRef(searchParams.has("view"));
@@ -613,6 +616,14 @@ export default function ManagerDashboard() {
 
   const visibleInsights = showAllInsights ? insights : defaultInsights;
   const featuredInsight = visibleInsights[0];
+  const visibleAlerts = showAllAlerts ? alerts : alerts.slice(0, 3);
+  const hasMoreAlerts = alerts.length > visibleAlerts.length;
+  const groupedPerformancePinned =
+    activeView === "sales-summary" || activeView === "department-activity";
+  const groupedPerformanceOpen =
+    showGroupedPerformance || groupedPerformancePinned;
+  const departmentCardsPinned = activeView === "department-activity";
+  const departmentCardsOpen = showAllDepartments || departmentCardsPinned;
   const groupedInsights = useMemo(() => {
     const groups = [
       { key: "risk", label: "Risks", items: [] as typeof insights },
@@ -648,6 +659,32 @@ export default function ManagerDashboard() {
   const receivablesTotal = metrics.totals.receivables || Math.max(0, metrics.totals.revenue - metrics.totals.collections);
   const dataConfidenceLabel = getDataConfidenceLabel(metrics.entries);
   const dataConfidenceHint = getDataConfidenceHint(dataConfidenceLabel);
+  const topPriorityAlert = alerts[0] || null;
+  const topPriorityText =
+    topPriorityAlert?.message ||
+    featuredInsight?.message ||
+    "No urgent issue is currently flagged for this range.";
+  const businessHealthTone: AlertTone = alerts.some((alert) => alert.type === "critical")
+    ? "red"
+    : alerts.some((alert) => alert.type === "warning")
+      ? "amber"
+      : metrics.transactions > 0
+        ? "green"
+        : "blue";
+  const businessHealthLabel =
+    businessHealthTone === "red"
+      ? "Needs Attention"
+      : businessHealthTone === "amber"
+        ? "Monitor Closely"
+        : businessHealthTone === "green"
+          ? "Steady"
+          : "Low Activity";
+  const topDepartments = departmentPerformance
+    .filter((department) => department.transactions > 0)
+    .slice()
+    .sort((a, b) => b.total - a.total || b.transactions - a.transactions)
+    .slice(0, 3);
+  const quietDepartments = departmentPerformance.filter((department) => department.transactions === 0).length;
 
   const kpis = [
     { label: "Total Sales", value: money(metrics.totals.revenue), hint: getRangeLabel(activeRange) },
@@ -835,6 +872,38 @@ export default function ManagerDashboard() {
         </div>
       </section>
 
+      <section style={styles.executivePanel}>
+        <div style={styles.executiveHeader}>
+          <div>
+            <h2 style={styles.executiveTitle}>Business Health Summary</h2>
+            <p style={styles.sectionSubtitle}>
+              What needs attention, what is performing well, and what to review next.
+            </p>
+          </div>
+          <span style={{ ...styles.badge, ...alertStyle(businessHealthTone) }}>
+            {businessHealthLabel}
+          </span>
+        </div>
+
+        <div style={styles.executiveGrid}>
+          <div style={styles.executivePriority}>
+            <div style={styles.detailEyebrow}>Top Priority Issue</div>
+            <h3 style={styles.detailTitle}>
+              {topPriorityAlert?.title || featuredInsight?.title || "No urgent issue"}
+            </h3>
+            <p style={styles.detailText}>{topPriorityText}</p>
+          </div>
+
+          <div style={styles.executiveNumbers} aria-label="Key manager numbers">
+            <DetailMetric label="Sales" value={money(metrics.totals.revenue)} />
+            <DetailMetric label="Net Profit" value={money(metrics.totals.netProfit)} />
+            <DetailMetric label="Receivables" value={money(receivablesTotal)} />
+            <DetailMetric label="Pending Closings" value={String(pendingClosings.length)} />
+            <DetailMetric label="Alerts" value={String(alerts.length)} />
+          </div>
+        </div>
+      </section>
+
       <section
         ref={overviewRef}
         className={overviewFlash ? "active-section" : undefined}
@@ -983,41 +1052,79 @@ export default function ManagerDashboard() {
         }}
       >
         <div style={styles.sectionHeader}>
-          <h2 style={styles.sectionTitle}>Department Performance Preview</h2>
+          <div>
+            <h2 style={styles.sectionTitle}>Department Performance Preview</h2>
+            <p style={styles.sectionSubtitle}>
+              What is performing well and where activity may need review.
+            </p>
+          </div>
           <span style={styles.sectionMeta}>{getRangeLabel(activeRange)}</span>
         </div>
         {departmentPerformance.length === 0 ? (
           <div style={styles.emptyState}>No department activity yet.</div>
         ) : (
-          <div style={styles.departmentGrid}>
-            {departmentPerformance.map((department) => (
-              <article key={department.key} style={styles.card}>
-                <div style={styles.rowBetween}>
-                  <h3 style={styles.cardTitle}>{department.name}</h3>
-                  <span
-                    style={{
-                      ...styles.badge,
-                      ...alertStyle(
-                        department.status === "Active"
-                          ? "green"
-                          : department.status === "Needs Review"
-                            ? "amber"
-                            : "blue"
-                      ),
-                    }}
-                  >
-                    {department.status}
-                  </span>
+          <>
+            <div style={styles.managerReviewStrip}>
+              <div style={styles.reviewBlock}>
+                <div style={styles.detailEyebrow}>What is performing well</div>
+                <div style={styles.detailText}>
+                  {topDepartments.length
+                    ? topDepartments.map((department) => department.name).join(", ")
+                    : "No active department leaders yet."}
                 </div>
-                <div style={styles.departmentAmount}>{money(department.total)}</div>
-                <div style={styles.kpiHint}>
-                  {department.transactions
-                    ? `${department.transactions} transaction${department.transactions === 1 ? "" : "s"} in range`
-                    : "No department activity yet."}
+              </div>
+              <div style={styles.reviewBlock}>
+                <div style={styles.detailEyebrow}>What needs attention</div>
+                <div style={styles.detailText}>
+                  {quietDepartments
+                    ? `${quietDepartments} department${quietDepartments === 1 ? "" : "s"} recorded no activity.`
+                    : "All enabled departments have activity in this range."}
                 </div>
-              </article>
-            ))}
-          </div>
+              </div>
+            </div>
+
+            {departmentCardsOpen ? (
+              <div style={styles.departmentGrid}>
+                {departmentPerformance.map((department) => (
+                  <article key={department.key} style={styles.card}>
+                    <div style={styles.rowBetween}>
+                      <h3 style={styles.cardTitle}>{department.name}</h3>
+                      <span
+                        style={{
+                          ...styles.badge,
+                          ...alertStyle(
+                            department.status === "Active"
+                              ? "green"
+                              : department.status === "Needs Review"
+                                ? "amber"
+                                : "blue"
+                          ),
+                        }}
+                      >
+                        {department.status}
+                      </span>
+                    </div>
+                    <div style={styles.departmentAmount}>{money(department.total)}</div>
+                    <div style={styles.kpiHint}>
+                      {department.transactions
+                        ? `${department.transactions} transaction${department.transactions === 1 ? "" : "s"} in range`
+                        : "No department activity yet."}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : null}
+
+            {!departmentCardsPinned ? (
+              <button
+                type="button"
+                style={styles.showMoreButton}
+                onClick={() => setShowAllDepartments((current) => !current)}
+              >
+                {departmentCardsOpen ? "Hide department cards" : "Show all department cards"}
+              </button>
+            ) : null}
+          </>
         )}
       </section>
 
@@ -1035,9 +1142,10 @@ export default function ManagerDashboard() {
             Grouped by: {metrics.groupLabel} | {dataConfidenceLabel}
           </span>
         </div>
-        {metrics.groupedRows.length === 0 ? (
+        {groupedPerformanceOpen ? (
+          metrics.groupedRows.length === 0 ? (
           <div style={styles.emptyState}>No grouped performance data for this range.</div>
-        ) : (
+          ) : (
           <div style={styles.tableWrap}>
             <div style={styles.tableHead}>
               <div>Group</div>
@@ -1060,7 +1168,21 @@ export default function ManagerDashboard() {
               </div>
             ))}
           </div>
+          )
+        ) : (
+          <div style={styles.emptyState}>
+            Detailed grouped performance is hidden for a calmer manager view.
+          </div>
         )}
+        {!groupedPerformancePinned ? (
+          <button
+            type="button"
+            style={styles.showMoreButton}
+            onClick={() => setShowGroupedPerformance((current) => !current)}
+          >
+            {groupedPerformanceOpen ? "Hide grouped performance" : "Show grouped performance"}
+          </button>
+        ) : null}
       </section>
 
       <section style={styles.twoColumn}>
@@ -1073,7 +1195,10 @@ export default function ManagerDashboard() {
           }}
         >
           <div style={styles.sectionHeader}>
-            <h2 style={styles.sectionTitle}>Manager Alerts</h2>
+            <div>
+              <h2 style={styles.sectionTitle}>Manager Alerts</h2>
+              <p style={styles.sectionSubtitle}>What to review next.</p>
+            </div>
           </div>
           <div style={styles.alertList}>
             {alerts.length === 0 ? (
@@ -1082,7 +1207,7 @@ export default function ManagerDashboard() {
                 <div style={styles.alertText}>Performance and operations look steady for this range.</div>
               </article>
             ) : (
-              alerts.map((alert) => (
+              visibleAlerts.map((alert) => (
                 <button
                   key={alert.id}
                   type="button"
@@ -1103,6 +1228,15 @@ export default function ManagerDashboard() {
                 </button>
               ))
             )}
+            {hasMoreAlerts || showAllAlerts ? (
+              <button
+                type="button"
+                style={styles.showMoreButton}
+                onClick={() => setShowAllAlerts((current) => !current)}
+              >
+                {showAllAlerts ? "Show fewer alerts" : `Show more alerts (${alerts.length - visibleAlerts.length})`}
+              </button>
+            ) : null}
           </div>
 
           {selectedAlert ? (
@@ -1262,6 +1396,42 @@ const styles: Record<string, CSSProperties> = {
     color: "#607486",
     fontSize: 12,
     lineHeight: 1.35,
+  },
+  executivePanel: {
+    background: "#ffffff",
+    border: "1px solid #dce5ec",
+    borderRadius: 8,
+    padding: 18,
+    marginBottom: 20,
+    boxShadow: "0 10px 24px rgba(15, 38, 55, 0.06)",
+  },
+  executiveHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 14,
+    marginBottom: 14,
+  },
+  executiveTitle: {
+    margin: 0,
+    fontSize: 20,
+    color: "#17364b",
+  },
+  executiveGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(240px, 1.2fr) minmax(260px, 1fr)",
+    gap: 14,
+  },
+  executivePriority: {
+    border: "1px solid #edf2f6",
+    borderRadius: 8,
+    padding: 14,
+    background: "#f8fafc",
+  },
+  executiveNumbers: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
+    gap: 10,
   },
   filterBar: {
     display: "grid",
@@ -1429,6 +1599,19 @@ const styles: Record<string, CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
     gap: 14,
+  },
+  managerReviewStrip: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 12,
+    marginBottom: 12,
+  },
+  reviewBlock: {
+    background: "#ffffff",
+    border: "1px solid #dce5ec",
+    borderRadius: 8,
+    padding: 14,
+    boxShadow: "0 8px 20px rgba(15, 38, 55, 0.04)",
   },
   card: {
     background: "#ffffff",
