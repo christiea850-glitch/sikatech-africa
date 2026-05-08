@@ -877,7 +877,7 @@ export default function ManagerDashboard() {
           <div>
             <h2 style={styles.executiveTitle}>Business Health Summary</h2>
             <p style={styles.sectionSubtitle}>
-              What needs attention, what is performing well, and what to review next.
+              Top priority, core numbers, and the next review focus for this range.
             </p>
           </div>
           <span style={{ ...styles.badge, ...alertStyle(businessHealthTone) }}>
@@ -908,18 +908,28 @@ export default function ManagerDashboard() {
         ref={overviewRef}
         className={overviewFlash ? "active-section" : undefined}
         style={{
-          ...styles.kpiGrid,
+          ...styles.section,
           ...(overviewFlash ? styles.sectionFlash : {}),
         }}
-        aria-label="Manager KPI summary"
+        aria-label="Supporting KPI details"
       >
-        {kpis.map((kpi) => (
-          <div key={kpi.label} style={styles.kpiCard}>
-            <div style={styles.kpiLabel}>{kpi.label}</div>
-            <div style={styles.kpiValue}>{kpi.value}</div>
-            <div style={styles.kpiHint}>{kpi.hint}</div>
+        <div style={styles.sectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>Supporting KPI Details</h2>
+            <p style={styles.sectionSubtitle}>
+              Reference numbers behind the business health summary.
+            </p>
           </div>
-        ))}
+        </div>
+        <div style={{ ...styles.kpiGrid, marginBottom: 0 }}>
+          {kpis.map((kpi) => (
+            <div key={kpi.label} style={styles.kpiCard}>
+              <div style={styles.kpiLabel}>{kpi.label}</div>
+              <div style={styles.kpiValue}>{kpi.value}</div>
+              <div style={styles.kpiHint}>{kpi.hint}</div>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section
@@ -934,7 +944,7 @@ export default function ManagerDashboard() {
           <div>
             <h2 style={styles.sectionTitle}>Manager Insights</h2>
             <p style={styles.sectionSubtitle}>
-              Plain-language intelligence from selected dashboard data.
+              Risks, wins, and next steps from the selected range.
             </p>
           </div>
         </div>
@@ -1055,7 +1065,7 @@ export default function ManagerDashboard() {
           <div>
             <h2 style={styles.sectionTitle}>Department Performance Preview</h2>
             <p style={styles.sectionSubtitle}>
-              What is performing well and where activity may need review.
+              Quick department totals before opening the full department cards.
             </p>
           </div>
           <span style={styles.sectionMeta}>{getRangeLabel(activeRange)}</span>
@@ -1069,7 +1079,9 @@ export default function ManagerDashboard() {
                 <div style={styles.detailEyebrow}>What is performing well</div>
                 <div style={styles.detailText}>
                   {topDepartments.length
-                    ? topDepartments.map((department) => department.name).join(", ")
+                    ? topDepartments
+                        .map((department) => `${department.name} (${money(department.total)})`)
+                        .join(", ")
                     : "No active department leaders yet."}
                 </div>
               </div>
@@ -1139,7 +1151,7 @@ export default function ManagerDashboard() {
         <div style={styles.sectionHeader}>
           <h2 style={styles.sectionTitle}>Grouped Performance</h2>
           <span style={styles.sectionMeta}>
-            Grouped by: {metrics.groupLabel} | {dataConfidenceLabel}
+            Comparing by {metrics.groupLabel} | {dataConfidenceLabel}
           </span>
         </div>
         {groupedPerformanceOpen ? (
@@ -1171,7 +1183,7 @@ export default function ManagerDashboard() {
           )
         ) : (
           <div style={styles.emptyState}>
-            Detailed grouped performance is hidden for a calmer manager view.
+            Detailed rows are hidden. Open this view to compare revenue, collections, expenses, net profit, and transactions by {metrics.groupLabel.toLowerCase()}.
           </div>
         )}
         {!groupedPerformancePinned ? (
@@ -1197,7 +1209,7 @@ export default function ManagerDashboard() {
           <div style={styles.sectionHeader}>
             <div>
               <h2 style={styles.sectionTitle}>Manager Alerts</h2>
-              <p style={styles.sectionSubtitle}>What to review next.</p>
+              <p style={styles.sectionSubtitle}>Issues ranked for manager review; select one to see details.</p>
             </div>
           </div>
           <div style={styles.alertList}>
