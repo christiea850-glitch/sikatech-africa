@@ -58,6 +58,7 @@ type DashboardReturnState = {
   fromView: ManagerDashboardView;
   fromParams: string;
   fromLabel: string;
+  detailContext?: string;
 };
 
 const DATE_PRESETS: DatePreset[] = ["today", "yesterday", "week", "month", "custom"];
@@ -369,7 +370,7 @@ export default function ManagerDashboard() {
   const [showGroupedPerformance, setShowGroupedPerformance] = useState(false);
   const [selectedExecutiveBrief, setSelectedExecutiveBrief] =
     useState<ManagerExecutiveBriefCard | null>(null);
-  const [returnState, setReturnState] = useState<DashboardReturnState | null>(null);
+  const [dashboardReturnStack, setDashboardReturnStack] = useState<DashboardReturnState[]>([]);
   const previousGroupByRef = useRef<GroupBy>(groupBy);
   const handledViewRef = useRef<ManagerDashboardView | null>(null);
   const shouldScrollViewRef = useRef(searchParams.has("view"));
@@ -1145,7 +1146,11 @@ export default function ManagerDashboard() {
     setSearchParams(next);
   }
 
-  function openDashboardViewWithReturn(nextView: ManagerDashboardView, fromLabel: string) {
+  function openDashboardViewWithReturn(
+    nextView: ManagerDashboardView,
+    fromLabel: string,
+    detailContext?: string
+  ) {
     if (nextView === activeView) {
       openDashboardView(nextView);
       return;
@@ -1159,23 +1164,40 @@ export default function ManagerDashboard() {
       view: activeView,
     });
 
-    setReturnState({
+    const nextEntry: DashboardReturnState = {
       fromView: activeView,
       fromParams: currentParams.toString(),
       fromLabel,
+      detailContext,
+    };
+
+    setDashboardReturnStack((currentStack) => {
+      const latest = currentStack[currentStack.length - 1];
+      if (
+        latest &&
+        latest.fromView === nextEntry.fromView &&
+        latest.fromParams === nextEntry.fromParams &&
+        latest.fromLabel === nextEntry.fromLabel &&
+        latest.detailContext === nextEntry.detailContext
+      ) {
+        return currentStack;
+      }
+
+      return [...currentStack, nextEntry];
     });
     openDashboardView(nextView);
   }
 
   function returnToPreviousDashboardView() {
-    if (!returnState) return;
+    const latestReturn = dashboardReturnStack[dashboardReturnStack.length - 1];
+    if (!latestReturn) return;
 
-    const previousParams = new URLSearchParams(returnState.fromParams);
+    const previousParams = new URLSearchParams(latestReturn.fromParams);
     const previousView = readDashboardView(previousParams.get("view"));
 
     shouldScrollViewRef.current = true;
     handledViewRef.current = null;
-    setReturnState(null);
+    setDashboardReturnStack((currentStack) => currentStack.slice(0, -1));
     setSearchParams(previousParams);
     triggerDashboardView(previousView);
   }
@@ -1232,14 +1254,18 @@ export default function ManagerDashboard() {
     return path;
   }
 
-  function openManagerSafeReviewPath(path?: string | null, fromLabel?: string) {
+  function openManagerSafeReviewPath(
+    path?: string | null,
+    fromLabel?: string,
+    detailContext?: string
+  ) {
     const safePath = managerSafeReviewPath(path);
 
     if (safePath.startsWith("/app/dashboard")) {
       const next = new URLSearchParams(safePath.split("?")[1] || "");
       const nextView = readDashboardView(next.get("view"));
       if (fromLabel) {
-        openDashboardViewWithReturn(nextView, fromLabel);
+        openDashboardViewWithReturn(nextView, fromLabel, detailContext);
       } else {
         openDashboardView(nextView);
       }
@@ -1257,7 +1283,7 @@ export default function ManagerDashboard() {
       setSelectedAlert(alerts.find((alert) => alert.id === alertId) || null);
     }
 
-    openDashboardViewWithReturn(card.targetView, "Executive Brief");
+    openDashboardViewWithReturn(card.targetView, "Executive Brief", card.id);
   }
 
   const snapshot = [
@@ -1286,6 +1312,8 @@ export default function ManagerDashboard() {
   function handleAlertClick(alert: SmartAlert) {
     setSelectedAlert(alert);
   }
+
+  const returnTarget = dashboardReturnStack[dashboardReturnStack.length - 1] || null;
 
   return (
     <main style={styles.page}>
@@ -1397,14 +1425,14 @@ export default function ManagerDashboard() {
         </div>
       </section>
 
-      {returnState ? (
+      {returnTarget ? (
         <div style={styles.returnBar}>
           <button
             type="button"
             style={styles.returnButton}
             onClick={returnToPreviousDashboardView}
           >
-            Return to {returnState.fromLabel}
+            Return to {returnTarget.fromLabel}
           </button>
         </div>
       ) : null}
@@ -1474,7 +1502,13 @@ export default function ManagerDashboard() {
             ...styles.reviewSourceButton,
             ...alertStyle(executiveBriefTone(selectedExecutiveBrief.tone)),
           }}
-          onClick={() => openDashboardViewWithReturn(selectedExecutiveBrief.targetView, "Executive Brief")}
+          onClick={() =>
+            openDashboardViewWithReturn(
+              selectedExecutiveBrief.targetView,
+              "Executive Brief",
+              selectedExecutiveBrief.id
+            )
+          }
         >
           Open {labelize(selectedExecutiveBrief.targetView)}
         </button>
@@ -2312,7 +2346,13 @@ export default function ManagerDashboard() {
                 <button
                   type="button"
                   style={styles.reviewSourceButton}
-                  onClick={() => openManagerSafeReviewPath(selectedAlert.reviewPath, "Alert Detail")}
+                  onClick={() =>
+                    openManagerSafeReviewPath(
+                      selectedAlert.reviewPath,
+                      "Alert Detail",
+                      selectedAlert.id
+                    )
+                  }
                 >
                   {selectedAlert.reviewLabel || "Review Related Section"}
                 </button>
