@@ -45,12 +45,26 @@ export default function OperationsAnalytics({
       <div style={styles.analyticsGrid}>
         <article className="manager-analytics-card" style={styles.visualCard}>
           <h3 style={styles.visualTitle}>Operational Readiness</h3>
+          <div style={styles.visualLegend}>
+            {operationsReadinessRows.map((row) => (
+              <span key={row.label} style={styles.visualLegendItem}>
+                <span style={{ ...styles.visualLegendDot, ...styles[`visualBar${labelize(row.tone)}`] }} />
+                {row.label}
+              </span>
+            ))}
+          </div>
           <div style={styles.visualBarStack}>
             {operationsReadinessRows.map((row) => (
-              <div key={row.label} style={styles.visualBarRow}>
+              <div
+                key={row.label}
+                className="manager-visual-row"
+                style={styles.visualBarRow}
+                title={`${row.label}: ${row.helper}`}
+              >
                 <div style={styles.visualBarLabel}>{row.label}</div>
                 <div style={styles.visualBarTrack}>
                   <div
+                    className="manager-visual-fill"
                     style={{
                       ...styles.visualBarFill,
                       ...styles[`visualBar${labelize(row.tone)}`],
@@ -62,6 +76,12 @@ export default function OperationsAnalytics({
               </div>
             ))}
           </div>
+          {operationsReadinessRows[0] ? (
+            <div style={styles.visualInsightRow}>
+              <span>Primary status</span>
+              <strong>{operationsReadinessRows[0].helper}</strong>
+            </div>
+          ) : null}
         </article>
         <article className="manager-analytics-card" style={styles.visualCard}>
           <h3 style={styles.visualTitle}>Closing Readiness</h3>
@@ -83,7 +103,21 @@ export default function OperationsAnalytics({
         <article className="manager-analytics-card" style={styles.visualCard}>
           <h3 style={styles.visualTitle}>Department Health</h3>
           <div style={styles.collectionTrack}>
-            <div style={{ ...styles.collectionFill, width: `${Math.max(4, activeDepartmentPercent)}%` }} />
+            <div
+              className="manager-visual-fill"
+              title={`${activeDepartments} active departments, ${quietDepartments} quiet`}
+              style={{ ...styles.collectionFill, width: `${Math.max(4, activeDepartmentPercent)}%` }}
+            />
+          </div>
+          <div style={styles.visualLegend}>
+            <span style={styles.visualLegendItem}>
+              <span style={{ ...styles.visualLegendDot, background: "#0f5e7a" }} />
+              Active
+            </span>
+            <span style={styles.visualLegendItem}>
+              <span style={{ ...styles.visualLegendDot, background: "#e8eef3" }} />
+              Quiet
+            </span>
           </div>
           <div style={styles.visualSplit}>
             <span>Active: {activeDepartments}</span>

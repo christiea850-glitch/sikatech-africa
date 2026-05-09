@@ -66,23 +66,55 @@ export default function ManagerVisualIntelligence({
               </button>
             </div>
             <div style={styles.collectionTrack}>
-              <div style={{ ...styles.collectionFill, width: `${Math.max(4, collectionPercent)}%` }} />
+              <div
+                className="manager-visual-fill"
+                title={`Collections cover ${collectionPercent.toFixed(0)}% of revenue`}
+                style={{ ...styles.collectionFill, width: `${Math.max(4, collectionPercent)}%` }}
+              />
+            </div>
+            <div style={styles.visualLegend}>
+              <span style={styles.visualLegendItem}>
+                <span style={{ ...styles.visualLegendDot, background: "#0f5e7a" }} />
+                Coverage
+              </span>
+              <span style={styles.visualLegendItem}>
+                <span style={{ ...styles.visualLegendDot, background: "#e8eef3" }} />
+                Remaining gap
+              </span>
             </div>
             <div style={styles.visualSplit}>
               <span>Revenue: {money(totals.revenue)}</span>
               <span>Collections: {money(totals.collections)}</span>
               <strong>{collectionPercent.toFixed(0)}%</strong>
             </div>
+            <div style={styles.visualInsightRow}>
+              <span>Cash collection signal</span>
+              <strong>{totals.collections >= totals.revenue ? "Covered" : "Review gap"}</strong>
+            </div>
           </article>
 
           <article className="manager-visual-card" style={styles.visualCard}>
             <h3 style={styles.visualTitle}>Revenue / Expenses / Net Profit</h3>
+            <div style={styles.visualLegend}>
+              {financialVisualRows.map((row) => (
+                <span key={row.label} style={styles.visualLegendItem}>
+                  <span style={{ ...styles.visualLegendDot, ...styles[`visualBar${labelize(row.tone)}`] }} />
+                  {row.label}
+                </span>
+              ))}
+            </div>
             <div style={styles.visualBarStack}>
               {financialVisualRows.map((row) => (
-                <div key={row.label} style={styles.visualBarRow}>
+                <div
+                  key={row.label}
+                  className="manager-visual-row"
+                  style={styles.visualBarRow}
+                  title={`${row.label}: ${money(row.value)}`}
+                >
                   <div style={styles.visualBarLabel}>{row.label}</div>
                   <div style={styles.visualBarTrack}>
                     <div
+                      className="manager-visual-fill"
                       style={{
                         ...styles.visualBarFill,
                         ...styles[`visualBar${labelize(row.tone)}`],
@@ -111,9 +143,14 @@ export default function ManagerVisualIntelligence({
             ) : (
               <div style={styles.miniColumnChart}>
                 {topDepartmentVisualRows.map((department) => (
-                  <div key={department.key} style={styles.miniColumnItem}>
+                  <div
+                    key={department.key}
+                    style={styles.miniColumnItem}
+                    title={`${department.name}: ${money(department.total)}`}
+                  >
                     <div style={styles.miniColumnFrame}>
                       <div
+                        className="manager-visual-fill"
                         style={{
                           ...styles.miniColumnFill,
                           height: `${Math.max(8, (department.total / maxDepartmentVisualValue) * 100)}%`,
@@ -126,6 +163,12 @@ export default function ManagerVisualIntelligence({
                 ))}
               </div>
             )}
+            {topDepartmentVisualRows[0] ? (
+              <div style={styles.visualInsightRow}>
+                <span>Current leader</span>
+                <strong>{topDepartmentVisualRows[0].name}</strong>
+              </div>
+            ) : null}
           </article>
 
           <article className="manager-visual-card" style={styles.visualCard}>
@@ -146,10 +189,16 @@ export default function ManagerVisualIntelligence({
                   const value = row.revenue || row.collections || row.expenses;
 
                   return (
-                    <div key={row.key} style={styles.visualBarRow}>
+                    <div
+                      key={row.key}
+                      className="manager-visual-row"
+                      style={styles.visualBarRow}
+                      title={`${row.name}: ${money(value)}`}
+                    >
                       <div style={styles.visualBarLabel}>{row.name}</div>
                       <div style={styles.visualBarTrack}>
                         <div
+                          className="manager-visual-fill"
                           style={{
                             ...styles.visualBarFill,
                             ...styles.visualBarCollections,
@@ -163,6 +212,12 @@ export default function ManagerVisualIntelligence({
                 })}
               </div>
             )}
+            {groupedVisualRows[0] ? (
+              <div style={styles.visualInsightRow}>
+                <span>Largest {groupLabel.toLowerCase()}</span>
+                <strong>{groupedVisualRows[0].name}</strong>
+              </div>
+            ) : null}
           </article>
 
           <article className="manager-visual-card" style={styles.visualCard}>
@@ -175,12 +230,26 @@ export default function ManagerVisualIntelligence({
                 Alerts
               </button>
             </div>
+            <div style={styles.visualLegend}>
+              {alertSeverityRows.map((row) => (
+                <span key={row.label} style={styles.visualLegendItem}>
+                  <span style={{ ...styles.visualLegendDot, ...styles[`visualBar${labelize(row.tone)}`] }} />
+                  {row.label}
+                </span>
+              ))}
+            </div>
             <div style={styles.visualBarStack}>
               {alertSeverityRows.map((row) => (
-                <div key={row.label} style={styles.visualBarRow}>
+                <div
+                  key={row.label}
+                  className="manager-visual-row"
+                  style={styles.visualBarRow}
+                  title={`${row.label}: ${row.count}`}
+                >
                   <div style={styles.visualBarLabel}>{row.label}</div>
                   <div style={styles.visualBarTrack}>
                     <div
+                      className="manager-visual-fill"
                       style={{
                         ...styles.visualBarFill,
                         ...styles[`visualBar${labelize(row.tone)}`],

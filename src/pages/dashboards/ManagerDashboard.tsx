@@ -18,6 +18,7 @@ import {
 } from "./dashboardMetrics";
 import AlertAnalytics from "./manager/AlertAnalytics";
 import DepartmentAnalytics from "./manager/DepartmentAnalytics";
+import ExecutiveAnalyticsExpansion from "./manager/ExecutiveAnalyticsExpansion";
 import InsightsAnalytics from "./manager/InsightsAnalytics";
 import ManagerDecisionCenter from "./manager/ManagerDecisionCenter";
 import ManagerIntelligenceSections from "./manager/ManagerIntelligenceSections";
@@ -1092,6 +1093,12 @@ export default function ManagerDashboard() {
             border-color: #c7d7e4;
             box-shadow: 0 12px 26px rgba(15, 38, 55, 0.08);
           }
+          .manager-visual-fill {
+            transition: width 420ms ease, height 420ms ease, opacity 160ms ease;
+          }
+          .manager-visual-row:hover .manager-visual-fill {
+            opacity: 0.86;
+          }
         `}
       </style>
       <header style={styles.header}>
@@ -1240,6 +1247,22 @@ export default function ManagerDashboard() {
         maxAlertSeverityCount={maxAlertSeverityCount}
         money={money}
         labelize={labelize}
+        openDashboardView={openDashboardView}
+      />
+
+      <ExecutiveAnalyticsExpansion
+        styles={styles}
+        hasVisualActivity={hasVisualActivity}
+        totals={metrics.totals}
+        receivablesTotal={receivablesTotal}
+        collectionPercent={collectionPercent}
+        alertsLength={alerts.length}
+        riskInsightCount={riskInsightCount}
+        warningInsightCount={warningInsightCount}
+        activeDepartmentPercent={activeDepartmentPercent}
+        strongestDepartment={strongestDepartment}
+        weakestDepartment={weakestDepartment}
+        money={money}
         openDashboardView={openDashboardView}
       />
 
@@ -1448,7 +1471,7 @@ export default function ManagerDashboard() {
       </>
       ) : null}
 
-      {activeView === "operations" || activeView === "front-desk" || activeView === "closings" ? (
+      {activeView === "operations" ? (
       <>
       <section
         ref={operationsRef}
@@ -1512,6 +1535,104 @@ export default function ManagerDashboard() {
         labelize={labelize}
       />
       </>
+      ) : null}
+
+      {activeView === "front-desk" ? (
+      <section
+        ref={frontDeskRef}
+        className={frontDeskFlash ? "active-section" : undefined}
+        style={{
+          ...styles.section,
+          ...(frontDeskFlash ? styles.sectionFlash : {}),
+        }}
+      >
+        <div style={styles.sectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>Front Desk Status</h2>
+            <p style={styles.sectionSubtitle}>
+              Manager-safe receivables and room balance context for the selected range.
+            </p>
+          </div>
+          <span style={{ ...styles.badge, ...alertStyle(unpaidBookings.length ? "red" : "green") }}>
+            {unpaidBookings.length ? "Review balances" : "Settled"}
+          </span>
+        </div>
+
+        <div style={styles.managerReviewStrip}>
+          <div style={styles.reviewBlock}>
+            <div style={styles.detailEyebrow}>Current front desk signal</div>
+            <div style={styles.detailText}>
+              {unpaidBookings.length
+                ? `${unpaidBookings.length} unpaid room balance${unpaidBookings.length === 1 ? "" : "s"} need manager review.`
+                : "Room balances look settled for this range."}
+            </div>
+          </div>
+          <div style={styles.reviewBlock}>
+            <div style={styles.detailEyebrow}>Collection context</div>
+            <div style={styles.detailText}>
+              {receivablesTotal > 0
+                ? `${money(receivablesTotal)} remains visible in receivables against current revenue activity.`
+                : "Receivables are not creating a visible pressure point in this range."}
+            </div>
+          </div>
+        </div>
+
+        <div style={styles.detailGrid}>
+          <DetailMetric label="Receivables" value={money(receivablesTotal)} />
+          <DetailMetric label="Unpaid Room Balances" value={String(unpaidBookings.length)} />
+          <DetailMetric label="Collections" value={money(metrics.totals.collections)} />
+          <DetailMetric label="Collection Coverage" value={`${collectionPercent.toFixed(0)}%`} />
+        </div>
+      </section>
+      ) : null}
+
+      {activeView === "closings" ? (
+      <section
+        ref={closingStatusRef}
+        className={closingStatusFlash ? "active-section" : undefined}
+        style={{
+          ...styles.section,
+          ...(closingStatusFlash ? styles.sectionFlash : {}),
+        }}
+      >
+        <div style={styles.sectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>Cash Desk / Closings Status</h2>
+            <p style={styles.sectionSubtitle}>
+              Manager-safe closing readiness and cash desk context for the selected range.
+            </p>
+          </div>
+          <span style={{ ...styles.badge, ...alertStyle(pendingClosings.length ? "amber" : "green") }}>
+            {pendingClosings.length ? "Closings pending" : "Ready"}
+          </span>
+        </div>
+
+        <div style={styles.managerReviewStrip}>
+          <div style={styles.reviewBlock}>
+            <div style={styles.detailEyebrow}>Cash desk readiness</div>
+            <div style={styles.detailText}>
+              {pendingClosings.length
+                ? `${pendingClosings.length} closing${pendingClosings.length === 1 ? "" : "s"} remain pending for manager review.`
+                : "No pending closings are visible for this range."}
+            </div>
+          </div>
+          <div style={styles.reviewBlock}>
+            <div style={styles.detailEyebrow}>Shift context</div>
+            <div style={styles.detailText}>
+              {openShifts.length
+                ? `${openShifts.length} shift${openShifts.length === 1 ? "" : "s"} are still open.`
+                : "No open shifts are currently adding closing pressure."}
+            </div>
+          </div>
+        </div>
+
+        <div style={styles.detailGrid}>
+          <DetailMetric label="Pending Closings" value={String(pendingClosings.length)} />
+          <DetailMetric label="Open Shifts" value={String(openShifts.length)} />
+          <DetailMetric label="Cash Collections" value={money(metrics.totals.collections)} />
+          <DetailMetric label="Receivables" value={money(receivablesTotal)} />
+        </div>
+      </section>
       ) : null}
 
       {activeView === "department-activity" ? (
@@ -2075,6 +2196,39 @@ const styles: Record<string, CSSProperties> = {
     background: "#f8fafc",
     minHeight: 180,
   },
+  visualLegend: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+    color: "#607486",
+    fontSize: 11,
+    fontWeight: 800,
+  },
+  visualLegendItem: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+  },
+  visualLegendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    background: "#0f5e7a",
+    flex: "0 0 auto",
+  },
+  visualInsightRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 12,
+    paddingTop: 10,
+    borderTop: "1px solid #edf2f6",
+    color: "#354b5d",
+    fontSize: 12,
+    fontWeight: 800,
+  },
   visualCardHeader: {
     display: "flex",
     justifyContent: "space-between",
@@ -2116,6 +2270,7 @@ const styles: Record<string, CSSProperties> = {
     height: "100%",
     background: "#0f5e7a",
     borderRadius: 999,
+    transition: "width 420ms ease",
   },
   visualSplit: {
     display: "flex",
@@ -2156,6 +2311,7 @@ const styles: Record<string, CSSProperties> = {
   visualBarFill: {
     height: "100%",
     borderRadius: 999,
+    transition: "width 420ms ease, opacity 160ms ease",
   },
   visualBarRevenue: {
     background: "#0f5e7a",
@@ -2203,6 +2359,7 @@ const styles: Record<string, CSSProperties> = {
     width: "100%",
     background: "#0f5e7a",
     borderRadius: "8px 8px 0 0",
+    transition: "height 420ms ease, opacity 160ms ease",
   },
   miniColumnLabel: {
     color: "#354b5d",
@@ -2234,6 +2391,61 @@ const styles: Record<string, CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
     gap: 12,
+  },
+  executiveAnalytics: {
+    background: "#ffffff",
+    border: "1px solid #dce5ec",
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 20,
+    boxShadow: "0 10px 24px rgba(15, 38, 55, 0.05)",
+  },
+  executiveAnalyticsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+    gap: 12,
+  },
+  executiveAnalyticsCard: {
+    border: "1px solid #edf2f6",
+    borderRadius: 8,
+    padding: 14,
+    background: "#f8fafc",
+    minHeight: 190,
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+  executiveAnalyticsTopline: {
+    display: "grid",
+    gap: 8,
+  },
+  executiveAnalyticsPill: {
+    justifySelf: "start",
+    border: "1px solid #d7e2ea",
+    borderRadius: 999,
+    background: "#ffffff",
+    color: "#354b5d",
+    fontSize: 11,
+    fontWeight: 900,
+    padding: "5px 8px",
+  },
+  executiveAnalyticsText: {
+    margin: 0,
+    color: "#354b5d",
+    fontSize: 13,
+    lineHeight: 1.45,
+    flex: 1,
+  },
+  executiveAnalyticsMeter: {
+    height: 10,
+    background: "#e8eef3",
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  executiveAnalyticsMeterFill: {
+    height: "100%",
+    borderRadius: 999,
+    transition: "width 420ms ease, opacity 160ms ease",
   },
   drilldownMetricGrid: {
     display: "grid",

@@ -43,7 +43,21 @@ export default function DepartmentAnalytics({
           <article className="manager-analytics-card" style={styles.visualCard}>
             <h3 style={styles.visualTitle}>Active vs Quiet Departments</h3>
             <div style={styles.collectionTrack}>
-              <div style={{ ...styles.collectionFill, width: `${Math.max(4, activeDepartmentPercent)}%` }} />
+              <div
+                className="manager-visual-fill"
+                title={`${activeDepartments} of ${enabledDepartmentsLength} departments active`}
+                style={{ ...styles.collectionFill, width: `${Math.max(4, activeDepartmentPercent)}%` }}
+              />
+            </div>
+            <div style={styles.visualLegend}>
+              <span style={styles.visualLegendItem}>
+                <span style={{ ...styles.visualLegendDot, background: "#0f5e7a" }} />
+                Active
+              </span>
+              <span style={styles.visualLegendItem}>
+                <span style={{ ...styles.visualLegendDot, background: "#e8eef3" }} />
+                Quiet
+              </span>
             </div>
             <div style={styles.visualSplit}>
               <span>Active: {activeDepartments}</span>
@@ -55,10 +69,16 @@ export default function DepartmentAnalytics({
             <h3 style={styles.visualTitle}>Department Contribution</h3>
             <div style={styles.visualBarStack}>
               {departmentRankingRows.slice(0, 6).map((department) => (
-                <div key={department.key} style={styles.visualBarRow}>
+                <div
+                  key={department.key}
+                  className="manager-visual-row"
+                  style={styles.visualBarRow}
+                  title={`${department.name}: ${money(department.total)}`}
+                >
                   <div style={styles.visualBarLabel}>{department.name}</div>
                   <div style={styles.visualBarTrack}>
                     <div
+                      className="manager-visual-fill"
                       style={{
                         ...styles.visualBarFill,
                         ...styles.visualBarRevenue,
@@ -70,15 +90,27 @@ export default function DepartmentAnalytics({
                 </div>
               ))}
             </div>
+            {departmentRankingRows[0] ? (
+              <div style={styles.visualInsightRow}>
+                <span>Top contributor</span>
+                <strong>{departmentRankingRows[0].name}</strong>
+              </div>
+            ) : null}
           </article>
           <article className="manager-analytics-card" style={styles.visualCard}>
             <h3 style={styles.visualTitle}>Operational Load</h3>
             <div style={styles.visualBarStack}>
               {departmentRankingRows.slice(0, 6).map((department) => (
-                <div key={department.key} style={styles.visualBarRow}>
+                <div
+                  key={department.key}
+                  className="manager-visual-row"
+                  style={styles.visualBarRow}
+                  title={`${department.name}: ${department.transactions} transaction${department.transactions === 1 ? "" : "s"}`}
+                >
                   <div style={styles.visualBarLabel}>{department.name}</div>
                   <div style={styles.visualBarTrack}>
                     <div
+                      className="manager-visual-fill"
                       style={{
                         ...styles.visualBarFill,
                         ...styles.visualBarCollections,
@@ -95,7 +127,11 @@ export default function DepartmentAnalytics({
             <h3 style={styles.visualTitle}>Department Activity Ranking</h3>
             <div style={styles.drilldownList}>
               {departmentRankingRows.slice(0, 5).map((department, index) => (
-                <div key={department.key} style={styles.drilldownListRow}>
+                <div
+                  key={department.key}
+                  style={styles.drilldownListRow}
+                  title={`${department.name}: ${department.status}`}
+                >
                   <span>#{index + 1} {department.name}</span>
                   <strong>{department.status}</strong>
                 </div>

@@ -44,16 +44,36 @@ export default function InsightsAnalytics({
         <div style={styles.analyticsGrid}>
           <article className="manager-analytics-card" style={styles.visualCard}>
             <h3 style={styles.visualTitle}>Risk vs Opportunity</h3>
+            <div style={styles.visualLegend}>
+              <span style={styles.visualLegendItem}>
+                <span style={{ ...styles.visualLegendDot, ...styles.visualBarLoss }} />
+                Risks
+              </span>
+              <span style={styles.visualLegendItem}>
+                <span style={{ ...styles.visualLegendDot, ...styles.visualBarExpenses }} />
+                Warnings
+              </span>
+              <span style={styles.visualLegendItem}>
+                <span style={{ ...styles.visualLegendDot, ...styles.visualBarProfit }} />
+                Positives
+              </span>
+            </div>
             <div style={styles.visualBarStack}>
               {[
                 { label: "Risks", value: riskInsightCount, tone: "loss" },
                 { label: "Warnings", value: warningInsightCount, tone: "expenses" },
                 { label: "Positives", value: positiveInsightCount, tone: "profit" },
               ].map((row) => (
-                <div key={row.label} style={styles.visualBarRow}>
+                <div
+                  key={row.label}
+                  className="manager-visual-row"
+                  style={styles.visualBarRow}
+                  title={`${row.label}: ${row.value}`}
+                >
                   <div style={styles.visualBarLabel}>{row.label}</div>
                   <div style={styles.visualBarTrack}>
                     <div
+                      className="manager-visual-fill"
                       style={{
                         ...styles.visualBarFill,
                         ...styles[`visualBar${labelize(row.tone)}`],
@@ -65,15 +85,25 @@ export default function InsightsAnalytics({
                 </div>
               ))}
             </div>
+            <div style={styles.visualInsightRow}>
+              <span>Insight balance</span>
+              <strong>{riskInsightCount > positiveInsightCount ? "Risk-led" : "Opportunity-led"}</strong>
+            </div>
           </article>
           <article className="manager-analytics-card" style={styles.visualCard}>
             <h3 style={styles.visualTitle}>Follow-up Priority</h3>
             <div style={styles.visualBarStack}>
               {insightPriorityRows.map((row) => (
-                <div key={row.id} style={styles.visualBarRow}>
+                <div
+                  key={row.id}
+                  className="manager-visual-row"
+                  style={styles.visualBarRow}
+                  title={`${row.title}: priority ${row.score}`}
+                >
                   <div style={styles.visualBarLabel}>{row.title}</div>
                   <div style={styles.visualBarTrack}>
                     <div
+                      className="manager-visual-fill"
                       style={{
                         ...styles.visualBarFill,
                         ...styles[`visualBar${row.type === "risk" ? "Loss" : row.type === "warning" ? "Expenses" : row.type === "positive" ? "Profit" : "Collections"}`],
@@ -85,6 +115,12 @@ export default function InsightsAnalytics({
                 </div>
               ))}
             </div>
+            {insightPriorityRows[0] ? (
+              <div style={styles.visualInsightRow}>
+                <span>Next follow-up</span>
+                <strong>{insightPriorityRows[0].title}</strong>
+              </div>
+            ) : null}
           </article>
           <article className="manager-analytics-card" style={styles.visualCard}>
             <h3 style={styles.visualTitle}>Strongest Performer</h3>

@@ -36,12 +36,26 @@ export default function AlertAnalytics({
         <div style={styles.analyticsGrid}>
           <article className="manager-analytics-card" style={styles.visualCard}>
             <h3 style={styles.visualTitle}>Severity Distribution</h3>
+            <div style={styles.visualLegend}>
+              {alertSeverityRows.map((row) => (
+                <span key={row.label} style={styles.visualLegendItem}>
+                  <span style={{ ...styles.visualLegendDot, ...styles[`visualBar${labelize(row.tone)}`] }} />
+                  {row.label}
+                </span>
+              ))}
+            </div>
             <div style={styles.visualBarStack}>
               {alertSeverityRows.map((row) => (
-                <div key={row.label} style={styles.visualBarRow}>
+                <div
+                  key={row.label}
+                  className="manager-visual-row"
+                  style={styles.visualBarRow}
+                  title={`${row.label}: ${row.count}`}
+                >
                   <div style={styles.visualBarLabel}>{row.label}</div>
                   <div style={styles.visualBarTrack}>
                     <div
+                      className="manager-visual-fill"
                       style={{
                         ...styles.visualBarFill,
                         ...styles[`visualBar${labelize(row.tone)}`],
@@ -61,10 +75,16 @@ export default function AlertAnalytics({
             ) : (
               <div style={styles.visualBarStack}>
                 {alertHotspots.map((row) => (
-                  <div key={row.label} style={styles.visualBarRow}>
+                  <div
+                    key={row.label}
+                    className="manager-visual-row"
+                    style={styles.visualBarRow}
+                    title={`${row.label}: ${row.count}`}
+                  >
                     <div style={styles.visualBarLabel}>{row.label}</div>
                     <div style={styles.visualBarTrack}>
                       <div
+                        className="manager-visual-fill"
                         style={{
                           ...styles.visualBarFill,
                           ...styles.visualBarLoss,
@@ -77,6 +97,12 @@ export default function AlertAnalytics({
                 ))}
               </div>
             )}
+            {alertHotspots[0] ? (
+              <div style={styles.visualInsightRow}>
+                <span>Largest hotspot</span>
+                <strong>{alertHotspots[0].label}</strong>
+              </div>
+            ) : null}
           </article>
           <article className="manager-analytics-card" style={styles.visualCard}>
             <h3 style={styles.visualTitle}>Unresolved Emphasis</h3>
@@ -89,7 +115,7 @@ export default function AlertAnalytics({
             <h3 style={styles.visualTitle}>Alert Concentration</h3>
             <div style={styles.drilldownList}>
               {alerts.slice(0, 5).map((alert) => (
-                <div key={alert.id} style={styles.drilldownListRow}>
+                <div key={alert.id} style={styles.drilldownListRow} title={`${alert.title}: ${labelize(alert.type)}`}>
                   <span>{alert.title}</span>
                   <strong>{labelize(alert.type)}</strong>
                 </div>

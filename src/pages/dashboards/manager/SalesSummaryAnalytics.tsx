@@ -48,16 +48,41 @@ export default function SalesSummaryAnalytics({
         <div style={styles.analyticsGrid}>
           <article className="manager-analytics-card" style={styles.visualCard}>
             <h3 style={styles.visualTitle}>Revenue vs Collections Gap</h3>
+            <div style={styles.visualLegend}>
+              <span style={styles.visualLegendItem}>
+                <span style={{ ...styles.visualLegendDot, ...styles.visualBarRevenue }} />
+                Revenue
+              </span>
+              <span style={styles.visualLegendItem}>
+                <span style={{ ...styles.visualLegendDot, ...styles.visualBarCollections }} />
+                Collections
+              </span>
+              <span style={styles.visualLegendItem}>
+                <span
+                  style={{
+                    ...styles.visualLegendDot,
+                    ...(collectionGap > 0 ? styles.visualBarExpenses : styles.visualBarProfit),
+                  }}
+                />
+                Gap
+              </span>
+            </div>
             <div style={styles.visualBarStack}>
               {[
                 { label: "Revenue", value: totals.revenue, tone: "revenue" },
                 { label: "Collections", value: totals.collections, tone: "collections" },
                 { label: "Gap", value: collectionGap, tone: collectionGap > 0 ? "expenses" : "profit" },
               ].map((row) => (
-                <div key={row.label} style={styles.visualBarRow}>
+                <div
+                  key={row.label}
+                  className="manager-visual-row"
+                  style={styles.visualBarRow}
+                  title={`${row.label}: ${money(row.value)}`}
+                >
                   <div style={styles.visualBarLabel}>{row.label}</div>
                   <div style={styles.visualBarTrack}>
                     <div
+                      className="manager-visual-fill"
                       style={{
                         ...styles.visualBarFill,
                         ...styles[`visualBar${labelize(row.tone)}`],
@@ -69,15 +94,25 @@ export default function SalesSummaryAnalytics({
                 </div>
               ))}
             </div>
+            <div style={styles.visualInsightRow}>
+              <span>Collection status</span>
+              <strong>{collectionGap > 0 ? "Gap open" : "Covered"}</strong>
+            </div>
           </article>
           <article className="manager-analytics-card" style={styles.visualCard}>
             <h3 style={styles.visualTitle}>Grouped Ranking</h3>
             <div style={styles.visualBarStack}>
               {groupedRankingRows.map((row) => (
-                <div key={row.key} style={styles.visualBarRow}>
+                <div
+                  key={row.key}
+                  className="manager-visual-row"
+                  style={styles.visualBarRow}
+                  title={`${row.name}: ${money(row.revenue)} revenue`}
+                >
                   <div style={styles.visualBarLabel}>{row.name}</div>
                   <div style={styles.visualBarTrack}>
                     <div
+                      className="manager-visual-fill"
                       style={{
                         ...styles.visualBarFill,
                         ...styles.visualBarRevenue,
@@ -89,6 +124,12 @@ export default function SalesSummaryAnalytics({
                 </div>
               ))}
             </div>
+            {groupedRankingRows[0] ? (
+              <div style={styles.visualInsightRow}>
+                <span>Leading {groupLabel.toLowerCase()}</span>
+                <strong>{groupedRankingRows[0].name}</strong>
+              </div>
+            ) : null}
           </article>
           <article className="manager-analytics-card" style={styles.visualCard}>
             <h3 style={styles.visualTitle}>Top vs Lowest Performance</h3>
@@ -107,7 +148,11 @@ export default function SalesSummaryAnalytics({
             <h3 style={styles.visualTitle}>Trend-style Rows</h3>
             <div style={styles.drilldownList}>
               {groupedRankingRows.slice(0, 5).map((row) => (
-                <div key={row.key} style={styles.drilldownListRow}>
+                <div
+                  key={row.key}
+                  style={styles.drilldownListRow}
+                  title={`${row.name}: collections ${money(row.collections)}, expenses ${money(row.expenses)}`}
+                >
                   <span>{row.name}</span>
                   <strong>{row.collections >= row.expenses ? "Healthy" : "Review"}</strong>
                 </div>
