@@ -1417,6 +1417,7 @@ export default function ManagerDashboard() {
           activeView={activeView}
           labelize={labelize}
           openDashboardView={openDashboardView}
+          openDashboardViewWithReturn={openDashboardViewWithReturn}
         />
         ) : null
       ) : null}
@@ -1600,6 +1601,7 @@ export default function ManagerDashboard() {
         activeView={activeView}
         labelize={labelize}
         openDashboardView={openDashboardView}
+        openDashboardViewWithReturn={openDashboardViewWithReturn}
       />
 
       <section style={styles.section}>

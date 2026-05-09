@@ -12,6 +12,7 @@ type Props = {
   activeView: any;
   labelize: (value: string) => string;
   openDashboardView: (view: any) => void;
+  openDashboardViewWithReturn?: (view: any, fromLabel: string) => void;
 };
 
 export default function ManagerIntelligenceSections({
@@ -20,6 +21,7 @@ export default function ManagerIntelligenceSections({
   activeView,
   labelize,
   openDashboardView,
+  openDashboardViewWithReturn,
 }: Props) {
   return (
     <section style={styles.intelligenceNav} aria-label="Manager Intelligence Sections">
@@ -44,7 +46,19 @@ export default function ManagerIntelligenceSections({
                 ...styles.intelligenceCard,
                 ...(active ? styles.intelligenceCardActive : {}),
               }}
-              onClick={() => openDashboardView(section.target)}
+              onClick={() => {
+                if (active) {
+                  openDashboardView(section.target);
+                  return;
+                }
+
+                if (openDashboardViewWithReturn) {
+                  openDashboardViewWithReturn(section.target, labelize(activeView));
+                  return;
+                }
+
+                openDashboardView(section.target);
+              }}
               aria-current={active ? "page" : undefined}
             >
               <span style={styles.intelligenceTitle}>{section.title}</span>
