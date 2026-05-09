@@ -144,12 +144,16 @@ function confidenceForSample(
   return "Observation Only";
 }
 
+function hasComparableSample(currentTransactions: number, previousTransactions: number) {
+  return currentTransactions >= 3 && previousTransactions >= 3;
+}
+
 function trendChange(current: number, previous: number) {
   if (previous <= 0) return current > 0 ? 1 : 0;
   return (current - previous) / previous;
 }
 
-function directionFromChange(change: number, threshold = 0.08): ManagerTrendDirection {
+function directionFromChange(change: number, threshold = 0.12): ManagerTrendDirection {
   if (change >= threshold) return "Improving";
   if (change <= -threshold) return "Declining";
   return "Stable";
@@ -346,14 +350,14 @@ export function getManagerExecutiveBriefCards({
         targetView: "sales-summary",
         importance: lowData ? 44 : 72,
       });
-    } else if (Math.abs(safeNumber(revenueChange)) <= Math.max(1, previousRevenue * 0.02)) {
+    } else if (Math.abs(safeNumber(revenueChange)) <= Math.max(1, previousRevenue * 0.08)) {
       addCard({
         id: "revenue:flat",
         title: "Revenue Steady",
-        text: "Revenue is broadly flat compared with the prior matching range.",
+        text: `Revenue is steady at ${money(revenue)}, with movement inside the normal review threshold.`,
         tone: "healthy",
         riskLevel: "Healthy",
-        whyFlagged: "Revenue movement is within a small tolerance of the prior matching period.",
+        whyFlagged: "Revenue movement is within the manager review tolerance, so it is not treated as a risk signal.",
         keyNumbers: [
           { label: "Revenue", value: money(revenue) },
           { label: "Change", value: `${safeNumber(revenueChangePercent).toFixed(0)}%` },
@@ -368,10 +372,10 @@ export function getManagerExecutiveBriefCards({
       addCard({
         id: revenueUp ? "revenue:up" : "revenue:down",
         title: revenueUp ? "Revenue Up" : "Revenue Down",
-        text: `Revenue is ${revenueUp ? "up" : "down"} ${absChangePercent.toFixed(0)}% compared with the prior matching range.`,
+        text: `Revenue is ${revenueUp ? "up" : "down"} ${absChangePercent.toFixed(0)}% to ${money(revenue)} compared with the prior matching range.`,
         tone: revenueUp ? "opportunity" : "watch",
         riskLevel: revenueUp ? "Opportunity" : "Watch",
-        whyFlagged: "Revenue moved materially against the prior matching period.",
+        whyFlagged: "Revenue moved beyond the manager review threshold, which can change staffing, purchasing, or follow-up priorities.",
         keyNumbers: [
           { label: "Revenue", value: money(revenue) },
           { label: "Prior Revenue", value: money(previousRevenue) },
@@ -388,14 +392,14 @@ export function getManagerExecutiveBriefCards({
   }
 
   if (hasActivity && revenue > 0) {
-    if (collectionGapRatio >= 0.2 || receivablesRatio >= 0.2) {
+    if (collectionGapRatio >= 0.25 || receivablesRatio >= 0.25) {
       addCard({
         id: "collections:pressure",
         title: "Collection Pressure",
         text: `${money(safeNumber(receivablesTotal))} in receivables and ${money(safeNumber(collectionGap))} in collection gap are visible for this range.`,
-        tone: collectionGapRatio >= 0.35 || receivablesRatio >= 0.35 ? "risk" : "watch",
-        riskLevel: collectionGapRatio >= 0.35 || receivablesRatio >= 0.35 ? "Risk" : "Watch",
-        whyFlagged: "Collections and/or receivables are materially behind recorded revenue.",
+        tone: collectionGapRatio >= 0.4 || receivablesRatio >= 0.4 ? "risk" : "watch",
+        riskLevel: collectionGapRatio >= 0.4 || receivablesRatio >= 0.4 ? "Risk" : "Watch",
+        whyFlagged: "Collections or receivables are far enough behind recorded revenue to affect cash visibility.",
         keyNumbers: [
           { label: "Receivables", value: money(safeNumber(receivablesTotal)) },
           { label: "Collection Gap", value: money(safeNumber(collectionGap)) },
@@ -424,11 +428,11 @@ export function getManagerExecutiveBriefCards({
         targetView: "sales-summary",
         importance: lowData ? 30 : 58,
       });
-    } else if (safeNumber(collectionPercent) >= 70) {
+    } else if (safeNumber(collectionPercent) >= 70 && safeNumber(receivablesTotal) > 0) {
       addCard({
         id: "collections:watch",
         title: "Collections Watch",
-        text: "Collections cover most recorded revenue, but receivables remain visible.",
+        text: `Collections cover ${safeNumber(collectionPercent).toFixed(0)}% of revenue, but ${money(safeNumber(receivablesTotal))} remains in receivables.`,
         tone: "watch",
         riskLevel: "Watch",
         whyFlagged: "Collection coverage is acceptable, but unpaid balances remain visible.",
@@ -463,14 +467,14 @@ export function getManagerExecutiveBriefCards({
         targetView: "sales-summary",
         importance: lowData ? 64 : 104,
       });
-    } else if (profitMargin < 0.12) {
+    } else if (profitMargin < 0.1) {
       addCard({
         id: "profit:low-margin",
         title: "Low Profit Margin",
         text: `Net profit margin is ${pct(profitMargin)}, which may indicate cost pressure or thin operating returns.`,
         tone: "watch",
         riskLevel: "Watch",
-        whyFlagged: "Profit exists, but margin is below the manager watch threshold.",
+        whyFlagged: "Profit exists, but margin is below the manager watch threshold, leaving little room for cost movement.",
         keyNumbers: [
           { label: "Net Profit", value: money(netProfit) },
           { label: "Profit Margin", value: pct(profitMargin) },
@@ -501,14 +505,14 @@ export function getManagerExecutiveBriefCards({
     }
   }
 
-  if (hasActivity && revenue > 0 && expenseRatio >= 0.6) {
+  if (hasActivity && revenue > 0 && expenseRatio >= 0.7) {
     addCard({
       id: "expenses:pressure",
       title: "Expense Pressure",
       text: `Expenses are ${pct(expenseRatio)} of revenue, so cost control should stay on the manager watch list.`,
       tone: expenseRatio >= 1 ? "risk" : "watch",
       riskLevel: expenseRatio >= 1 ? "Risk" : "Watch",
-      whyFlagged: "Expense ratio is high relative to revenue.",
+      whyFlagged: "Expense ratio is high enough to pressure profit if it continues.",
       keyNumbers: [
         { label: "Expenses", value: money(expenses) },
         { label: "Revenue", value: money(revenue) },
@@ -733,7 +737,8 @@ export function getManagerTrendIntelligence({
   const currentRows = metrics.groupedRows || [];
   const previousRows = previousMetrics?.groupedRows || [];
   const confidenceLevel = confidenceForSample(transactions, previousTransactions);
-  const hasComparableData = transactions > 0 && previousTransactions > 0;
+  const hasAnyComparableData = transactions > 0 && previousTransactions > 0;
+  const hasComparableData = hasComparableSample(transactions, previousTransactions);
 
   const revenueChange = trendChange(revenue, previousRevenue);
   const collectionsChange = trendChange(collections, previousCollections);
@@ -755,19 +760,21 @@ export function getManagerTrendIntelligence({
   const receivablesRatio = revenue > 0 ? safeNumber(receivablesTotal) / revenue : 0;
   const currentRiskSignals = [
     netProfit < 0,
-    currentCashImbalanceRatio >= 0.15,
-    currentExpenseRatio >= 0.65,
-    receivablesRatio >= 0.2,
+    currentCashImbalanceRatio >= 0.2,
+    currentExpenseRatio >= 0.7,
+    receivablesRatio >= 0.25,
     transactions <= 2,
   ].filter(Boolean).length;
   const previousRiskSignals = [
     previousNetProfit < 0,
-    previousCashImbalanceRatio >= 0.15,
-    previousExpenseRatio >= 0.65,
+    previousCashImbalanceRatio >= 0.2,
+    previousExpenseRatio >= 0.7,
     previousTransactions <= 2 && previousTransactions > 0,
   ].filter(Boolean).length;
   const riskAcceleration =
-    currentRiskSignals > previousRiskSignals
+    !hasComparableData
+      ? "Limited data"
+      : currentRiskSignals > previousRiskSignals
       ? "Rising"
       : currentRiskSignals < previousRiskSignals
         ? "Easing"
@@ -775,7 +782,7 @@ export function getManagerTrendIntelligence({
 
   const directionVotes = [revenueDirection, collectionsDirection];
   const trendDirection: ManagerTrendDirection =
-    !hasComparableData
+    !hasAnyComparableData
       ? "Insufficient Data"
       : directionVotes.every((direction) => direction === "Improving")
         ? "Improving"
@@ -793,27 +800,36 @@ export function getManagerTrendIntelligence({
           ? `Revenue is ${trendLabel(revenueDirection)} while collections are ${trendLabel(collectionsDirection)}.`
           : trendDirection === "Stable"
             ? "Core movement is steady against the prior matching range."
-            : "Trend movement needs more comparable data.";
+      : hasAnyComparableData
+        ? "Comparable data is present, but the sample is too small for prediction."
+        : "Trend movement needs prior range data before prediction.";
   const volatilityPenalty =
-    Math.min(35, Math.abs(revenueChange) * 60) +
-    Math.min(25, Math.abs(collectionsChange) * 50) +
-    Math.min(20, Math.max(0, currentExpenseRatio - previousExpenseRatio) * 100);
+    !hasAnyComparableData
+      ? 20
+      : Math.min(35, Math.abs(revenueChange) * 60) +
+        Math.min(25, Math.abs(collectionsChange) * 50) +
+        Math.min(20, Math.max(0, currentExpenseRatio - previousExpenseRatio) * 100);
   const stabilityScore = Math.max(
     0,
     Math.min(100, Math.round(100 - volatilityPenalty - currentRiskSignals * 8))
   );
 
-  if (hasComparableData && revenueDirection === "Declining" && collectionsDirection !== "Improving") {
+  if (
+    hasComparableData &&
+    revenueDirection === "Declining" &&
+    collectionsDirection !== "Improving" &&
+    Math.abs(revenueChange) >= 0.18
+  ) {
     addPredictiveCard(
       {
         id: "trend:revenue-collections-decline",
         title: "Revenue Trend Softening",
-        text: `Revenue is down ${pct(Math.abs(revenueChange))} while collections are ${trendLabel(collectionsDirection)} against the prior matching range.`,
+        text: `Revenue is down ${pct(Math.abs(revenueChange))} to ${money(revenue)}, while collections are ${trendLabel(collectionsDirection)} against the prior range.`,
         tone: "watch",
         riskLevel: "Watch",
         trendDirection: "Declining",
         confidenceLevel,
-        whyFlagged: "Revenue is declining and collections are not improving enough to offset the movement.",
+        whyFlagged: "Revenue declined beyond the predictive threshold and collections are not improving enough to soften the operating impact.",
         keyNumbers: [
           { label: "Revenue", value: money(revenue) },
           { label: "Prior Revenue", value: money(previousRevenue) },
@@ -831,19 +847,19 @@ export function getManagerTrendIntelligence({
 
   if (
     hasComparableData &&
-    currentCollectionGapRatio >= 0.15 &&
-    currentCollectionGapRatio > previousCollectionGapRatio + 0.08
+    currentCollectionGapRatio >= 0.25 &&
+    currentCollectionGapRatio > previousCollectionGapRatio + 0.12
   ) {
     addPredictiveCard(
       {
         id: "trend:receivables-pressure",
         title: "Receivables Pressure Building",
         text: `Collection gap pressure increased to ${pct(currentCollectionGapRatio)} of revenue from ${pct(previousCollectionGapRatio)} previously.`,
-        tone: currentCollectionGapRatio >= 0.3 ? "risk" : "watch",
-        riskLevel: currentCollectionGapRatio >= 0.3 ? "Risk" : "Watch",
+        tone: currentCollectionGapRatio >= 0.4 ? "risk" : "watch",
+        riskLevel: currentCollectionGapRatio >= 0.4 ? "Risk" : "Watch",
         trendDirection: "Declining",
         confidenceLevel,
-        whyFlagged: "The collection gap is widening versus the prior matching period.",
+        whyFlagged: "The collection gap widened beyond the predictive threshold, which can create cash follow-up pressure.",
         keyNumbers: [
           { label: "Current Gap", value: money(safeNumber(collectionGap)) },
           { label: "Previous Gap", value: money(previousCollectionGap) },
@@ -860,19 +876,19 @@ export function getManagerTrendIntelligence({
 
   if (
     hasComparableData &&
-    currentExpenseRatio >= 0.55 &&
-    currentExpenseRatio > previousExpenseRatio + 0.12
+    currentExpenseRatio >= 0.7 &&
+    currentExpenseRatio > previousExpenseRatio + 0.15
   ) {
     addPredictiveCard(
       {
         id: "trend:expense-acceleration",
         title: "Expense Acceleration",
         text: `Expense ratio rose to ${pct(currentExpenseRatio)} from ${pct(previousExpenseRatio)} in the prior matching range.`,
-        tone: currentExpenseRatio >= 0.8 ? "risk" : "watch",
-        riskLevel: currentExpenseRatio >= 0.8 ? "Risk" : "Watch",
+        tone: currentExpenseRatio >= 0.9 ? "risk" : "watch",
+        riskLevel: currentExpenseRatio >= 0.9 ? "Risk" : "Watch",
         trendDirection: "Declining",
         confidenceLevel,
-        whyFlagged: "Expenses are accelerating faster than the revenue base.",
+        whyFlagged: "Expenses accelerated faster than revenue by enough to threaten margin if it continues.",
         keyNumbers: [
           { label: "Expenses", value: money(expenses) },
           { label: "Prior Expenses", value: money(previousExpenses) },
@@ -892,7 +908,7 @@ export function getManagerTrendIntelligence({
       {
         id: "trend:repeated-losses",
         title: "Repeated Loss Pattern",
-        text: `Net profit is negative in both the selected range and the prior matching range.`,
+        text: `Net profit is negative now (${money(netProfit)}) and was also negative in the prior matching range.`,
         tone: "risk",
         riskLevel: "Risk",
         trendDirection: "Declining",
@@ -913,16 +929,16 @@ export function getManagerTrendIntelligence({
 
   if (
     hasComparableData &&
-    currentCashImbalanceRatio >= 0.15 &&
-    previousCashImbalanceRatio >= 0.15
+    currentCashImbalanceRatio >= 0.2 &&
+    previousCashImbalanceRatio >= 0.2
   ) {
     addPredictiveCard(
       {
         id: "trend:repeated-cash-imbalance",
         title: "Repeated Cash Imbalance",
         text: `Revenue and collections differ materially across both comparable ranges.`,
-        tone: currentCashImbalanceRatio >= 0.3 ? "risk" : "watch",
-        riskLevel: currentCashImbalanceRatio >= 0.3 ? "Risk" : "Watch",
+        tone: currentCashImbalanceRatio >= 0.35 ? "risk" : "watch",
+        riskLevel: currentCashImbalanceRatio >= 0.35 ? "Risk" : "Watch",
         trendDirection: currentCashImbalanceRatio > previousCashImbalanceRatio ? "Declining" : "Mixed",
         confidenceLevel,
         whyFlagged: "Revenue-to-collections variance has repeated, which may indicate reconciliation pressure.",
@@ -943,8 +959,8 @@ export function getManagerTrendIntelligence({
   if (
     hasComparableData &&
     departmentMomentum &&
-    Math.abs(departmentMomentum.change) >= 0.2 &&
-    safeNumber(departmentMomentum.row.transactions) >= 2
+    Math.abs(departmentMomentum.change) >= 0.25 &&
+    safeNumber(departmentMomentum.row.transactions) >= 3
   ) {
     const improving = departmentMomentum.change > 0;
     addPredictiveCard(
