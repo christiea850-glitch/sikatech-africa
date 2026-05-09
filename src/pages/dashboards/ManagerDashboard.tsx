@@ -12,6 +12,7 @@ import { loadShiftClosings } from "../../shifts/shiftClosingStore";
 import {
   getManagerExecutiveBriefCards,
   getManagerInsights,
+  type ManagerExecutiveBriefCard,
 } from "../../utils/managerInsights";
 import { getSmartAlerts, type SmartAlert } from "../../utils/smartAlerts";
 import {
@@ -250,6 +251,13 @@ function smartAlertTone(type: SmartAlert["type"]): AlertTone {
   return "blue";
 }
 
+function executiveBriefTone(tone: ManagerExecutiveBriefCard["tone"]): AlertTone {
+  if (tone === "risk") return "red";
+  if (tone === "watch") return "amber";
+  if (tone === "healthy") return "green";
+  return "blue";
+}
+
 function DetailMetric({ label, value }: { label: string; value: string }) {
   return (
     <div style={styles.detailMetric}>
@@ -317,6 +325,8 @@ export default function ManagerDashboard() {
   const [showAllAlerts, setShowAllAlerts] = useState(false);
   const [showAllDepartments, setShowAllDepartments] = useState(false);
   const [showGroupedPerformance, setShowGroupedPerformance] = useState(false);
+  const [selectedExecutiveBrief, setSelectedExecutiveBrief] =
+    useState<ManagerExecutiveBriefCard | null>(null);
   const previousGroupByRef = useRef<GroupBy>(groupBy);
   const handledViewRef = useRef<ManagerDashboardView | null>(null);
   const shouldScrollViewRef = useRef(searchParams.has("view"));
@@ -1142,6 +1152,17 @@ export default function ManagerDashboard() {
     navigate(safePath);
   }
 
+  function handleExecutiveBriefClick(card: ManagerExecutiveBriefCard) {
+    setSelectedExecutiveBrief(card);
+
+    if (card.targetView === "alerts" && card.id.startsWith("critical-alert:")) {
+      const alertId = card.id.replace("critical-alert:", "");
+      setSelectedAlert(alerts.find((alert) => alert.id === alertId) || null);
+    }
+
+    openDashboardView(card.targetView);
+  }
+
   const snapshot = [
     {
       title: "Shift Status",
@@ -1291,6 +1312,59 @@ export default function ManagerDashboard() {
         ) : null
       ) : null}
 
+      {selectedExecutiveBrief ? (
+      <section style={styles.alertDetailPanel} aria-label="Executive brief evidence">
+        <div style={styles.rowBetween}>
+          <div>
+            <div style={styles.detailEyebrow}>Executive Brief Evidence</div>
+            <h3 style={styles.detailTitle}>{selectedExecutiveBrief.title}</h3>
+          </div>
+          <button
+            type="button"
+            style={styles.closeButton}
+            onClick={() => setSelectedExecutiveBrief(null)}
+          >
+            Close
+          </button>
+        </div>
+
+        <div style={styles.detailGrid}>
+          <DetailMetric label="Risk Level" value={selectedExecutiveBrief.riskLevel} />
+          <DetailMetric label="Source Area" value={selectedExecutiveBrief.sourceArea} />
+          <DetailMetric label="Target Panel" value={labelize(selectedExecutiveBrief.targetView)} />
+        </div>
+
+        <div style={styles.detailBlock}>
+          <div style={styles.detailLabel}>Why it was flagged</div>
+          <div style={styles.detailText}>{selectedExecutiveBrief.whyFlagged}</div>
+        </div>
+
+        {selectedExecutiveBrief.keyNumbers.length > 0 ? (
+          <div style={styles.detailGrid}>
+            {selectedExecutiveBrief.keyNumbers.map((item) => (
+              <DetailMetric key={`${selectedExecutiveBrief.id}:${item.label}`} label={item.label} value={item.value} />
+            ))}
+          </div>
+        ) : null}
+
+        <div style={styles.detailBlock}>
+          <div style={styles.detailLabel}>Recommended manager action</div>
+          <div style={styles.detailText}>{selectedExecutiveBrief.recommendedAction}</div>
+        </div>
+
+        <button
+          type="button"
+          style={{
+            ...styles.reviewSourceButton,
+            ...alertStyle(executiveBriefTone(selectedExecutiveBrief.tone)),
+          }}
+          onClick={() => openDashboardView(selectedExecutiveBrief.targetView)}
+        >
+          Open {labelize(selectedExecutiveBrief.targetView)}
+        </button>
+      </section>
+      ) : null}
+
       {isOverviewView ? (
       <>
       <section style={styles.executivePanel}>
@@ -1328,6 +1402,8 @@ export default function ManagerDashboard() {
       <AIExecutiveBrief
         styles={styles}
         items={aiExecutiveBriefItems}
+        activeItemId={selectedExecutiveBrief?.id || null}
+        onSelectItem={(item) => handleExecutiveBriefClick(item as ManagerExecutiveBriefCard)}
       />
 
       <ManagerDecisionCenter
@@ -1492,6 +1568,8 @@ export default function ManagerDashboard() {
       <AIExecutiveBrief
         styles={styles}
         items={aiExecutiveBriefItems}
+        activeItemId={selectedExecutiveBrief?.id || null}
+        onSelectItem={(item) => handleExecutiveBriefClick(item as ManagerExecutiveBriefCard)}
       />
       ) : null}
 
@@ -2620,6 +2698,12 @@ const styles: Record<string, CSSProperties> = {
     display: "grid",
     alignContent: "start",
     gap: 10,
+  },
+  aiBriefCardButton: {
+    width: "100%",
+    textAlign: "left",
+    font: "inherit",
+    cursor: "pointer",
   },
   aiBriefPill: {
     justifySelf: "start",

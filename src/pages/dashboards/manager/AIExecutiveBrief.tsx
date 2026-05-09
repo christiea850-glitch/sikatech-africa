@@ -3,6 +3,8 @@ import type { CSSProperties } from "react";
 type BriefTone = "healthy" | "watch" | "risk" | "opportunity";
 
 type BriefItem = {
+  id?: string;
+  title?: string;
   text: string;
   tone: BriefTone;
 };
@@ -10,6 +12,8 @@ type BriefItem = {
 type Props = {
   styles: Record<string, CSSProperties>;
   items: BriefItem[];
+  activeItemId?: string | null;
+  onSelectItem?: (item: BriefItem) => void;
 };
 
 function toneLabel(tone: BriefTone) {
@@ -19,7 +23,12 @@ function toneLabel(tone: BriefTone) {
   return "Watch";
 }
 
-export default function AIExecutiveBrief({ styles, items }: Props) {
+export default function AIExecutiveBrief({
+  styles,
+  items,
+  activeItemId,
+  onSelectItem,
+}: Props) {
   return (
     <section style={styles.aiBrief} aria-label="AI Executive Brief">
       <div style={styles.sectionHeader}>
@@ -36,14 +45,44 @@ export default function AIExecutiveBrief({ styles, items }: Props) {
         <div style={styles.emptyState}>No meaningful insight signals for this range yet.</div>
       ) : (
         <div style={styles.aiBriefGrid}>
-          {items.map((item, index) => (
-            <article key={`${item.tone}-${index}`} className="manager-analytics-card" style={styles.aiBriefCard}>
+          {items.map((item, index) => {
+            const active = Boolean(item.id && activeItemId === item.id);
+            const cardStyle = {
+              ...styles.aiBriefCard,
+              ...(onSelectItem ? styles.aiBriefCardButton : {}),
+              ...(active ? styles.intelligenceCardActive : {}),
+            };
+            const content = (
+              <>
               <span style={{ ...styles.aiBriefPill, ...styles[`aiBriefPill${toneLabel(item.tone)}`] }}>
                 {toneLabel(item.tone)}
               </span>
               <p style={styles.aiBriefText}>{item.text}</p>
-            </article>
-          ))}
+              </>
+            );
+
+            return onSelectItem ? (
+              <button
+                key={item.id || `${item.tone}-${index}`}
+                type="button"
+                className="manager-analytics-card"
+                style={cardStyle}
+                onClick={() => onSelectItem(item)}
+                aria-pressed={active}
+                aria-label={`Open evidence for ${item.title || item.text}`}
+              >
+                {content}
+              </button>
+            ) : (
+              <article
+                key={item.id || `${item.tone}-${index}`}
+                className="manager-analytics-card"
+                style={cardStyle}
+              >
+                {content}
+              </article>
+            );
+          })}
         </div>
       )}
     </section>
