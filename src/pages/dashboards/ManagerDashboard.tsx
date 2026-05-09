@@ -704,6 +704,58 @@ export default function ManagerDashboard() {
     { label: "Alerts", value: String(alerts.length), hint: "Items needing attention" },
   ];
 
+  const maxFinancialVisualValue = Math.max(
+    metrics.totals.revenue,
+    metrics.totals.collections,
+    metrics.totals.expenses,
+    Math.abs(metrics.totals.netProfit),
+    1
+  );
+  const financialVisualRows = [
+    { label: "Revenue", value: metrics.totals.revenue, tone: "revenue" },
+    { label: "Collections", value: metrics.totals.collections, tone: "collections" },
+    { label: "Expenses", value: metrics.totals.expenses, tone: "expenses" },
+    { label: "Net Profit", value: metrics.totals.netProfit, tone: metrics.totals.netProfit < 0 ? "loss" : "profit" },
+  ];
+  const collectionPercent =
+    metrics.totals.revenue > 0
+      ? Math.min(100, Math.max(0, (metrics.totals.collections / metrics.totals.revenue) * 100))
+      : 0;
+  const topDepartmentVisualRows = topDepartments.slice(0, 4);
+  const maxDepartmentVisualValue = Math.max(
+    ...topDepartmentVisualRows.map((department) => department.total),
+    1
+  );
+  const groupedVisualRows = metrics.groupedRows.slice(0, 4);
+  const maxGroupedVisualValue = Math.max(
+    ...groupedVisualRows.map((row) => row.revenue || row.collections || row.expenses),
+    1
+  );
+  const alertSeverityRows = [
+    {
+      label: "Critical",
+      count: alerts.filter((alert) => alert.type === "critical").length,
+      tone: "loss",
+    },
+    {
+      label: "Warning",
+      count: alerts.filter((alert) => alert.type === "warning").length,
+      tone: "expenses",
+    },
+    {
+      label: "Info",
+      count: alerts.filter((alert) => alert.type === "info").length,
+      tone: "collections",
+    },
+  ];
+  const maxAlertSeverityCount = Math.max(...alertSeverityRows.map((row) => row.count), 1);
+  const hasVisualActivity =
+    metrics.transactions > 0 ||
+    metrics.totals.revenue > 0 ||
+    metrics.totals.collections > 0 ||
+    metrics.totals.expenses > 0 ||
+    alerts.length > 0;
+
   const bestDepartment = topDepartments[0] || null;
   const priorityFocusTarget: ManagerDashboardView = topPriorityAlert ? "alerts" : "insights";
   const nextReviewTarget: ManagerDashboardView = topPriorityAlert
@@ -1086,6 +1138,184 @@ export default function ManagerDashboard() {
             </article>
           ))}
         </div>
+      </section>
+
+      <section style={styles.visualIntelligence} aria-label="Manager Visual Intelligence">
+        <div style={styles.sectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>Manager Visual Intelligence</h2>
+            <p style={styles.sectionSubtitle}>
+              Visual readout for {getRangeLabel(activeRange)} using current dashboard data.
+            </p>
+          </div>
+          <span style={styles.sectionMeta}>Grouped by {metrics.groupLabel}</span>
+        </div>
+
+        {!hasVisualActivity ? (
+          <div style={styles.emptyState}>No chartable activity for this range yet.</div>
+        ) : (
+          <div style={styles.visualGrid}>
+            <article style={styles.visualCard}>
+              <div style={styles.visualCardHeader}>
+                <div>
+                  <h3 style={styles.visualTitle}>Revenue vs Collections</h3>
+                  <p style={styles.visualSub}>Collection coverage against recorded revenue.</p>
+                </div>
+                <button
+                  type="button"
+                  style={styles.visualLinkButton}
+                  onClick={() => openDashboardView("sales-summary")}
+                >
+                  Sales Summary
+                </button>
+              </div>
+              <div style={styles.collectionTrack}>
+                <div
+                  style={{
+                    ...styles.collectionFill,
+                    width: `${Math.max(4, collectionPercent)}%`,
+                  }}
+                />
+              </div>
+              <div style={styles.visualSplit}>
+                <span>Revenue: {money(metrics.totals.revenue)}</span>
+                <span>Collections: {money(metrics.totals.collections)}</span>
+                <strong>{collectionPercent.toFixed(0)}%</strong>
+              </div>
+            </article>
+
+            <article style={styles.visualCard}>
+              <h3 style={styles.visualTitle}>Revenue / Expenses / Net Profit</h3>
+              <div style={styles.visualBarStack}>
+                {financialVisualRows.map((row) => (
+                  <div key={row.label} style={styles.visualBarRow}>
+                    <div style={styles.visualBarLabel}>{row.label}</div>
+                    <div style={styles.visualBarTrack}>
+                      <div
+                        style={{
+                          ...styles.visualBarFill,
+                          ...styles[`visualBar${labelize(row.tone)}`],
+                          width: `${Math.max(4, (Math.abs(row.value) / maxFinancialVisualValue) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <div style={styles.visualBarValue}>{money(row.value)}</div>
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article style={styles.visualCard}>
+              <div style={styles.visualCardHeader}>
+                <div>
+                  <h3 style={styles.visualTitle}>Department Performance</h3>
+                  <p style={styles.visualSub}>Top active departments by sales.</p>
+                </div>
+                <button
+                  type="button"
+                  style={styles.visualLinkButton}
+                  onClick={() => openDashboardView("department-activity")}
+                >
+                  Departments
+                </button>
+              </div>
+              {topDepartmentVisualRows.length === 0 ? (
+                <div style={styles.visualEmpty}>No chartable activity for this range yet.</div>
+              ) : (
+                <div style={styles.miniColumnChart}>
+                  {topDepartmentVisualRows.map((department) => (
+                    <div key={department.key} style={styles.miniColumnItem}>
+                      <div style={styles.miniColumnFrame}>
+                        <div
+                          style={{
+                            ...styles.miniColumnFill,
+                            height: `${Math.max(8, (department.total / maxDepartmentVisualValue) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                      <div style={styles.miniColumnLabel}>{department.name}</div>
+                      <div style={styles.miniColumnValue}>{money(department.total)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </article>
+
+            <article style={styles.visualCard}>
+              <div style={styles.visualCardHeader}>
+                <div>
+                  <h3 style={styles.visualTitle}>{metrics.groupLabel} Distribution</h3>
+                  <p style={styles.visualSub}>Top grouped rows by current grouping.</p>
+                </div>
+                <button
+                  type="button"
+                  style={styles.visualLinkButton}
+                  onClick={() => openDashboardView("sales-summary")}
+                >
+                  Details
+                </button>
+              </div>
+              {groupedVisualRows.length === 0 ? (
+                <div style={styles.visualEmpty}>No chartable activity for this range yet.</div>
+              ) : (
+                <div style={styles.visualBarStack}>
+                  {groupedVisualRows.map((row) => {
+                    const value = row.revenue || row.collections || row.expenses;
+
+                    return (
+                      <div key={row.key} style={styles.visualBarRow}>
+                        <div style={styles.visualBarLabel}>{row.name}</div>
+                        <div style={styles.visualBarTrack}>
+                          <div
+                            style={{
+                              ...styles.visualBarFill,
+                              ...styles.visualBarCollections,
+                              width: `${Math.max(4, (value / maxGroupedVisualValue) * 100)}%`,
+                            }}
+                          />
+                        </div>
+                        <div style={styles.visualBarValue}>{money(value)}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </article>
+
+            <article style={styles.visualCard}>
+              <div style={styles.visualCardHeader}>
+                <div>
+                  <h3 style={styles.visualTitle}>Alert Severity</h3>
+                  <p style={styles.visualSub}>Current alert mix for manager review.</p>
+                </div>
+                <button
+                  type="button"
+                  style={styles.visualLinkButton}
+                  onClick={() => openDashboardView("alerts")}
+                >
+                  Alerts
+                </button>
+              </div>
+              <div style={styles.visualBarStack}>
+                {alertSeverityRows.map((row) => (
+                  <div key={row.label} style={styles.visualBarRow}>
+                    <div style={styles.visualBarLabel}>{row.label}</div>
+                    <div style={styles.visualBarTrack}>
+                      <div
+                        style={{
+                          ...styles.visualBarFill,
+                          ...styles[`visualBar${labelize(row.tone)}`],
+                          width: `${row.count === 0 ? 0 : Math.max(8, (row.count / maxAlertSeverityCount) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <div style={styles.visualBarValue}>{row.count}</div>
+                  </div>
+                ))}
+              </div>
+            </article>
+          </div>
+        )}
       </section>
 
       <section
@@ -1852,6 +2082,173 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 800,
     padding: "0 11px",
     cursor: "pointer",
+  },
+  visualIntelligence: {
+    background: "#ffffff",
+    border: "1px solid #dce5ec",
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 20,
+    boxShadow: "0 10px 24px rgba(15, 38, 55, 0.05)",
+  },
+  visualGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
+    gap: 12,
+  },
+  visualCard: {
+    border: "1px solid #edf2f6",
+    borderRadius: 8,
+    padding: 14,
+    background: "#f8fafc",
+    minHeight: 180,
+  },
+  visualCardHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 10,
+    marginBottom: 12,
+  },
+  visualTitle: {
+    margin: 0,
+    color: "#17364b",
+    fontSize: 15,
+  },
+  visualSub: {
+    margin: "4px 0 0",
+    color: "#607486",
+    fontSize: 12,
+    lineHeight: 1.35,
+  },
+  visualLinkButton: {
+    border: "1px solid #cfdbe4",
+    borderRadius: 8,
+    background: "#ffffff",
+    color: "#17364b",
+    fontWeight: 800,
+    fontSize: 12,
+    minHeight: 30,
+    padding: "0 10px",
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+  collectionTrack: {
+    height: 16,
+    background: "#e8eef3",
+    borderRadius: 999,
+    overflow: "hidden",
+    marginTop: 12,
+  },
+  collectionFill: {
+    height: "100%",
+    background: "#0f5e7a",
+    borderRadius: 999,
+  },
+  visualSplit: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
+    marginTop: 12,
+    color: "#354b5d",
+    fontSize: 12,
+    fontWeight: 800,
+  },
+  visualBarStack: {
+    display: "grid",
+    gap: 10,
+    marginTop: 12,
+  },
+  visualBarRow: {
+    display: "grid",
+    gridTemplateColumns: "minmax(80px, 0.9fr) minmax(90px, 1.5fr) minmax(58px, auto)",
+    gap: 8,
+    alignItems: "center",
+  },
+  visualBarLabel: {
+    color: "#354b5d",
+    fontSize: 12,
+    fontWeight: 800,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  visualBarTrack: {
+    height: 10,
+    background: "#e8eef3",
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  visualBarFill: {
+    height: "100%",
+    borderRadius: 999,
+  },
+  visualBarRevenue: {
+    background: "#0f5e7a",
+  },
+  visualBarCollections: {
+    background: "#2563eb",
+  },
+  visualBarExpenses: {
+    background: "#d97706",
+  },
+  visualBarProfit: {
+    background: "#16a34a",
+  },
+  visualBarLoss: {
+    background: "#dc2626",
+  },
+  visualBarValue: {
+    color: "#17364b",
+    fontSize: 12,
+    fontWeight: 900,
+    textAlign: "right",
+  },
+  miniColumnChart: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: 10,
+    alignItems: "end",
+    minHeight: 150,
+  },
+  miniColumnItem: {
+    display: "grid",
+    gap: 6,
+    alignItems: "end",
+    minWidth: 0,
+  },
+  miniColumnFrame: {
+    height: 88,
+    borderRadius: 8,
+    background: "#e8eef3",
+    display: "flex",
+    alignItems: "flex-end",
+    overflow: "hidden",
+  },
+  miniColumnFill: {
+    width: "100%",
+    background: "#0f5e7a",
+    borderRadius: "8px 8px 0 0",
+  },
+  miniColumnLabel: {
+    color: "#354b5d",
+    fontSize: 11,
+    fontWeight: 800,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  miniColumnValue: {
+    color: "#17364b",
+    fontSize: 11,
+    fontWeight: 900,
+  },
+  visualEmpty: {
+    color: "#607486",
+    fontSize: 13,
+    padding: "18px 0",
   },
   filterBar: {
     display: "grid",
