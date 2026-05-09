@@ -378,6 +378,43 @@ export default function ManagerDashboard() {
   const previousRange = useMemo(() => getPreviousRange(activeRange), [activeRange]);
 
   useEffect(() => {
+    const hasFilterParams =
+      searchParams.has("dateFilter") ||
+      searchParams.has("startDate") ||
+      searchParams.has("endDate") ||
+      searchParams.has("groupBy");
+
+    if (hasFilterParams) {
+      const nextDatePreset = readDatePreset(searchParams.get("dateFilter"));
+      const nextRange = getPresetRange(nextDatePreset);
+      const nextCustomRange = {
+        startDate: searchParams.get("startDate") || nextRange.startDate,
+        endDate: searchParams.get("endDate") || nextRange.endDate,
+      };
+      const nextGroupBy = readGroupBy(searchParams.get("groupBy"));
+      let syncedFromParams = false;
+
+      if (datePreset !== nextDatePreset) {
+        setDatePreset(nextDatePreset);
+        syncedFromParams = true;
+      }
+
+      if (
+        customRange.startDate !== nextCustomRange.startDate ||
+        customRange.endDate !== nextCustomRange.endDate
+      ) {
+        setCustomRange(nextCustomRange);
+        syncedFromParams = true;
+      }
+
+      if (groupBy !== nextGroupBy) {
+        setGroupBy(nextGroupBy);
+        syncedFromParams = true;
+      }
+
+      if (syncedFromParams) return;
+    }
+
     const next = buildDashboardParams({
       source: searchParams,
       datePreset,
@@ -395,6 +432,8 @@ export default function ManagerDashboard() {
     activeRange.endDate,
     activeRange.startDate,
     activeView,
+    customRange.endDate,
+    customRange.startDate,
     datePreset,
     groupBy,
     searchParams,
