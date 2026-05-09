@@ -985,39 +985,6 @@ export default function ManagerDashboard() {
         </div>
       </section>
 
-      <section style={styles.intelligenceNav} aria-label="Manager Intelligence Sections">
-        <div style={styles.sectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>Manager Intelligence Sections</h2>
-            <p style={styles.sectionSubtitle}>
-              Choose the exact manager view to review without leaving this dashboard.
-            </p>
-          </div>
-          <span style={styles.sectionMeta}>View: {labelize(activeView)}</span>
-        </div>
-        <div style={styles.intelligenceGrid}>
-          {intelligenceSections.map((section) => {
-            const active = activeView === section.target;
-
-            return (
-              <button
-                key={section.target}
-                type="button"
-                style={{
-                  ...styles.intelligenceCard,
-                  ...(active ? styles.intelligenceCardActive : {}),
-                }}
-                onClick={() => openDashboardView(section.target)}
-                aria-current={active ? "page" : undefined}
-              >
-                <span style={styles.intelligenceTitle}>{section.title}</span>
-                <span style={styles.intelligenceText}>{section.text}</span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
       <section style={styles.executivePanel}>
         <div style={styles.executiveHeader}>
           <div>
@@ -1049,6 +1016,41 @@ export default function ManagerDashboard() {
           </div>
         </div>
       </section>
+
+      {!isOverviewView ? (
+        <section style={styles.intelligenceNav} aria-label="Manager Intelligence Sections">
+          <div style={styles.sectionHeader}>
+            <div>
+              <h2 style={styles.sectionTitle}>Manager Intelligence Sections</h2>
+              <p style={styles.sectionSubtitle}>
+                Choose the exact manager view to review without leaving this dashboard.
+              </p>
+            </div>
+            <span style={styles.sectionMeta}>View: {labelize(activeView)}</span>
+          </div>
+          <div style={styles.intelligenceGrid}>
+            {intelligenceSections.map((section) => {
+              const active = activeView === section.target;
+
+              return (
+                <button
+                  key={section.target}
+                  type="button"
+                  style={{
+                    ...styles.intelligenceCard,
+                    ...(active ? styles.intelligenceCardActive : {}),
+                  }}
+                  onClick={() => openDashboardView(section.target)}
+                  aria-current={active ? "page" : undefined}
+                >
+                  <span style={styles.intelligenceTitle}>{section.title}</span>
+                  <span style={styles.intelligenceText}>{section.text}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       {isOverviewView ? (
       <>
@@ -1097,9 +1099,9 @@ export default function ManagerDashboard() {
       >
         <div style={styles.sectionHeader}>
           <div>
-            <h2 style={styles.sectionTitle}>Supporting KPI Details</h2>
+            <h2 style={styles.sectionTitle}>Executive KPI Support</h2>
             <p style={styles.sectionSubtitle}>
-              Reference numbers behind the business health summary.
+              Compact reference numbers behind the business health summary.
             </p>
           </div>
         </div>
@@ -1145,6 +1147,39 @@ export default function ManagerDashboard() {
           >
             Review Alerts
           </button>
+        </div>
+      </section>
+
+      <section style={styles.intelligenceNav} aria-label="Manager Intelligence Sections">
+        <div style={styles.sectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>Manager Intelligence Sections</h2>
+            <p style={styles.sectionSubtitle}>
+              Choose the exact manager view to review without leaving this dashboard.
+            </p>
+          </div>
+          <span style={styles.sectionMeta}>View: {labelize(activeView)}</span>
+        </div>
+        <div style={styles.intelligenceGrid}>
+          {intelligenceSections.map((section) => {
+            const active = activeView === section.target;
+
+            return (
+              <button
+                key={section.target}
+                type="button"
+                style={{
+                  ...styles.intelligenceCard,
+                  ...(active ? styles.intelligenceCardActive : {}),
+                }}
+                onClick={() => openDashboardView(section.target)}
+                aria-current={active ? "page" : undefined}
+              >
+                <span style={styles.intelligenceTitle}>{section.title}</span>
+                <span style={styles.intelligenceText}>{section.text}</span>
+              </button>
+            );
+          })}
         </div>
       </section>
 
@@ -1850,32 +1885,32 @@ const styles: Record<string, CSSProperties> = {
   },
   kpiGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-    gap: 14,
-    marginBottom: 20,
+    gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+    gap: 8,
+    marginBottom: 12,
   },
   kpiCard: {
     background: "#ffffff",
     border: "1px solid #dce5ec",
     borderRadius: 8,
-    padding: 16,
-    boxShadow: "0 8px 20px rgba(15, 38, 55, 0.05)",
+    padding: "10px 12px",
+    boxShadow: "0 4px 12px rgba(15, 38, 55, 0.04)",
   },
   kpiLabel: {
-    fontSize: 13,
+    fontSize: 12,
     color: "#607486",
-    fontWeight: 700,
+    fontWeight: 800,
   },
   kpiValue: {
-    marginTop: 8,
-    fontSize: 25,
+    marginTop: 5,
+    fontSize: 18,
     fontWeight: 900,
     color: "#0f2637",
   },
   kpiHint: {
-    marginTop: 6,
+    marginTop: 4,
     color: "#6b7f90",
-    fontSize: 13,
+    fontSize: 11,
   },
   section: {
     marginBottom: 20,
