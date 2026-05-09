@@ -1008,6 +1008,26 @@ export default function ManagerDashboard() {
     setSearchParams(next);
   }
 
+  function updateDashboardFilters(nextInput: {
+    datePreset?: DatePreset;
+    customRange?: DateRange;
+    groupBy?: GroupBy;
+  }) {
+    const nextDatePreset = nextInput.datePreset ?? datePreset;
+    const nextCustomRange = nextInput.customRange ?? customRange;
+    const nextGroupBy = nextInput.groupBy ?? groupBy;
+    const nextRange = nextDatePreset === "custom" ? nextCustomRange : getPresetRange(nextDatePreset);
+    const next = buildDashboardParams({
+      source: searchParams,
+      datePreset: nextDatePreset,
+      activeRange: nextRange,
+      groupBy: nextGroupBy,
+      view: activeView,
+    });
+
+    setSearchParams(next);
+  }
+
   function managerSafeReviewPath(path?: string | null) {
     if (!path) return dashboardPathFor(activeView);
 
@@ -1121,7 +1141,11 @@ export default function ManagerDashboard() {
             id="manager-date-filter"
             style={styles.input}
             value={datePreset}
-            onChange={(event) => setDatePreset(event.target.value as DatePreset)}
+            onChange={(event) => {
+              const nextDatePreset = event.target.value as DatePreset;
+              setDatePreset(nextDatePreset);
+              updateDashboardFilters({ datePreset: nextDatePreset });
+            }}
           >
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -1140,9 +1164,11 @@ export default function ManagerDashboard() {
                 type="date"
                 style={styles.input}
                 value={customRange.startDate}
-                onChange={(event) =>
-                  setCustomRange((current) => ({ ...current, startDate: event.target.value }))
-                }
+                onChange={(event) => {
+                  const nextCustomRange = { ...customRange, startDate: event.target.value };
+                  setCustomRange(nextCustomRange);
+                  updateDashboardFilters({ datePreset: "custom", customRange: nextCustomRange });
+                }}
               />
             </div>
             <div style={styles.field}>
@@ -1152,9 +1178,11 @@ export default function ManagerDashboard() {
                 type="date"
                 style={styles.input}
                 value={customRange.endDate}
-                onChange={(event) =>
-                  setCustomRange((current) => ({ ...current, endDate: event.target.value }))
-                }
+                onChange={(event) => {
+                  const nextCustomRange = { ...customRange, endDate: event.target.value };
+                  setCustomRange(nextCustomRange);
+                  updateDashboardFilters({ datePreset: "custom", customRange: nextCustomRange });
+                }}
               />
             </div>
           </>
@@ -1166,7 +1194,11 @@ export default function ManagerDashboard() {
             id="manager-group-by"
             style={styles.input}
             value={groupBy}
-            onChange={(event) => setGroupBy(event.target.value as GroupBy)}
+            onChange={(event) => {
+              const nextGroupBy = event.target.value as GroupBy;
+              setGroupBy(nextGroupBy);
+              updateDashboardFilters({ groupBy: nextGroupBy });
+            }}
           >
             <option value="department">Department</option>
             <option value="payment">Payment Method</option>

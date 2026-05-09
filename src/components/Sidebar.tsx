@@ -112,7 +112,7 @@ export default function Sidebar() {
       });
     }
 
-    if (canViewModuleKey(user, "shift-closing") && canShowNav(user, modules, "shift-closing")) {
+    if (!isManager && canViewModuleKey(user, "shift-closing") && canShowNav(user, modules, "shift-closing")) {
       items.push({
         key: "shift-closing",
         label: "Shift Closing",
@@ -122,7 +122,7 @@ export default function Sidebar() {
     }
 
     return items;
-  }, [user, modules, primaryDailyOperator, isAccounting, isAuditor]);
+  }, [user, modules, primaryDailyOperator, isAccounting, isAuditor, isManager]);
 
   const operationalItems: Item[] = useMemo(() => {
     if (primaryDailyOperator) return [];

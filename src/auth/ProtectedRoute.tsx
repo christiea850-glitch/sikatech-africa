@@ -13,6 +13,7 @@ import {
   canReviewFinancials,
   canViewDepartmentRoute,
   canViewModuleKey,
+  roleOf,
 } from "./permissions";
 
 export type RouteCapability =
@@ -81,6 +82,12 @@ export default function ProtectedRoute({
   }
 
   if (moduleKey) {
+    const role = roleOf(user);
+
+    if (moduleKey === "shift-closing" && (role === "manager" || role === "assistant_manager")) {
+      return <Navigate to="/app/dashboard?view=closings" replace />;
+    }
+
     if (moduleKey === "manage-departments" && !canManageSetup(user)) {
       const deptKey = (user as any).departmentKey;
       return <Navigate to={deptKey ? `/app/departments/${deptKey}` : "/app/dashboard"} replace />;
