@@ -28,6 +28,7 @@ import DepartmentAnalytics from "./manager/DepartmentAnalytics";
 import InsightsAnalytics from "./manager/InsightsAnalytics";
 import ManagerDecisionCenter from "./manager/ManagerDecisionCenter";
 import ManagerIntelligenceSections from "./manager/ManagerIntelligenceSections";
+import ManagerWorkspaceShell from "./manager/ManagerWorkspaceShell";
 import OperationsAnalytics from "./manager/OperationsAnalytics";
 import SalesSummaryAnalytics from "./manager/SalesSummaryAnalytics";
 import VisualInsightsHub from "./manager/VisualInsightsHub";
@@ -1732,14 +1733,19 @@ export default function ManagerDashboard() {
       ) : null}
 
       {activeView === "decision-center" ? (
-      <ManagerDecisionCenter
-        styles={styles}
-        cards={decisionCards}
-        dataConfidenceLabel={dataConfidenceLabel}
-        businessHealthTone={businessHealthTone}
-        alertStyle={alertStyle}
-        openDashboardView={(view) => openDashboardViewWithReturn(view, "Decision Center")}
-      />
+      <ManagerWorkspaceShell
+        title="Decision Center"
+        subtitle="Focused manager decisions for the selected range."
+      >
+        <ManagerDecisionCenter
+          styles={styles}
+          cards={decisionCards}
+          dataConfidenceLabel={dataConfidenceLabel}
+          businessHealthTone={businessHealthTone}
+          alertStyle={alertStyle}
+          openDashboardView={(view) => openDashboardViewWithReturn(view, "Decision Center")}
+        />
+      </ManagerWorkspaceShell>
       ) : null}
 
       {activeView === "visual-insights" ? (
