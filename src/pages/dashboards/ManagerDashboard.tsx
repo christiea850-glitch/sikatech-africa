@@ -16,6 +16,14 @@ import {
   getDashboardMetrics,
   type DashboardGroupBy,
 } from "./dashboardMetrics";
+import AlertAnalytics from "./manager/AlertAnalytics";
+import DepartmentAnalytics from "./manager/DepartmentAnalytics";
+import InsightsAnalytics from "./manager/InsightsAnalytics";
+import ManagerDecisionCenter from "./manager/ManagerDecisionCenter";
+import ManagerIntelligenceSections from "./manager/ManagerIntelligenceSections";
+import ManagerVisualIntelligence from "./manager/ManagerVisualIntelligence";
+import OperationsAnalytics from "./manager/OperationsAnalytics";
+import SalesSummaryAnalytics from "./manager/SalesSummaryAnalytics";
 
 type AlertTone = "green" | "amber" | "red" | "blue";
 type DatePreset = "today" | "yesterday" | "week" | "month" | "custom";
@@ -1195,253 +1203,45 @@ export default function ManagerDashboard() {
       </section>
 
       {!isOverviewView ? (
-        <section style={styles.intelligenceNav} aria-label="Manager Intelligence Sections">
-          <div style={styles.sectionHeader}>
-            <div>
-              <h2 style={styles.sectionTitle}>Manager Intelligence Sections</h2>
-              <p style={styles.sectionSubtitle}>
-                Choose the exact manager view to review without leaving this dashboard.
-              </p>
-            </div>
-            <span style={styles.sectionMeta}>View: {labelize(activeView)}</span>
-          </div>
-          <div style={styles.intelligenceGrid}>
-            {intelligenceSections.map((section) => {
-              const active = activeView === section.target;
-
-              return (
-                <button
-                  key={section.target}
-                  type="button"
-                  style={{
-                    ...styles.intelligenceCard,
-                    ...(active ? styles.intelligenceCardActive : {}),
-                  }}
-                  onClick={() => openDashboardView(section.target)}
-                  aria-current={active ? "page" : undefined}
-                >
-                  <span style={styles.intelligenceTitle}>{section.title}</span>
-                  <span style={styles.intelligenceText}>{section.text}</span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
+        <ManagerIntelligenceSections
+          styles={styles}
+          sections={intelligenceSections}
+          activeView={activeView}
+          labelize={labelize}
+          openDashboardView={openDashboardView}
+        />
       ) : null}
 
       {isOverviewView ? (
       <>
-      <section style={styles.decisionCenter} aria-label="Manager Decision Center">
-        <div style={styles.sectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>Manager Decision Center</h2>
-            <p style={styles.sectionSubtitle}>
-              Fast read on attention areas, strengths, next action, and data confidence.
-            </p>
-          </div>
-          <span style={{ ...styles.badge, ...alertStyle(businessHealthTone) }}>
-            {dataConfidenceLabel}
-          </span>
-        </div>
-        <div style={styles.decisionGrid}>
-          {decisionCards.map((card) => (
-            <article key={card.title} style={styles.decisionCard}>
-              <div style={styles.decisionCardTop}>
-                <h3 style={styles.decisionTitle}>{card.title}</h3>
-                <span style={{ ...styles.decisionPill, ...alertStyle(card.tone) }}>
-                  {card.status}
-                </span>
-              </div>
-              <p style={styles.decisionText}>{card.text}</p>
-              <button
-                type="button"
-                style={styles.decisionButton}
-                onClick={() => openDashboardView(card.target)}
-              >
-                {card.actionLabel}
-              </button>
-            </article>
-          ))}
-        </div>
-      </section>
+      <ManagerDecisionCenter
+        styles={styles}
+        cards={decisionCards}
+        dataConfidenceLabel={dataConfidenceLabel}
+        businessHealthTone={businessHealthTone}
+        alertStyle={alertStyle}
+        openDashboardView={openDashboardView}
+      />
 
-      <section style={styles.visualIntelligence} aria-label="Manager Visual Intelligence">
-        <div style={styles.sectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>Manager Visual Intelligence</h2>
-            <p style={styles.sectionSubtitle}>
-              Visual readout for {getRangeLabel(activeRange)} using current dashboard data.
-            </p>
-          </div>
-          <span style={styles.sectionMeta}>Grouped by {metrics.groupLabel}</span>
-        </div>
-
-        {!hasVisualActivity ? (
-          <div style={styles.emptyState}>No chartable activity for this range yet.</div>
-        ) : (
-          <div style={styles.visualGrid}>
-            <article className="manager-visual-card" style={styles.visualCard}>
-              <div style={styles.visualCardHeader}>
-                <div>
-                  <h3 style={styles.visualTitle}>Revenue vs Collections</h3>
-                  <p style={styles.visualSub}>Collection coverage against recorded revenue.</p>
-                </div>
-                <button
-                  type="button"
-                  style={styles.visualLinkButton}
-                  onClick={() => openDashboardView("sales-summary")}
-                >
-                  Sales Summary
-                </button>
-              </div>
-              <div style={styles.collectionTrack}>
-                <div
-                  style={{
-                    ...styles.collectionFill,
-                    width: `${Math.max(4, collectionPercent)}%`,
-                  }}
-                />
-              </div>
-              <div style={styles.visualSplit}>
-                <span>Revenue: {money(metrics.totals.revenue)}</span>
-                <span>Collections: {money(metrics.totals.collections)}</span>
-                <strong>{collectionPercent.toFixed(0)}%</strong>
-              </div>
-            </article>
-
-            <article className="manager-visual-card" style={styles.visualCard}>
-              <h3 style={styles.visualTitle}>Revenue / Expenses / Net Profit</h3>
-              <div style={styles.visualBarStack}>
-                {financialVisualRows.map((row) => (
-                  <div key={row.label} style={styles.visualBarRow}>
-                    <div style={styles.visualBarLabel}>{row.label}</div>
-                    <div style={styles.visualBarTrack}>
-                      <div
-                        style={{
-                          ...styles.visualBarFill,
-                          ...styles[`visualBar${labelize(row.tone)}`],
-                          width: `${Math.max(4, (Math.abs(row.value) / maxFinancialVisualValue) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                    <div style={styles.visualBarValue}>{money(row.value)}</div>
-                  </div>
-                ))}
-              </div>
-            </article>
-
-            <article className="manager-visual-card" style={styles.visualCard}>
-              <div style={styles.visualCardHeader}>
-                <div>
-                  <h3 style={styles.visualTitle}>Department Performance</h3>
-                  <p style={styles.visualSub}>Top active departments by sales.</p>
-                </div>
-                <button
-                  type="button"
-                  style={styles.visualLinkButton}
-                  onClick={() => openDashboardView("department-activity")}
-                >
-                  Departments
-                </button>
-              </div>
-              {topDepartmentVisualRows.length === 0 ? (
-                <div style={styles.visualEmpty}>No chartable activity for this range yet.</div>
-              ) : (
-                <div style={styles.miniColumnChart}>
-                  {topDepartmentVisualRows.map((department) => (
-                    <div key={department.key} style={styles.miniColumnItem}>
-                      <div style={styles.miniColumnFrame}>
-                        <div
-                          style={{
-                            ...styles.miniColumnFill,
-                            height: `${Math.max(8, (department.total / maxDepartmentVisualValue) * 100)}%`,
-                          }}
-                        />
-                      </div>
-                      <div style={styles.miniColumnLabel}>{department.name}</div>
-                      <div style={styles.miniColumnValue}>{money(department.total)}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </article>
-
-            <article className="manager-visual-card" style={styles.visualCard}>
-              <div style={styles.visualCardHeader}>
-                <div>
-                  <h3 style={styles.visualTitle}>{metrics.groupLabel} Distribution</h3>
-                  <p style={styles.visualSub}>Top grouped rows by current grouping.</p>
-                </div>
-                <button
-                  type="button"
-                  style={styles.visualLinkButton}
-                  onClick={() => openDashboardView("sales-summary")}
-                >
-                  Details
-                </button>
-              </div>
-              {groupedVisualRows.length === 0 ? (
-                <div style={styles.visualEmpty}>No chartable activity for this range yet.</div>
-              ) : (
-                <div style={styles.visualBarStack}>
-                  {groupedVisualRows.map((row) => {
-                    const value = row.revenue || row.collections || row.expenses;
-
-                    return (
-                      <div key={row.key} style={styles.visualBarRow}>
-                        <div style={styles.visualBarLabel}>{row.name}</div>
-                        <div style={styles.visualBarTrack}>
-                          <div
-                            style={{
-                              ...styles.visualBarFill,
-                              ...styles.visualBarCollections,
-                              width: `${Math.max(4, (value / maxGroupedVisualValue) * 100)}%`,
-                            }}
-                          />
-                        </div>
-                        <div style={styles.visualBarValue}>{money(value)}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </article>
-
-            <article className="manager-visual-card" style={styles.visualCard}>
-              <div style={styles.visualCardHeader}>
-                <div>
-                  <h3 style={styles.visualTitle}>Alert Severity</h3>
-                  <p style={styles.visualSub}>Current alert mix for manager review.</p>
-                </div>
-                <button
-                  type="button"
-                  style={styles.visualLinkButton}
-                  onClick={() => openDashboardView("alerts")}
-                >
-                  Alerts
-                </button>
-              </div>
-              <div style={styles.visualBarStack}>
-                {alertSeverityRows.map((row) => (
-                  <div key={row.label} style={styles.visualBarRow}>
-                    <div style={styles.visualBarLabel}>{row.label}</div>
-                    <div style={styles.visualBarTrack}>
-                      <div
-                        style={{
-                          ...styles.visualBarFill,
-                          ...styles[`visualBar${labelize(row.tone)}`],
-                          width: `${row.count === 0 ? 0 : Math.max(8, (row.count / maxAlertSeverityCount) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                    <div style={styles.visualBarValue}>{row.count}</div>
-                  </div>
-                ))}
-              </div>
-            </article>
-          </div>
-        )}
-      </section>
+      <ManagerVisualIntelligence
+        styles={styles}
+        activeRangeLabel={getRangeLabel(activeRange)}
+        groupLabel={metrics.groupLabel}
+        hasVisualActivity={hasVisualActivity}
+        collectionPercent={collectionPercent}
+        totals={metrics.totals}
+        financialVisualRows={financialVisualRows}
+        maxFinancialVisualValue={maxFinancialVisualValue}
+        topDepartmentVisualRows={topDepartmentVisualRows}
+        maxDepartmentVisualValue={maxDepartmentVisualValue}
+        groupedVisualRows={groupedVisualRows}
+        maxGroupedVisualValue={maxGroupedVisualValue}
+        alertSeverityRows={alertSeverityRows}
+        maxAlertSeverityCount={maxAlertSeverityCount}
+        money={money}
+        labelize={labelize}
+        openDashboardView={openDashboardView}
+      />
 
       <section
         ref={overviewRef}
@@ -1505,38 +1305,13 @@ export default function ManagerDashboard() {
         </div>
       </section>
 
-      <section style={styles.intelligenceNav} aria-label="Manager Intelligence Sections">
-        <div style={styles.sectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>Manager Intelligence Sections</h2>
-            <p style={styles.sectionSubtitle}>
-              Choose the exact manager view to review without leaving this dashboard.
-            </p>
-          </div>
-          <span style={styles.sectionMeta}>View: {labelize(activeView)}</span>
-        </div>
-        <div style={styles.intelligenceGrid}>
-          {intelligenceSections.map((section) => {
-            const active = activeView === section.target;
-
-            return (
-              <button
-                key={section.target}
-                type="button"
-                style={{
-                  ...styles.intelligenceCard,
-                  ...(active ? styles.intelligenceCardActive : {}),
-                }}
-                onClick={() => openDashboardView(section.target)}
-                aria-current={active ? "page" : undefined}
-              >
-                <span style={styles.intelligenceTitle}>{section.title}</span>
-                <span style={styles.intelligenceText}>{section.text}</span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
+      <ManagerIntelligenceSections
+        styles={styles}
+        sections={intelligenceSections}
+        activeView={activeView}
+        labelize={labelize}
+        openDashboardView={openDashboardView}
+      />
 
       <section style={styles.section}>
         <div style={styles.sectionHeader}>
@@ -1657,91 +1432,19 @@ export default function ManagerDashboard() {
           </div>
         )}
       </section>
-      <section style={styles.analyticsPanel}>
-        <div style={styles.sectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>Insight Drilldown Analytics</h2>
-            <p style={styles.sectionSubtitle}>
-              Recommendation priority, risk balance, and strongest signals for this range.
-            </p>
-          </div>
-          <span style={styles.sectionMeta}>{insights.length} insight{insights.length === 1 ? "" : "s"}</span>
-        </div>
-        {insights.length === 0 ? (
-          <div style={styles.emptyState}>No chartable activity for this range yet.</div>
-        ) : (
-          <div style={styles.analyticsGrid}>
-            <article className="manager-analytics-card" style={styles.visualCard}>
-              <h3 style={styles.visualTitle}>Risk vs Opportunity</h3>
-              <div style={styles.visualBarStack}>
-                {[
-                  { label: "Risks", value: riskInsightCount, tone: "loss" },
-                  { label: "Warnings", value: warningInsightCount, tone: "expenses" },
-                  { label: "Positives", value: positiveInsightCount, tone: "profit" },
-                ].map((row) => (
-                  <div key={row.label} style={styles.visualBarRow}>
-                    <div style={styles.visualBarLabel}>{row.label}</div>
-                    <div style={styles.visualBarTrack}>
-                      <div
-                        style={{
-                          ...styles.visualBarFill,
-                          ...styles[`visualBar${labelize(row.tone)}`],
-                          width: `${row.value === 0 ? 0 : Math.max(8, (row.value / Math.max(insights.length, 1)) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                    <div style={styles.visualBarValue}>{row.value}</div>
-                  </div>
-                ))}
-              </div>
-            </article>
-            <article className="manager-analytics-card" style={styles.visualCard}>
-              <h3 style={styles.visualTitle}>Follow-up Priority</h3>
-              <div style={styles.visualBarStack}>
-                {insightPriorityRows.map((row) => (
-                  <div key={row.id} style={styles.visualBarRow}>
-                    <div style={styles.visualBarLabel}>{row.title}</div>
-                    <div style={styles.visualBarTrack}>
-                      <div
-                        style={{
-                          ...styles.visualBarFill,
-                          ...styles[`visualBar${row.type === "risk" ? "Loss" : row.type === "warning" ? "Expenses" : row.type === "positive" ? "Profit" : "Collections"}`],
-                          width: `${row.score}%`,
-                        }}
-                      />
-                    </div>
-                    <div style={styles.visualBarValue}>{row.score}</div>
-                  </div>
-                ))}
-              </div>
-            </article>
-            <article className="manager-analytics-card" style={styles.visualCard}>
-              <h3 style={styles.visualTitle}>Strongest Performer</h3>
-              <div style={styles.drilldownFocusValue}>
-                {strongestDepartment ? strongestDepartment.name : "No active leader"}
-              </div>
-              <p style={styles.visualSub}>
-                {strongestDepartment
-                  ? `${money(strongestDepartment.total)} across ${strongestDepartment.transactions} transaction${strongestDepartment.transactions === 1 ? "" : "s"}.`
-                  : "No chartable activity for this range yet."}
-              </p>
-            </article>
-            <article className="manager-analytics-card" style={styles.visualCard}>
-              <h3 style={styles.visualTitle}>Weakest Area</h3>
-              <div style={styles.drilldownFocusValue}>
-                {weakestDepartment ? weakestDepartment.name : weakestGroupedRow?.name || "No weak area"}
-              </div>
-              <p style={styles.visualSub}>
-                {weakestDepartment
-                  ? `${weakestDepartment.status} with ${weakestDepartment.transactions} transaction${weakestDepartment.transactions === 1 ? "" : "s"}.`
-                  : weakestGroupedRow
-                    ? `Lowest grouped net: ${money(weakestGroupedRow.netProfit)}.`
-                    : "No chartable activity for this range yet."}
-              </p>
-            </article>
-          </div>
-        )}
-      </section>
+      <InsightsAnalytics
+        styles={styles}
+        insights={insights}
+        riskInsightCount={riskInsightCount}
+        warningInsightCount={warningInsightCount}
+        positiveInsightCount={positiveInsightCount}
+        insightPriorityRows={insightPriorityRows}
+        strongestDepartment={strongestDepartment}
+        weakestDepartment={weakestDepartment}
+        weakestGroupedRow={weakestGroupedRow}
+        money={money}
+        labelize={labelize}
+      />
       </>
       ) : null}
 
@@ -1794,72 +1497,20 @@ export default function ManagerDashboard() {
           ))}
         </div>
       </section>
-      <section style={styles.analyticsPanel}>
-        <div style={styles.sectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>Operations Drilldown Analytics</h2>
-            <p style={styles.sectionSubtitle}>
-              Readiness indicators for shifts, closings, front desk, and departments.
-            </p>
-          </div>
-          <span style={styles.sectionMeta}>{getRangeLabel(activeRange)}</span>
-        </div>
-        <div style={styles.analyticsGrid}>
-          <article className="manager-analytics-card" style={styles.visualCard}>
-            <h3 style={styles.visualTitle}>Operational Readiness</h3>
-            <div style={styles.visualBarStack}>
-              {operationsReadinessRows.map((row) => (
-                <div key={row.label} style={styles.visualBarRow}>
-                  <div style={styles.visualBarLabel}>{row.label}</div>
-                  <div style={styles.visualBarTrack}>
-                    <div
-                      style={{
-                        ...styles.visualBarFill,
-                        ...styles[`visualBar${labelize(row.tone)}`],
-                        width: `${row.value === 0 ? 8 : Math.max(12, (row.value / maxOperationsValue) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                  <div style={styles.visualBarValue}>{row.helper}</div>
-                </div>
-              ))}
-            </div>
-          </article>
-          <article className="manager-analytics-card" style={styles.visualCard}>
-            <h3 style={styles.visualTitle}>Closing Readiness</h3>
-            <div style={styles.drilldownMetricGrid}>
-              <DetailMetric label="Pending Closings" value={String(pendingClosings.length)} />
-              <DetailMetric label="Open Shifts" value={String(openShifts.length)} />
-              <DetailMetric label="Cash Desk Signal" value={pendingClosings.length ? "Review" : "Ready"} />
-            </div>
-          </article>
-          <article className="manager-analytics-card" style={styles.visualCard}>
-            <h3 style={styles.visualTitle}>Front Desk State</h3>
-            <div style={styles.drilldownFocusValue}>
-              {unpaidBookings.length ? `${unpaidBookings.length} unpaid balance${unpaidBookings.length === 1 ? "" : "s"}` : "Settled"}
-            </div>
-            <p style={styles.visualSub}>
-              Room balance signal is based on existing front desk booking data for this range.
-            </p>
-          </article>
-          <article className="manager-analytics-card" style={styles.visualCard}>
-            <h3 style={styles.visualTitle}>Department Health</h3>
-            <div style={styles.collectionTrack}>
-              <div
-                style={{
-                  ...styles.collectionFill,
-                  width: `${Math.max(4, activeDepartmentPercent)}%`,
-                }}
-              />
-            </div>
-            <div style={styles.visualSplit}>
-              <span>Active: {activeDepartments}</span>
-              <span>Quiet: {quietDepartments}</span>
-              <strong>{activeDepartmentPercent.toFixed(0)}%</strong>
-            </div>
-          </article>
-        </div>
-      </section>
+      <OperationsAnalytics
+        styles={styles}
+        rangeLabel={getRangeLabel(activeRange)}
+        operationsReadinessRows={operationsReadinessRows}
+        maxOperationsValue={maxOperationsValue}
+        pendingClosingsLength={pendingClosings.length}
+        openShiftsLength={openShifts.length}
+        unpaidBookingsLength={unpaidBookings.length}
+        activeDepartmentPercent={activeDepartmentPercent}
+        activeDepartments={activeDepartments}
+        quietDepartments={quietDepartments}
+        DetailMetric={DetailMetric}
+        labelize={labelize}
+      />
       </>
       ) : null}
 
@@ -1951,90 +1602,18 @@ export default function ManagerDashboard() {
           </>
         )}
       </section>
-      <section style={styles.analyticsPanel}>
-        <div style={styles.sectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>Department Drilldown Analytics</h2>
-            <p style={styles.sectionSubtitle}>
-              Contribution, activity ranking, and operational load by department.
-            </p>
-          </div>
-          <span style={styles.sectionMeta}>{activeDepartments}/{enabledDepartments.length} active</span>
-        </div>
-        {departmentPerformance.length === 0 ? (
-          <div style={styles.emptyState}>No chartable activity for this range yet.</div>
-        ) : (
-          <div style={styles.analyticsGrid}>
-            <article className="manager-analytics-card" style={styles.visualCard}>
-              <h3 style={styles.visualTitle}>Active vs Quiet Departments</h3>
-              <div style={styles.collectionTrack}>
-                <div
-                  style={{
-                    ...styles.collectionFill,
-                    width: `${Math.max(4, activeDepartmentPercent)}%`,
-                  }}
-                />
-              </div>
-              <div style={styles.visualSplit}>
-                <span>Active: {activeDepartments}</span>
-                <span>Quiet: {quietDepartments}</span>
-                <strong>{activeDepartmentPercent.toFixed(0)}%</strong>
-              </div>
-            </article>
-            <article className="manager-analytics-card" style={styles.visualCard}>
-              <h3 style={styles.visualTitle}>Department Contribution</h3>
-              <div style={styles.visualBarStack}>
-                {departmentRankingRows.slice(0, 6).map((department) => (
-                  <div key={department.key} style={styles.visualBarRow}>
-                    <div style={styles.visualBarLabel}>{department.name}</div>
-                    <div style={styles.visualBarTrack}>
-                      <div
-                        style={{
-                          ...styles.visualBarFill,
-                          ...styles.visualBarRevenue,
-                          width: `${department.total === 0 ? 0 : Math.max(6, (department.total / maxDepartmentTotal) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                    <div style={styles.visualBarValue}>{money(department.total)}</div>
-                  </div>
-                ))}
-              </div>
-            </article>
-            <article className="manager-analytics-card" style={styles.visualCard}>
-              <h3 style={styles.visualTitle}>Operational Load</h3>
-              <div style={styles.visualBarStack}>
-                {departmentRankingRows.slice(0, 6).map((department) => (
-                  <div key={department.key} style={styles.visualBarRow}>
-                    <div style={styles.visualBarLabel}>{department.name}</div>
-                    <div style={styles.visualBarTrack}>
-                      <div
-                        style={{
-                          ...styles.visualBarFill,
-                          ...styles.visualBarCollections,
-                          width: `${department.transactions === 0 ? 0 : Math.max(6, (department.transactions / maxDepartmentTransactions) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                    <div style={styles.visualBarValue}>{department.transactions}</div>
-                  </div>
-                ))}
-              </div>
-            </article>
-            <article className="manager-analytics-card" style={styles.visualCard}>
-              <h3 style={styles.visualTitle}>Department Activity Ranking</h3>
-              <div style={styles.drilldownList}>
-                {departmentRankingRows.slice(0, 5).map((department, index) => (
-                  <div key={department.key} style={styles.drilldownListRow}>
-                    <span>#{index + 1} {department.name}</span>
-                    <strong>{department.status}</strong>
-                  </div>
-                ))}
-              </div>
-            </article>
-          </div>
-        )}
-      </section>
+      <DepartmentAnalytics
+        styles={styles}
+        departmentPerformance={departmentPerformance}
+        departmentRankingRows={departmentRankingRows}
+        activeDepartments={activeDepartments}
+        enabledDepartmentsLength={enabledDepartments.length}
+        quietDepartments={quietDepartments}
+        activeDepartmentPercent={activeDepartmentPercent}
+        maxDepartmentTotal={maxDepartmentTotal}
+        maxDepartmentTransactions={maxDepartmentTransactions}
+        money={money}
+      />
       </>
       ) : null}
 
@@ -2096,91 +1675,20 @@ export default function ManagerDashboard() {
           </button>
         ) : null}
       </section>
-      <section style={styles.analyticsPanel}>
-        <div style={styles.sectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>Sales Summary Drilldown Analytics</h2>
-            <p style={styles.sectionSubtitle}>
-              Grouped ranking, collection gaps, and performance spread for the current view.
-            </p>
-          </div>
-          <span style={styles.sectionMeta}>Grouped by {metrics.groupLabel}</span>
-        </div>
-        {metrics.groupedRows.length === 0 ? (
-          <div style={styles.emptyState}>No chartable activity for this range yet.</div>
-        ) : (
-          <div style={styles.analyticsGrid}>
-            <article className="manager-analytics-card" style={styles.visualCard}>
-              <h3 style={styles.visualTitle}>Revenue vs Collections Gap</h3>
-              <div style={styles.visualBarStack}>
-                {[
-                  { label: "Revenue", value: metrics.totals.revenue, tone: "revenue" },
-                  { label: "Collections", value: metrics.totals.collections, tone: "collections" },
-                  { label: "Gap", value: collectionGap, tone: collectionGap > 0 ? "expenses" : "profit" },
-                ].map((row) => (
-                  <div key={row.label} style={styles.visualBarRow}>
-                    <div style={styles.visualBarLabel}>{row.label}</div>
-                    <div style={styles.visualBarTrack}>
-                      <div
-                        style={{
-                          ...styles.visualBarFill,
-                          ...styles[`visualBar${labelize(row.tone)}`],
-                          width: `${row.value === 0 ? 0 : Math.max(6, (row.value / maxFinancialVisualValue) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                    <div style={styles.visualBarValue}>{money(row.value)}</div>
-                  </div>
-                ))}
-              </div>
-            </article>
-            <article className="manager-analytics-card" style={styles.visualCard}>
-              <h3 style={styles.visualTitle}>Grouped Ranking</h3>
-              <div style={styles.visualBarStack}>
-                {groupedRankingRows.map((row) => (
-                  <div key={row.key} style={styles.visualBarRow}>
-                    <div style={styles.visualBarLabel}>{row.name}</div>
-                    <div style={styles.visualBarTrack}>
-                      <div
-                        style={{
-                          ...styles.visualBarFill,
-                          ...styles.visualBarRevenue,
-                          width: `${row.revenue === 0 ? 0 : Math.max(6, (row.revenue / maxGroupedRevenue) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                    <div style={styles.visualBarValue}>{money(row.revenue)}</div>
-                  </div>
-                ))}
-              </div>
-            </article>
-            <article className="manager-analytics-card" style={styles.visualCard}>
-              <h3 style={styles.visualTitle}>Top vs Lowest Performance</h3>
-              <div style={styles.drilldownMetricGrid}>
-                <DetailMetric
-                  label="Top Group"
-                  value={metrics.groupedRows[0] ? `${metrics.groupedRows[0].name}: ${money(metrics.groupedRows[0].netProfit)}` : "None"}
-                />
-                <DetailMetric
-                  label="Lowest Group"
-                  value={weakestGroupedRow ? `${weakestGroupedRow.name}: ${money(weakestGroupedRow.netProfit)}` : "None"}
-                />
-              </div>
-            </article>
-            <article className="manager-analytics-card" style={styles.visualCard}>
-              <h3 style={styles.visualTitle}>Trend-style Rows</h3>
-              <div style={styles.drilldownList}>
-                {groupedRankingRows.slice(0, 5).map((row) => (
-                  <div key={row.key} style={styles.drilldownListRow}>
-                    <span>{row.name}</span>
-                    <strong>{row.collections >= row.expenses ? "Healthy" : "Review"}</strong>
-                  </div>
-                ))}
-              </div>
-            </article>
-          </div>
-        )}
-      </section>
+      <SalesSummaryAnalytics
+        styles={styles}
+        groupLabel={metrics.groupLabel}
+        groupedRows={metrics.groupedRows}
+        totals={metrics.totals}
+        collectionGap={collectionGap}
+        maxFinancialVisualValue={maxFinancialVisualValue}
+        groupedRankingRows={groupedRankingRows}
+        maxGroupedRevenue={maxGroupedRevenue}
+        weakestGroupedRow={weakestGroupedRow}
+        DetailMetric={DetailMetric}
+        money={money}
+        labelize={labelize}
+      />
       </>
       ) : null}
 
@@ -2350,85 +1858,15 @@ export default function ManagerDashboard() {
           </div>
         </div>
       </section>
-      <section style={styles.analyticsPanel}>
-        <div style={styles.sectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>Alert Drilldown Analytics</h2>
-            <p style={styles.sectionSubtitle}>
-              Severity distribution, risk concentration, and unresolved alert emphasis.
-            </p>
-          </div>
-          <span style={styles.sectionMeta}>{alerts.length} alert{alerts.length === 1 ? "" : "s"}</span>
-        </div>
-        {alerts.length === 0 ? (
-          <div style={styles.emptyState}>No chartable activity for this range yet.</div>
-        ) : (
-          <div style={styles.analyticsGrid}>
-            <article className="manager-analytics-card" style={styles.visualCard}>
-              <h3 style={styles.visualTitle}>Severity Distribution</h3>
-              <div style={styles.visualBarStack}>
-                {alertSeverityRows.map((row) => (
-                  <div key={row.label} style={styles.visualBarRow}>
-                    <div style={styles.visualBarLabel}>{row.label}</div>
-                    <div style={styles.visualBarTrack}>
-                      <div
-                        style={{
-                          ...styles.visualBarFill,
-                          ...styles[`visualBar${labelize(row.tone)}`],
-                          width: `${row.count === 0 ? 0 : Math.max(8, (row.count / maxAlertSeverityCount) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                    <div style={styles.visualBarValue}>{row.count}</div>
-                  </div>
-                ))}
-              </div>
-            </article>
-            <article className="manager-analytics-card" style={styles.visualCard}>
-              <h3 style={styles.visualTitle}>Risk Hotspots</h3>
-              {alertHotspots.length === 0 ? (
-                <div style={styles.visualEmpty}>No chartable activity for this range yet.</div>
-              ) : (
-                <div style={styles.visualBarStack}>
-                  {alertHotspots.map((row) => (
-                    <div key={row.label} style={styles.visualBarRow}>
-                      <div style={styles.visualBarLabel}>{row.label}</div>
-                      <div style={styles.visualBarTrack}>
-                        <div
-                          style={{
-                            ...styles.visualBarFill,
-                            ...styles.visualBarLoss,
-                            width: `${Math.max(8, (row.count / maxAlertHotspotCount) * 100)}%`,
-                          }}
-                        />
-                      </div>
-                      <div style={styles.visualBarValue}>{row.count}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </article>
-            <article className="manager-analytics-card" style={styles.visualCard}>
-              <h3 style={styles.visualTitle}>Unresolved Emphasis</h3>
-              <div style={styles.drilldownFocusValue}>{alerts.length}</div>
-              <p style={styles.visualSub}>
-                Current manager alerts remain active until the underlying operating signal changes.
-              </p>
-            </article>
-            <article className="manager-analytics-card" style={styles.visualCard}>
-              <h3 style={styles.visualTitle}>Alert Concentration</h3>
-              <div style={styles.drilldownList}>
-                {alerts.slice(0, 5).map((alert) => (
-                  <div key={alert.id} style={styles.drilldownListRow}>
-                    <span>{alert.title}</span>
-                    <strong>{labelize(alert.type)}</strong>
-                  </div>
-                ))}
-              </div>
-            </article>
-          </div>
-        )}
-      </section>
+      <AlertAnalytics
+        styles={styles}
+        alerts={alerts}
+        alertSeverityRows={alertSeverityRows}
+        maxAlertSeverityCount={maxAlertSeverityCount}
+        alertHotspots={alertHotspots}
+        maxAlertHotspotCount={maxAlertHotspotCount}
+        labelize={labelize}
+      />
       </>
       ) : null}
     </main>
