@@ -767,6 +767,42 @@ export default function ManagerDashboard() {
       target: nextReviewTarget,
     },
   ];
+  const intelligenceSections: Array<{
+    title: string;
+    text: string;
+    target: ManagerDashboardView;
+  }> = [
+    {
+      title: "Overview",
+      text: "Executive health, decision cards, KPI support, and quick review links.",
+      target: "overview",
+    },
+    {
+      title: "Insights",
+      text: "Plain-language risks, wins, and follow-up guidance from the selected range.",
+      target: "insights",
+    },
+    {
+      title: "Alerts",
+      text: "Ranked issues with the existing alert detail panel.",
+      target: "alerts",
+    },
+    {
+      title: "Department Activity",
+      text: "Department performance preview, leaders, quiet areas, and department cards.",
+      target: "department-activity",
+    },
+    {
+      title: "Sales Summary",
+      text: "Grouped performance table using the current grouping selection.",
+      target: "sales-summary",
+    },
+    {
+      title: "Operations Status",
+      text: "Shift, front desk, department activity, and cash desk readiness.",
+      target: "operations",
+    },
+  ];
 
   const dashboardPathFor = (view: ManagerDashboardView) => {
     const params = buildDashboardParams({
@@ -946,6 +982,39 @@ export default function ManagerDashboard() {
             <option value="staff">Staff</option>
             <option value="room_customer">Room / Customer</option>
           </select>
+        </div>
+      </section>
+
+      <section style={styles.intelligenceNav} aria-label="Manager Intelligence Sections">
+        <div style={styles.sectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>Manager Intelligence Sections</h2>
+            <p style={styles.sectionSubtitle}>
+              Choose the exact manager view to review without leaving this dashboard.
+            </p>
+          </div>
+          <span style={styles.sectionMeta}>View: {labelize(activeView)}</span>
+        </div>
+        <div style={styles.intelligenceGrid}>
+          {intelligenceSections.map((section) => {
+            const active = activeView === section.target;
+
+            return (
+              <button
+                key={section.target}
+                type="button"
+                style={{
+                  ...styles.intelligenceCard,
+                  ...(active ? styles.intelligenceCardActive : {}),
+                }}
+                onClick={() => openDashboardView(section.target)}
+                aria-current={active ? "page" : undefined}
+              >
+                <span style={styles.intelligenceTitle}>{section.title}</span>
+                <span style={styles.intelligenceText}>{section.text}</span>
+              </button>
+            );
+          })}
         </div>
       </section>
 
@@ -1646,6 +1715,46 @@ const styles: Record<string, CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
     gap: 10,
+  },
+  intelligenceNav: {
+    background: "#ffffff",
+    border: "1px solid #dce5ec",
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 20,
+    boxShadow: "0 8px 20px rgba(15, 38, 55, 0.04)",
+  },
+  intelligenceGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+    gap: 10,
+  },
+  intelligenceCard: {
+    border: "1px solid #dce5ec",
+    borderRadius: 8,
+    background: "#f8fafc",
+    color: "#17364b",
+    padding: 12,
+    textAlign: "left",
+    cursor: "pointer",
+    display: "grid",
+    gap: 6,
+    font: "inherit",
+  },
+  intelligenceCardActive: {
+    background: "#eff6ff",
+    borderColor: "#93c5fd",
+    boxShadow: "0 0 0 3px rgba(59, 130, 246, 0.12)",
+  },
+  intelligenceTitle: {
+    fontSize: 13,
+    fontWeight: 900,
+    color: "#17364b",
+  },
+  intelligenceText: {
+    fontSize: 12,
+    lineHeight: 1.35,
+    color: "#607486",
   },
   decisionCenter: {
     background: "#ffffff",
