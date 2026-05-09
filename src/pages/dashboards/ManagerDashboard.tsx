@@ -19,13 +19,12 @@ import {
 import AIExecutiveBrief from "./manager/AIExecutiveBrief";
 import AlertAnalytics from "./manager/AlertAnalytics";
 import DepartmentAnalytics from "./manager/DepartmentAnalytics";
-import ExecutiveAnalyticsExpansion from "./manager/ExecutiveAnalyticsExpansion";
 import InsightsAnalytics from "./manager/InsightsAnalytics";
 import ManagerDecisionCenter from "./manager/ManagerDecisionCenter";
 import ManagerIntelligenceSections from "./manager/ManagerIntelligenceSections";
-import ManagerVisualIntelligence from "./manager/ManagerVisualIntelligence";
 import OperationsAnalytics from "./manager/OperationsAnalytics";
 import SalesSummaryAnalytics from "./manager/SalesSummaryAnalytics";
+import VisualInsightsHub from "./manager/VisualInsightsHub";
 
 type AlertTone = "green" | "amber" | "red" | "blue";
 type DatePreset = "today" | "yesterday" | "week" | "month" | "custom";
@@ -36,6 +35,7 @@ type ManagerDashboardView =
   | "front-desk"
   | "department-activity"
   | "sales-summary"
+  | "visual-insights"
   | "closings"
   | "alerts"
   | "insights";
@@ -53,6 +53,7 @@ const DASHBOARD_VIEWS: ManagerDashboardView[] = [
   "front-desk",
   "department-activity",
   "sales-summary",
+  "visual-insights",
   "closings",
   "alerts",
   "insights",
@@ -360,6 +361,14 @@ export default function ManagerDashboard() {
     block: "start",
   });
   const {
+    ref: visualInsightsRef,
+    flash: visualInsightsFlash,
+    trigger: triggerVisualInsightsHighlight,
+  } = useScrollHighlight<HTMLElement>({
+    durationMs: 2000,
+    block: "start",
+  });
+  const {
     ref: managerAlertsRef,
     flash: managerAlertsFlash,
     trigger: triggerManagerAlertsHighlight,
@@ -468,6 +477,8 @@ export default function ManagerDashboard() {
       triggerDepartmentActivityHighlight();
     } else if (view === "sales-summary") {
       triggerGroupedPerformanceHighlight();
+    } else if (view === "visual-insights") {
+      triggerVisualInsightsHighlight();
     } else if (view === "closings") {
       triggerClosingStatusHighlight();
     } else if (view === "alerts") {
@@ -496,6 +507,7 @@ export default function ManagerDashboard() {
     triggerManagerAlertsHighlight,
     triggerOperationsHighlight,
     triggerOverviewHighlight,
+    triggerVisualInsightsHighlight,
   ]);
 
   const enabledDepartments = useMemo(
@@ -1044,6 +1056,11 @@ export default function ManagerDashboard() {
       target: "sales-summary",
     },
     {
+      title: "Visual Insights Hub",
+      text: "Power BI-style charts, trends, and manager visual analytics.",
+      target: "visual-insights",
+    },
+    {
       title: "Operations Status",
       text: "Shift, front desk, department activity, and cash desk readiness.",
       target: "operations",
@@ -1341,42 +1358,6 @@ export default function ManagerDashboard() {
         openDashboardView={openDashboardView}
       />
 
-      <ManagerVisualIntelligence
-        styles={styles}
-        activeRangeLabel={getRangeLabel(activeRange)}
-        groupLabel={metrics.groupLabel}
-        hasVisualActivity={hasVisualActivity}
-        collectionPercent={collectionPercent}
-        totals={metrics.totals}
-        financialVisualRows={financialVisualRows}
-        maxFinancialVisualValue={maxFinancialVisualValue}
-        topDepartmentVisualRows={topDepartmentVisualRows}
-        maxDepartmentVisualValue={maxDepartmentVisualValue}
-        groupedVisualRows={groupedVisualRows}
-        maxGroupedVisualValue={maxGroupedVisualValue}
-        alertSeverityRows={alertSeverityRows}
-        maxAlertSeverityCount={maxAlertSeverityCount}
-        money={money}
-        labelize={labelize}
-        openDashboardView={openDashboardView}
-      />
-
-      <ExecutiveAnalyticsExpansion
-        styles={styles}
-        hasVisualActivity={hasVisualActivity}
-        totals={metrics.totals}
-        receivablesTotal={receivablesTotal}
-        collectionPercent={collectionPercent}
-        alertsLength={alerts.length}
-        riskInsightCount={riskInsightCount}
-        warningInsightCount={warningInsightCount}
-        activeDepartmentPercent={activeDepartmentPercent}
-        strongestDepartment={strongestDepartment}
-        weakestDepartment={weakestDepartment}
-        money={money}
-        openDashboardView={openDashboardView}
-      />
-
       <section
         ref={overviewRef}
         className={overviewFlash ? "active-section" : undefined}
@@ -1490,6 +1471,53 @@ export default function ManagerDashboard() {
         </div>
       </section>
       </>
+      ) : null}
+
+      {activeView === "visual-insights" ? (
+      <section
+        ref={visualInsightsRef}
+        className={visualInsightsFlash ? "active-section" : undefined}
+        style={{
+          ...styles.section,
+          ...(visualInsightsFlash ? styles.sectionFlash : {}),
+        }}
+      >
+        <div style={styles.sectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>Visual Insights Hub</h2>
+            <p style={styles.sectionSubtitle}>
+              Power BI-style charts, trends, and manager visual analytics for the selected range.
+            </p>
+          </div>
+          <span style={styles.sectionMeta}>Grouped by {metrics.groupLabel}</span>
+        </div>
+        <VisualInsightsHub
+          styles={styles}
+          activeRangeLabel={getRangeLabel(activeRange)}
+          groupLabel={metrics.groupLabel}
+          hasVisualActivity={hasVisualActivity}
+          collectionPercent={collectionPercent}
+          totals={metrics.totals}
+          financialVisualRows={financialVisualRows}
+          maxFinancialVisualValue={maxFinancialVisualValue}
+          topDepartmentVisualRows={topDepartmentVisualRows}
+          maxDepartmentVisualValue={maxDepartmentVisualValue}
+          groupedVisualRows={groupedVisualRows}
+          maxGroupedVisualValue={maxGroupedVisualValue}
+          alertSeverityRows={alertSeverityRows}
+          maxAlertSeverityCount={maxAlertSeverityCount}
+          receivablesTotal={receivablesTotal}
+          alertsLength={alerts.length}
+          riskInsightCount={riskInsightCount}
+          warningInsightCount={warningInsightCount}
+          activeDepartmentPercent={activeDepartmentPercent}
+          strongestDepartment={strongestDepartment}
+          weakestDepartment={weakestDepartment}
+          money={money}
+          labelize={labelize}
+          openDashboardView={openDashboardView}
+        />
+      </section>
       ) : null}
 
       {activeView === "insights" ? (
