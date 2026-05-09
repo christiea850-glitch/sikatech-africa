@@ -12,7 +12,9 @@ import { loadShiftClosings } from "../../shifts/shiftClosingStore";
 import {
   getManagerExecutiveBriefCards,
   getManagerInsights,
+  getManagerTrendIntelligence,
   type ManagerExecutiveBriefCard,
+  type ManagerTrendIntelligence,
 } from "../../utils/managerInsights";
 import { getSmartAlerts, type SmartAlert } from "../../utils/smartAlerts";
 import {
@@ -258,12 +260,46 @@ function executiveBriefTone(tone: ManagerExecutiveBriefCard["tone"]): AlertTone 
   return "blue";
 }
 
+function executiveBriefCardRank(card: ManagerExecutiveBriefCard) {
+  if (card.tone === "risk") return 0;
+  if (card.tone === "watch") return 1;
+  if (card.tone === "opportunity") return 2;
+  return 3;
+}
+
 function DetailMetric({ label, value }: { label: string; value: string }) {
   return (
     <div style={styles.detailMetric}>
       <div style={styles.detailMetricLabel}>{label}</div>
       <div style={styles.detailMetricValue}>{value}</div>
     </div>
+  );
+}
+
+function TrendIntelligenceSection({
+  trendIntelligence,
+}: {
+  trendIntelligence: ManagerTrendIntelligence;
+}) {
+  return (
+    <section style={styles.trendIntelligence} aria-label="Trend Intelligence">
+      <div style={styles.sectionHeader}>
+        <div>
+          <h2 style={styles.sectionTitle}>Trend Intelligence</h2>
+          <p style={styles.sectionSubtitle}>
+            Current range compared with the prior matching range.
+          </p>
+        </div>
+        <span style={styles.sectionMeta}>{trendIntelligence.confidenceLevel}</span>
+      </div>
+      <div style={styles.detailGrid}>
+        <DetailMetric label="Trend Direction" value={trendIntelligence.trendDirection} />
+        <DetailMetric label="Momentum" value={trendIntelligence.momentum} />
+        <DetailMetric label="Risk Acceleration" value={trendIntelligence.riskAcceleration} />
+        <DetailMetric label="Stability Score" value={`${trendIntelligence.stabilityScore}/100`} />
+        <DetailMetric label="Confidence" value={trendIntelligence.confidenceLevel} />
+      </div>
+    </section>
   );
 }
 
@@ -929,7 +965,7 @@ export default function ManagerDashboard() {
       : metrics.totals.revenue > 0
         ? 100
         : 0;
-  const aiExecutiveBriefItems = getManagerExecutiveBriefCards({
+  const baseExecutiveBriefItems = getManagerExecutiveBriefCards({
     metrics,
     previousMetrics,
     alerts,
@@ -946,6 +982,20 @@ export default function ManagerDashboard() {
     revenueChange,
     revenueChangePercent,
   });
+  const trendIntelligence = getManagerTrendIntelligence({
+    metrics,
+    previousMetrics,
+    receivablesTotal,
+    collectionGap,
+    existingCardIds: baseExecutiveBriefItems.map((item) => item.id),
+  });
+  const aiExecutiveBriefItems = [
+    ...trendIntelligence.predictiveCards,
+    ...baseExecutiveBriefItems,
+  ]
+    .filter((item, index, items) => items.findIndex((candidate) => candidate.id === item.id) === index)
+    .sort((a, b) => executiveBriefCardRank(a) - executiveBriefCardRank(b))
+    .slice(0, 5);
   const decisionCards: Array<{
     title: string;
     text: string;
@@ -1332,6 +1382,12 @@ export default function ManagerDashboard() {
           <DetailMetric label="Risk Level" value={selectedExecutiveBrief.riskLevel} />
           <DetailMetric label="Source Area" value={selectedExecutiveBrief.sourceArea} />
           <DetailMetric label="Target Panel" value={labelize(selectedExecutiveBrief.targetView)} />
+          {selectedExecutiveBrief.trendDirection ? (
+            <DetailMetric label="Trend Direction" value={selectedExecutiveBrief.trendDirection} />
+          ) : null}
+          {selectedExecutiveBrief.confidenceLevel ? (
+            <DetailMetric label="Confidence" value={selectedExecutiveBrief.confidenceLevel} />
+          ) : null}
         </div>
 
         <div style={styles.detailBlock}>
@@ -1405,6 +1461,8 @@ export default function ManagerDashboard() {
         activeItemId={selectedExecutiveBrief?.id || null}
         onSelectItem={(item) => handleExecutiveBriefClick(item as ManagerExecutiveBriefCard)}
       />
+
+      <TrendIntelligenceSection trendIntelligence={trendIntelligence} />
 
       <ManagerDecisionCenter
         styles={styles}
@@ -1565,12 +1623,15 @@ export default function ManagerDashboard() {
       ) : null}
 
       {activeView === "ai-brief" ? (
+      <>
       <AIExecutiveBrief
         styles={styles}
         items={aiExecutiveBriefItems}
         activeItemId={selectedExecutiveBrief?.id || null}
         onSelectItem={(item) => handleExecutiveBriefClick(item as ManagerExecutiveBriefCard)}
       />
+      <TrendIntelligenceSection trendIntelligence={trendIntelligence} />
+      </>
       ) : null}
 
       {activeView === "decision-center" ? (
@@ -2667,6 +2728,14 @@ const styles: Record<string, CSSProperties> = {
     transition: "width 420ms ease, opacity 160ms ease",
   },
   aiBrief: {
+    background: "#ffffff",
+    border: "1px solid #dce5ec",
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 20,
+    boxShadow: "0 10px 24px rgba(15, 38, 55, 0.05)",
+  },
+  trendIntelligence: {
     background: "#ffffff",
     border: "1px solid #dce5ec",
     borderRadius: 8,

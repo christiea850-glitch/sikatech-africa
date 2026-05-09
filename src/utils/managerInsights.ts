@@ -2,6 +2,12 @@ import type { SmartAlert } from "./smartAlerts";
 
 type InsightType = "positive" | "warning" | "risk" | "neutral";
 export type ManagerExecutiveBriefTone = "healthy" | "watch" | "risk" | "opportunity";
+export type ManagerTrendDirection = "Improving" | "Declining" | "Stable" | "Mixed" | "Insufficient Data";
+export type ManagerTrendConfidence =
+  | "High Confidence"
+  | "Moderate Confidence"
+  | "Early Signal"
+  | "Observation Only";
 export type ManagerExecutiveBriefTargetView =
   | "overview"
   | "operations"
@@ -26,6 +32,7 @@ type MetricsLike = {
   };
   transactions?: number;
   pendingClosings?: number;
+  groupedRows?: GroupedRowLike[];
 };
 
 type GroupedRowLike = {
@@ -34,6 +41,7 @@ type GroupedRowLike = {
   revenue?: number;
   expenses?: number;
   collections?: number;
+  cashCollections?: number;
   netProfit?: number;
   transactions?: number;
 };
@@ -51,11 +59,22 @@ export type ManagerExecutiveBriefCard = {
   text: string;
   tone: ManagerExecutiveBriefTone;
   riskLevel: string;
+  trendDirection?: ManagerTrendDirection;
+  confidenceLevel?: ManagerTrendConfidence;
   whyFlagged: string;
   keyNumbers: Array<{ label: string; value: string }>;
   recommendedAction: string;
   sourceArea: string;
   targetView: ManagerExecutiveBriefTargetView;
+};
+
+export type ManagerTrendIntelligence = {
+  trendDirection: ManagerTrendDirection;
+  momentum: string;
+  riskAcceleration: string;
+  stabilityScore: number;
+  confidenceLevel: ManagerTrendConfidence;
+  predictiveCards: ManagerExecutiveBriefCard[];
 };
 
 type InsightCandidate = ManagerInsight & {
@@ -111,6 +130,63 @@ function briefTonePriority(tone: ManagerExecutiveBriefTone) {
   if (tone === "watch") return 1;
   if (tone === "opportunity") return 2;
   return 3;
+}
+
+function confidenceForSample(
+  currentTransactions: number,
+  previousTransactions: number
+): ManagerTrendConfidence {
+  const sample = Math.min(currentTransactions, previousTransactions);
+  if (sample >= 20) return "High Confidence";
+  if (sample >= 8) return "Moderate Confidence";
+  if (sample >= 3) return "Early Signal";
+  if (currentTransactions > 0 || previousTransactions > 0) return "Observation Only";
+  return "Observation Only";
+}
+
+function trendChange(current: number, previous: number) {
+  if (previous <= 0) return current > 0 ? 1 : 0;
+  return (current - previous) / previous;
+}
+
+function directionFromChange(change: number, threshold = 0.08): ManagerTrendDirection {
+  if (change >= threshold) return "Improving";
+  if (change <= -threshold) return "Declining";
+  return "Stable";
+}
+
+function trendLabel(direction: ManagerTrendDirection) {
+  if (direction === "Improving") return "up";
+  if (direction === "Declining") return "down";
+  if (direction === "Stable") return "stable";
+  if (direction === "Mixed") return "mixed";
+  return "limited";
+}
+
+function rowKey(row: GroupedRowLike) {
+  return String(row.key || row.name || "").trim().toLowerCase();
+}
+
+function mostChangedGroup(
+  currentRows: GroupedRowLike[],
+  previousRows: GroupedRowLike[]
+) {
+  const previousByKey = new Map(previousRows.map((row) => [rowKey(row), row]));
+  return currentRows
+    .map((row) => {
+      const previous = previousByKey.get(rowKey(row));
+      const currentRevenue = safeNumber(row.revenue);
+      const previousRevenue = safeNumber(previous?.revenue);
+      return {
+        row,
+        previous,
+        change: trendChange(currentRevenue, previousRevenue),
+        currentRevenue,
+        previousRevenue,
+      };
+    })
+    .filter((item) => item.currentRevenue > 0 && item.previousRevenue > 0)
+    .sort((a, b) => Math.abs(b.change) - Math.abs(a.change))[0] || null;
 }
 
 export function getManagerExecutiveBriefCards({
@@ -605,6 +681,334 @@ export function getManagerExecutiveBriefCards({
     .sort((a, b) => briefTonePriority(a.tone) - briefTonePriority(b.tone) || b.importance - a.importance)
     .slice(0, 5)
     .map(({ importance: _importance, ...card }) => card);
+}
+
+export function getManagerTrendIntelligence({
+  metrics,
+  previousMetrics,
+  receivablesTotal,
+  collectionGap,
+  existingCardIds = [],
+}: {
+  metrics: MetricsLike;
+  previousMetrics?: MetricsLike;
+  receivablesTotal: number;
+  collectionGap: number;
+  existingCardIds?: string[];
+}): ManagerTrendIntelligence {
+  const predictiveCards: ExecutiveBriefCandidate[] = [];
+  const usedIdeas = new Set(existingCardIds);
+  const addPredictiveCard = (
+    card: ExecutiveBriefInput & {
+      trendDirection: ManagerTrendDirection;
+      confidenceLevel: ManagerTrendConfidence;
+    },
+    relatedExistingIds: string[] = []
+  ) => {
+    if (usedIdeas.has(card.id) || relatedExistingIds.some((id) => usedIdeas.has(id))) return;
+    usedIdeas.add(card.id);
+    predictiveCards.push({
+      ...card,
+      title: card.title || "Trend Insight",
+      riskLevel: card.riskLevel || card.tone,
+      whyFlagged: card.whyFlagged || card.text,
+      keyNumbers: card.keyNumbers || [],
+      recommendedAction:
+        card.recommendedAction || "Review the related manager dashboard panel for supporting context.",
+      sourceArea: card.sourceArea || "Manager dashboard",
+      targetView: card.targetView || "overview",
+    });
+  };
+
+  const revenue = safeNumber(metrics.totals?.revenue);
+  const previousRevenue = safeNumber(previousMetrics?.totals?.revenue);
+  const collections = safeNumber(metrics.totals?.collections);
+  const previousCollections = safeNumber(previousMetrics?.totals?.collections);
+  const expenses = safeNumber(metrics.totals?.expenses);
+  const previousExpenses = safeNumber(previousMetrics?.totals?.expenses);
+  const netProfit = safeNumber(metrics.totals?.netProfit);
+  const previousNetProfit = safeNumber(previousMetrics?.totals?.netProfit);
+  const transactions = safeNumber(metrics.transactions);
+  const previousTransactions = safeNumber(previousMetrics?.transactions);
+  const currentRows = metrics.groupedRows || [];
+  const previousRows = previousMetrics?.groupedRows || [];
+  const confidenceLevel = confidenceForSample(transactions, previousTransactions);
+  const hasComparableData = transactions > 0 && previousTransactions > 0;
+
+  const revenueChange = trendChange(revenue, previousRevenue);
+  const collectionsChange = trendChange(collections, previousCollections);
+  const revenueDirection = hasComparableData
+    ? directionFromChange(revenueChange)
+    : "Insufficient Data";
+  const collectionsDirection = hasComparableData
+    ? directionFromChange(collectionsChange)
+    : "Insufficient Data";
+  const currentCollectionGapRatio = revenue > 0 ? safeNumber(collectionGap) / revenue : 0;
+  const previousCollectionGap = Math.max(0, previousRevenue - previousCollections);
+  const previousCollectionGapRatio = previousRevenue > 0 ? previousCollectionGap / previousRevenue : 0;
+  const currentExpenseRatio = revenue > 0 ? expenses / revenue : 0;
+  const previousExpenseRatio = previousRevenue > 0 ? previousExpenses / previousRevenue : 0;
+  const currentCashImbalanceRatio =
+    revenue > 0 ? Math.abs(revenue - collections) / revenue : 0;
+  const previousCashImbalanceRatio =
+    previousRevenue > 0 ? Math.abs(previousRevenue - previousCollections) / previousRevenue : 0;
+  const receivablesRatio = revenue > 0 ? safeNumber(receivablesTotal) / revenue : 0;
+  const currentRiskSignals = [
+    netProfit < 0,
+    currentCashImbalanceRatio >= 0.15,
+    currentExpenseRatio >= 0.65,
+    receivablesRatio >= 0.2,
+    transactions <= 2,
+  ].filter(Boolean).length;
+  const previousRiskSignals = [
+    previousNetProfit < 0,
+    previousCashImbalanceRatio >= 0.15,
+    previousExpenseRatio >= 0.65,
+    previousTransactions <= 2 && previousTransactions > 0,
+  ].filter(Boolean).length;
+  const riskAcceleration =
+    currentRiskSignals > previousRiskSignals
+      ? "Rising"
+      : currentRiskSignals < previousRiskSignals
+        ? "Easing"
+        : "Stable";
+
+  const directionVotes = [revenueDirection, collectionsDirection];
+  const trendDirection: ManagerTrendDirection =
+    !hasComparableData
+      ? "Insufficient Data"
+      : directionVotes.every((direction) => direction === "Improving")
+        ? "Improving"
+        : directionVotes.every((direction) => direction === "Declining")
+          ? "Declining"
+          : directionVotes.every((direction) => direction === "Stable")
+            ? "Stable"
+            : "Mixed";
+  const momentum =
+    trendDirection === "Improving"
+      ? "Revenue and collections are moving up together."
+      : trendDirection === "Declining"
+        ? "Revenue and collections are both moving down."
+        : trendDirection === "Mixed"
+          ? `Revenue is ${trendLabel(revenueDirection)} while collections are ${trendLabel(collectionsDirection)}.`
+          : trendDirection === "Stable"
+            ? "Core movement is steady against the prior matching range."
+            : "Trend movement needs more comparable data.";
+  const volatilityPenalty =
+    Math.min(35, Math.abs(revenueChange) * 60) +
+    Math.min(25, Math.abs(collectionsChange) * 50) +
+    Math.min(20, Math.max(0, currentExpenseRatio - previousExpenseRatio) * 100);
+  const stabilityScore = Math.max(
+    0,
+    Math.min(100, Math.round(100 - volatilityPenalty - currentRiskSignals * 8))
+  );
+
+  if (hasComparableData && revenueDirection === "Declining" && collectionsDirection !== "Improving") {
+    addPredictiveCard(
+      {
+        id: "trend:revenue-collections-decline",
+        title: "Revenue Trend Softening",
+        text: `Revenue is down ${pct(Math.abs(revenueChange))} while collections are ${trendLabel(collectionsDirection)} against the prior matching range.`,
+        tone: "watch",
+        riskLevel: "Watch",
+        trendDirection: "Declining",
+        confidenceLevel,
+        whyFlagged: "Revenue is declining and collections are not improving enough to offset the movement.",
+        keyNumbers: [
+          { label: "Revenue", value: money(revenue) },
+          { label: "Prior Revenue", value: money(previousRevenue) },
+          { label: "Revenue Direction", value: `${pct(Math.abs(revenueChange))} down` },
+          { label: "Collections Direction", value: trendLabel(collectionsDirection) },
+        ],
+        recommendedAction: "Open sales summary and compare group performance against the prior range.",
+        sourceArea: "Ledger trends",
+        targetView: "sales-summary",
+        importance: 92,
+      },
+      ["revenue:down"]
+    );
+  }
+
+  if (
+    hasComparableData &&
+    currentCollectionGapRatio >= 0.15 &&
+    currentCollectionGapRatio > previousCollectionGapRatio + 0.08
+  ) {
+    addPredictiveCard(
+      {
+        id: "trend:receivables-pressure",
+        title: "Receivables Pressure Building",
+        text: `Collection gap pressure increased to ${pct(currentCollectionGapRatio)} of revenue from ${pct(previousCollectionGapRatio)} previously.`,
+        tone: currentCollectionGapRatio >= 0.3 ? "risk" : "watch",
+        riskLevel: currentCollectionGapRatio >= 0.3 ? "Risk" : "Watch",
+        trendDirection: "Declining",
+        confidenceLevel,
+        whyFlagged: "The collection gap is widening versus the prior matching period.",
+        keyNumbers: [
+          { label: "Current Gap", value: money(safeNumber(collectionGap)) },
+          { label: "Previous Gap", value: money(previousCollectionGap) },
+          { label: "Receivables", value: money(safeNumber(receivablesTotal)) },
+        ],
+        recommendedAction: "Open front desk status and review unpaid balances before the gap carries forward.",
+        sourceArea: "Bookings / Ledger trends",
+        targetView: "front-desk",
+        importance: 96,
+      },
+      ["collections:pressure", "collections:watch"]
+    );
+  }
+
+  if (
+    hasComparableData &&
+    currentExpenseRatio >= 0.55 &&
+    currentExpenseRatio > previousExpenseRatio + 0.12
+  ) {
+    addPredictiveCard(
+      {
+        id: "trend:expense-acceleration",
+        title: "Expense Acceleration",
+        text: `Expense ratio rose to ${pct(currentExpenseRatio)} from ${pct(previousExpenseRatio)} in the prior matching range.`,
+        tone: currentExpenseRatio >= 0.8 ? "risk" : "watch",
+        riskLevel: currentExpenseRatio >= 0.8 ? "Risk" : "Watch",
+        trendDirection: "Declining",
+        confidenceLevel,
+        whyFlagged: "Expenses are accelerating faster than the revenue base.",
+        keyNumbers: [
+          { label: "Expenses", value: money(expenses) },
+          { label: "Prior Expenses", value: money(previousExpenses) },
+          { label: "Expense Ratio", value: pct(currentExpenseRatio) },
+        ],
+        recommendedAction: "Open sales summary and inspect expense-heavy groups before margin pressure deepens.",
+        sourceArea: "Expenses / Ledger trends",
+        targetView: "sales-summary",
+        importance: 90,
+      },
+      ["expenses:pressure", "profit:low-margin", "profit:negative"]
+    );
+  }
+
+  if (hasComparableData && netProfit < 0 && previousNetProfit < 0) {
+    addPredictiveCard(
+      {
+        id: "trend:repeated-losses",
+        title: "Repeated Loss Pattern",
+        text: `Net profit is negative in both the selected range and the prior matching range.`,
+        tone: "risk",
+        riskLevel: "Risk",
+        trendDirection: "Declining",
+        confidenceLevel,
+        whyFlagged: "Losses repeated across two comparable ranges, making this more than a one-period issue.",
+        keyNumbers: [
+          { label: "Net Profit", value: money(netProfit) },
+          { label: "Prior Net Profit", value: money(previousNetProfit) },
+        ],
+        recommendedAction: "Open sales summary and review revenue, expense, and net profit by group.",
+        sourceArea: "Ledger trends",
+        targetView: "sales-summary",
+        importance: 104,
+      },
+      ["profit:negative"]
+    );
+  }
+
+  if (
+    hasComparableData &&
+    currentCashImbalanceRatio >= 0.15 &&
+    previousCashImbalanceRatio >= 0.15
+  ) {
+    addPredictiveCard(
+      {
+        id: "trend:repeated-cash-imbalance",
+        title: "Repeated Cash Imbalance",
+        text: `Revenue and collections differ materially across both comparable ranges.`,
+        tone: currentCashImbalanceRatio >= 0.3 ? "risk" : "watch",
+        riskLevel: currentCashImbalanceRatio >= 0.3 ? "Risk" : "Watch",
+        trendDirection: currentCashImbalanceRatio > previousCashImbalanceRatio ? "Declining" : "Mixed",
+        confidenceLevel,
+        whyFlagged: "Revenue-to-collections variance has repeated, which may indicate reconciliation pressure.",
+        keyNumbers: [
+          { label: "Current Variance", value: pct(currentCashImbalanceRatio) },
+          { label: "Prior Variance", value: pct(previousCashImbalanceRatio) },
+        ],
+        recommendedAction: "Open front desk status and review collection records against room balances.",
+        sourceArea: "Ledger / Bookings trends",
+        targetView: "front-desk",
+        importance: 88,
+      },
+      ["collections:pressure", "collections:watch"]
+    );
+  }
+
+  const departmentMomentum = mostChangedGroup(currentRows, previousRows);
+  if (
+    hasComparableData &&
+    departmentMomentum &&
+    Math.abs(departmentMomentum.change) >= 0.2 &&
+    safeNumber(departmentMomentum.row.transactions) >= 2
+  ) {
+    const improving = departmentMomentum.change > 0;
+    addPredictiveCard(
+      {
+        id: `trend:department-momentum:${rowKey(departmentMomentum.row)}`,
+        title: improving ? "Department Momentum Improving" : "Department Momentum Slowing",
+        text: `${label(departmentMomentum.row)} revenue is ${improving ? "up" : "down"} ${pct(Math.abs(departmentMomentum.change))} versus the prior matching range.`,
+        tone: improving ? "opportunity" : "watch",
+        riskLevel: improving ? "Opportunity" : "Watch",
+        trendDirection: improving ? "Improving" : "Declining",
+        confidenceLevel,
+        whyFlagged: "One active group moved materially compared with its prior matching range.",
+        keyNumbers: [
+          { label: "Group", value: label(departmentMomentum.row) },
+          { label: "Revenue", value: money(departmentMomentum.currentRevenue) },
+          { label: "Prior Revenue", value: money(departmentMomentum.previousRevenue) },
+        ],
+        recommendedAction: "Open department activity to compare current momentum across departments.",
+        sourceArea: "Departments / Ledger trends",
+        targetView: "department-activity",
+        importance: improving ? 72 : 84,
+      },
+      ["departments:quiet"]
+    );
+  }
+
+  if (
+    (transactions === 0 && previousTransactions === 0) ||
+    (transactions > 0 && transactions <= 2 && previousTransactions > 0 && previousTransactions <= 2)
+  ) {
+    addPredictiveCard(
+      {
+        id: "trend:repeated-low-activity",
+        title: "Repeated Low Activity",
+        text: `Low activity appears in both comparable ranges, limiting trend confidence.`,
+        tone: "watch",
+        riskLevel: "Watch",
+        trendDirection: "Stable",
+        confidenceLevel: "Observation Only",
+        whyFlagged: "Both current and prior ranges have very few or no transactions.",
+        keyNumbers: [
+          { label: "Transactions", value: String(transactions) },
+          { label: "Prior Transactions", value: String(previousTransactions) },
+        ],
+        recommendedAction: "Confirm whether this is expected seasonality, closure, or missing entries.",
+        sourceArea: "Ledger trends",
+        targetView: "overview",
+        importance: 86,
+      },
+      ["low-activity:none", "low-activity:limited"]
+    );
+  }
+
+  return {
+    trendDirection,
+    momentum,
+    riskAcceleration,
+    stabilityScore,
+    confidenceLevel,
+    predictiveCards: predictiveCards
+      .sort((a, b) => briefTonePriority(a.tone) - briefTonePriority(b.tone) || b.importance - a.importance)
+      .slice(0, 2)
+      .map(({ importance: _importance, ...card }) => card),
+  };
 }
 
 export function getManagerInsights({
