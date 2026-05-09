@@ -1219,6 +1219,7 @@ export default function ManagerDashboard() {
       view: activeView,
     });
 
+    setDashboardReturnStack([]);
     setSearchParams(next);
   }
 
@@ -1434,6 +1435,7 @@ export default function ManagerDashboard() {
           >
             Return to {returnTarget.fromLabel}
           </button>
+          <span style={styles.returnHint}>Back to previous manager view.</span>
         </div>
       ) : null}
 
@@ -2421,6 +2423,9 @@ const styles: Record<string, CSSProperties> = {
   },
   returnBar: {
     display: "flex",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
     justifyContent: "flex-start",
     marginBottom: 14,
   },
@@ -2435,6 +2440,11 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 900,
     cursor: "pointer",
     boxShadow: "0 8px 20px rgba(15, 38, 55, 0.04)",
+  },
+  returnHint: {
+    color: "#607486",
+    fontSize: 12,
+    fontWeight: 800,
   },
   executivePanel: {
     background: "#ffffff",
