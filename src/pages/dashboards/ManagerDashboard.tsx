@@ -1300,6 +1300,18 @@ export default function ManagerDashboard() {
         </div>
       </section>
 
+      {!isOverviewView ? (
+        <ManagerIntelligenceSections
+          styles={styles}
+          sections={intelligenceSections}
+          activeView={activeView}
+          labelize={labelize}
+          openDashboardView={openDashboardView}
+        />
+      ) : null}
+
+      {isOverviewView ? (
+      <>
       <section style={styles.executivePanel}>
         <div style={styles.executiveHeader}>
           <div>
@@ -1332,18 +1344,6 @@ export default function ManagerDashboard() {
         </div>
       </section>
 
-      {!isOverviewView ? (
-        <ManagerIntelligenceSections
-          styles={styles}
-          sections={intelligenceSections}
-          activeView={activeView}
-          labelize={labelize}
-          openDashboardView={openDashboardView}
-        />
-      ) : null}
-
-      {isOverviewView ? (
-      <>
       <AIExecutiveBrief
         styles={styles}
         items={aiExecutiveBriefItems}
@@ -1954,15 +1954,14 @@ export default function ManagerDashboard() {
 
       {activeView === "alerts" ? (
       <>
-      <section style={styles.twoColumn}>
-        <div
-          ref={managerAlertsRef}
-          className={managerAlertsFlash ? "active-section" : undefined}
-          style={{
-            ...styles.section,
-            ...(managerAlertsFlash ? styles.sectionFlash : {}),
-          }}
-        >
+      <section
+        ref={managerAlertsRef}
+        className={managerAlertsFlash ? "active-section" : undefined}
+        style={{
+          ...styles.section,
+          ...(managerAlertsFlash ? styles.sectionFlash : {}),
+        }}
+      >
           <div style={styles.sectionHeader}>
             <div>
               <h2 style={styles.sectionTitle}>Manager Alerts</h2>
@@ -2087,36 +2086,6 @@ export default function ManagerDashboard() {
               ) : null}
             </div>
           ) : null}
-        </div>
-
-        <div style={styles.section}>
-          <div style={styles.sectionHeader}>
-            <h2 style={styles.sectionTitle}>Manager Review Shortcuts</h2>
-          </div>
-          <div style={styles.quickActions}>
-            <button
-              type="button"
-              style={styles.quickActionButton}
-              onClick={() => openDashboardView("sales-summary")}
-            >
-              Review Sales Summary
-            </button>
-            <button
-              type="button"
-              style={styles.quickActionButton}
-              onClick={() => openDashboardView("alerts")}
-            >
-              Review Alerts
-            </button>
-            <button
-              type="button"
-              style={styles.quickActionButton}
-              onClick={() => openDashboardView("insights")}
-            >
-              Review Insights
-            </button>
-          </div>
-        </div>
       </section>
       <AlertAnalytics
         styles={styles}
