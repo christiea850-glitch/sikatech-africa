@@ -1,7 +1,7 @@
 // src/components/Sidebar.tsx
 import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import { useModuleConfig } from "../setup/ModuleConfigContext";
@@ -23,6 +23,7 @@ type Item = {
   label: string;
   path: string;
   group: "dashboard" | "operations" | "operational" | "departments" | "financial" | "system";
+  dashboardView?: string;
 };
 
 export default function Sidebar() {
@@ -30,6 +31,7 @@ export default function Sidebar() {
   const { modules } = useModuleConfig();
   const { departments, canManageDepartments } = useDepartments();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [collapsed, setCollapsed] = useState(false);
   const [dashboardOpen, setDashboardOpen] = useState(true);
@@ -75,16 +77,94 @@ export default function Sidebar() {
     return `/app/${key}`;
   };
 
+  const currentDashboardView =
+    location.pathname === "/app/dashboard"
+      ? new URLSearchParams(location.search).get("view") || "overview"
+      : "";
+
+  const managerDashboardPath = (view: string) => {
+    const params =
+      location.pathname === "/app/dashboard"
+        ? new URLSearchParams(location.search)
+        : new URLSearchParams();
+
+    params.set("view", view);
+    return `/app/dashboard?${params.toString()}`;
+  };
+
   const dashboardItems: Item[] = useMemo(() => {
     if (isAccounting || isAuditor) return [];
 
-    return [{
+    const items: Item[] = [{
       key: "dashboard",
       label: "Dashboard",
       path: modulePath("dashboard"),
       group: "dashboard",
     }];
-  }, [isAccounting, isAuditor]);
+
+    if (isManager) {
+      items.push(
+        {
+          key: "manager-overview",
+          label: "Overview",
+          path: managerDashboardPath("overview"),
+          group: "dashboard",
+          dashboardView: "overview",
+        },
+        {
+          key: "manager-visual-insights",
+          label: "Visual Insights",
+          path: managerDashboardPath("visual-insights"),
+          group: "dashboard",
+          dashboardView: "visual-insights",
+        },
+        {
+          key: "manager-alerts",
+          label: "Alerts Review",
+          path: managerDashboardPath("alerts"),
+          group: "dashboard",
+          dashboardView: "alerts",
+        },
+        {
+          key: "manager-department-activity",
+          label: "Department Activity",
+          path: managerDashboardPath("department-activity"),
+          group: "dashboard",
+          dashboardView: "department-activity",
+        },
+        {
+          key: "manager-sales-summary",
+          label: "Sales Summary",
+          path: managerDashboardPath("sales-summary"),
+          group: "dashboard",
+          dashboardView: "sales-summary",
+        },
+        {
+          key: "manager-operations",
+          label: "Operations Status",
+          path: managerDashboardPath("operations"),
+          group: "dashboard",
+          dashboardView: "operations",
+        },
+        {
+          key: "manager-front-desk",
+          label: "Front Desk Status",
+          path: managerDashboardPath("front-desk"),
+          group: "dashboard",
+          dashboardView: "front-desk",
+        },
+        {
+          key: "manager-closings",
+          label: "Closing Status",
+          path: managerDashboardPath("closings"),
+          group: "dashboard",
+          dashboardView: "closings",
+        }
+      );
+    }
+
+    return items;
+  }, [isAccounting, isAuditor, isManager, location.pathname, location.search]);
 
   const operationsItems: Item[] = useMemo(() => {
     const items: Item[] = [];
@@ -340,24 +420,29 @@ export default function Sidebar() {
     </div>
   );
 
-  const LinkRow = ({ label, path }: { label: string; path: string }) => (
+  const LinkRow = ({ item }: { item: Item }) => (
     <NavLink
-      to={path}
+      to={item.path}
       style={({ isActive }) => ({
         ...styles.link,
+        ...(item.dashboardView ? styles.subLink : {}),
         ...(collapsed ? styles.linkCollapsed : {}),
-        ...(isActive ? styles.linkActive : {}),
+        ...((item.dashboardView
+          ? location.pathname === "/app/dashboard" && currentDashboardView === item.dashboardView
+          : isActive && !(isManager && item.key === "dashboard" && location.pathname === "/app/dashboard"))
+          ? styles.linkActive
+          : {}),
       })}
-      title={collapsed ? label : undefined}
+      title={collapsed ? item.label : undefined}
     >
-      {!collapsed && label}
+      {!collapsed && item.label}
       {collapsed && <span style={styles.dotBullet}>•</span>}
     </NavLink>
   );
 
   const renderSectionLinks = (items: Item[], open: boolean) => {
     if (!collapsed && !open) return null;
-    return items.map((i) => <LinkRow key={i.key} label={i.label} path={i.path} />);
+    return items.map((i) => <LinkRow key={i.key} item={i} />);
   };
 
   return (
@@ -611,6 +696,13 @@ const styles: Record<string, CSSProperties> = {
     transition: "all 0.15s ease",
     display: "block",
     border: "1px solid transparent",
+  },
+  subLink: {
+    marginLeft: 14,
+    padding: "9px 12px",
+    fontSize: 13,
+    fontWeight: 700,
+    color: "rgba(238,248,244,0.86)",
   },
   linkCollapsed: {
     padding: "12px 10px",
