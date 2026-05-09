@@ -35,6 +35,9 @@ type ManagerDashboardView =
   | "front-desk"
   | "department-activity"
   | "sales-summary"
+  | "business-health"
+  | "ai-brief"
+  | "decision-center"
   | "visual-insights"
   | "closings"
   | "alerts"
@@ -53,6 +56,9 @@ const DASHBOARD_VIEWS: ManagerDashboardView[] = [
   "front-desk",
   "department-activity",
   "sales-summary",
+  "business-health",
+  "ai-brief",
+  "decision-center",
   "visual-insights",
   "closings",
   "alerts",
@@ -727,6 +733,10 @@ export default function ManagerDashboard() {
   const dataConfidenceLabel = getDataConfidenceLabel(metrics.entries);
   const dataConfidenceHint = getDataConfidenceHint(dataConfidenceLabel);
   const isOverviewView = activeView === "overview";
+  const isOverviewSummaryLayerView =
+    activeView === "business-health" ||
+    activeView === "ai-brief" ||
+    activeView === "decision-center";
   const topPriorityAlert = alerts[0] || null;
   const topPriorityText =
     topPriorityAlert?.message ||
@@ -1036,6 +1046,21 @@ export default function ManagerDashboard() {
       target: "overview",
     },
     {
+      title: "Business Health",
+      text: "Focused executive health, top priority issue, and core manager numbers.",
+      target: "business-health",
+    },
+    {
+      title: "AI Brief",
+      text: "Deterministic executive observations from the current dashboard signals.",
+      target: "ai-brief",
+    },
+    {
+      title: "Decision Center",
+      text: "Focused attention areas, strengths, next action, and data confidence.",
+      target: "decision-center",
+    },
+    {
       title: "Insights",
       text: "Plain-language risks, wins, and follow-up guidance from the selected range.",
       target: "insights",
@@ -1301,6 +1326,7 @@ export default function ManagerDashboard() {
       </section>
 
       {!isOverviewView ? (
+        !isOverviewSummaryLayerView ? (
         <ManagerIntelligenceSections
           styles={styles}
           sections={intelligenceSections}
@@ -1308,6 +1334,7 @@ export default function ManagerDashboard() {
           labelize={labelize}
           openDashboardView={openDashboardView}
         />
+        ) : null
       ) : null}
 
       {isOverviewView ? (
@@ -1471,6 +1498,58 @@ export default function ManagerDashboard() {
         </div>
       </section>
       </>
+      ) : null}
+
+      {activeView === "business-health" ? (
+      <section style={styles.executivePanel}>
+        <div style={styles.executiveHeader}>
+          <div>
+            <h2 style={styles.executiveTitle}>Business Health Summary</h2>
+            <p style={styles.sectionSubtitle}>
+              Top priority, core numbers, and the next review focus for this range.
+            </p>
+          </div>
+          <span style={{ ...styles.badge, ...alertStyle(businessHealthTone) }}>
+            {businessHealthLabel}
+          </span>
+        </div>
+
+        <div style={styles.executiveGrid}>
+          <div style={styles.executivePriority}>
+            <div style={styles.detailEyebrow}>Top Priority Issue</div>
+            <h3 style={styles.detailTitle}>
+              {topPriorityAlert?.title || featuredInsight?.title || "No urgent issue"}
+            </h3>
+            <p style={styles.detailText}>{topPriorityText}</p>
+          </div>
+
+          <div style={styles.executiveNumbers} aria-label="Key manager numbers">
+            <DetailMetric label="Sales" value={money(metrics.totals.revenue)} />
+            <DetailMetric label="Net Profit" value={money(metrics.totals.netProfit)} />
+            <DetailMetric label="Receivables" value={money(receivablesTotal)} />
+            <DetailMetric label="Pending Closings" value={String(pendingClosings.length)} />
+            <DetailMetric label="Alerts" value={String(alerts.length)} />
+          </div>
+        </div>
+      </section>
+      ) : null}
+
+      {activeView === "ai-brief" ? (
+      <AIExecutiveBrief
+        styles={styles}
+        items={aiExecutiveBriefItems}
+      />
+      ) : null}
+
+      {activeView === "decision-center" ? (
+      <ManagerDecisionCenter
+        styles={styles}
+        cards={decisionCards}
+        dataConfidenceLabel={dataConfidenceLabel}
+        businessHealthTone={businessHealthTone}
+        alertStyle={alertStyle}
+        openDashboardView={openDashboardView}
+      />
       ) : null}
 
       {activeView === "visual-insights" ? (
