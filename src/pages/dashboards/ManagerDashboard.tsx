@@ -755,6 +755,78 @@ export default function ManagerDashboard() {
     metrics.totals.collections > 0 ||
     metrics.totals.expenses > 0 ||
     alerts.length > 0;
+  const groupedRankingRows = metrics.groupedRows.slice(0, 8);
+  const maxGroupedRevenue = Math.max(...groupedRankingRows.map((row) => row.revenue), 1);
+  const weakestGroupedRow =
+    metrics.groupedRows.length > 0
+      ? metrics.groupedRows
+          .slice()
+          .sort((a, b) => a.netProfit - b.netProfit || a.revenue - b.revenue)[0]
+      : null;
+  const collectionGap = Math.max(0, metrics.totals.revenue - metrics.totals.collections);
+  const departmentRankingRows = departmentPerformance
+    .slice()
+    .sort((a, b) => b.total - a.total || b.transactions - a.transactions);
+  const maxDepartmentTotal = Math.max(...departmentRankingRows.map((department) => department.total), 1);
+  const maxDepartmentTransactions = Math.max(
+    ...departmentRankingRows.map((department) => department.transactions),
+    1
+  );
+  const activeDepartmentPercent =
+    enabledDepartments.length > 0 ? (activeDepartments / enabledDepartments.length) * 100 : 0;
+  const alertsByGroup = alerts.reduce((map, alert) => {
+    const key = alert.relatedGroup || labelize(alert.type);
+    map.set(key, (map.get(key) || 0) + 1);
+    return map;
+  }, new Map<string, number>());
+  const alertHotspots = Array.from(alertsByGroup.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+  const maxAlertHotspotCount = Math.max(...alertHotspots.map((row) => row.count), 1);
+  const riskInsightCount = insights.filter((insight) => insight.type === "risk").length;
+  const warningInsightCount = insights.filter((insight) => insight.type === "warning").length;
+  const positiveInsightCount = insights.filter((insight) => insight.type === "positive").length;
+  const insightPriorityRows = insights.slice(0, 5).map((insight) => ({
+    id: insight.id,
+    title: insight.title,
+    type: insight.type,
+    score: insight.type === "risk" ? 95 : insight.type === "warning" ? 76 : insight.type === "positive" ? 58 : 42,
+  }));
+  const strongestDepartment = departmentRankingRows.find((department) => department.transactions > 0) || null;
+  const weakestDepartment =
+    departmentRankingRows
+      .slice()
+      .reverse()
+      .find((department) => department.transactions === 0 || department.status === "Needs Review") ||
+    null;
+  const operationsReadinessRows = [
+    {
+      label: "Shift Status",
+      value: openShifts.length,
+      helper: openShifts.length ? `${openShifts.length} open` : "No open shifts",
+      tone: openShifts.length ? "expenses" : "profit",
+    },
+    {
+      label: "Closings",
+      value: pendingClosings.length,
+      helper: pendingClosings.length ? `${pendingClosings.length} pending` : "Ready",
+      tone: pendingClosings.length ? "expenses" : "profit",
+    },
+    {
+      label: "Front Desk",
+      value: unpaidBookings.length,
+      helper: unpaidBookings.length ? `${unpaidBookings.length} unpaid` : "Settled",
+      tone: unpaidBookings.length ? "loss" : "profit",
+    },
+    {
+      label: "Departments",
+      value: quietDepartments,
+      helper: quietDepartments ? `${quietDepartments} quiet` : "All active",
+      tone: quietDepartments ? "collections" : "profit",
+    },
+  ];
+  const maxOperationsValue = Math.max(...operationsReadinessRows.map((row) => row.value), 1);
 
   const bestDepartment = topDepartments[0] || null;
   const priorityFocusTarget: ManagerDashboardView = topPriorityAlert ? "alerts" : "insights";
@@ -961,6 +1033,20 @@ export default function ManagerDashboard() {
 
   return (
     <main style={styles.page}>
+      <style>
+        {`
+          .manager-analytics-card,
+          .manager-visual-card {
+            transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+          }
+          .manager-analytics-card:hover,
+          .manager-visual-card:hover {
+            transform: translateY(-1px);
+            border-color: #c7d7e4;
+            box-shadow: 0 12px 26px rgba(15, 38, 55, 0.08);
+          }
+        `}
+      </style>
       <header style={styles.header}>
         <div>
           <h1 style={styles.title}>Manager Dashboard</h1>
@@ -1155,7 +1241,7 @@ export default function ManagerDashboard() {
           <div style={styles.emptyState}>No chartable activity for this range yet.</div>
         ) : (
           <div style={styles.visualGrid}>
-            <article style={styles.visualCard}>
+            <article className="manager-visual-card" style={styles.visualCard}>
               <div style={styles.visualCardHeader}>
                 <div>
                   <h3 style={styles.visualTitle}>Revenue vs Collections</h3>
@@ -1184,7 +1270,7 @@ export default function ManagerDashboard() {
               </div>
             </article>
 
-            <article style={styles.visualCard}>
+            <article className="manager-visual-card" style={styles.visualCard}>
               <h3 style={styles.visualTitle}>Revenue / Expenses / Net Profit</h3>
               <div style={styles.visualBarStack}>
                 {financialVisualRows.map((row) => (
@@ -1205,7 +1291,7 @@ export default function ManagerDashboard() {
               </div>
             </article>
 
-            <article style={styles.visualCard}>
+            <article className="manager-visual-card" style={styles.visualCard}>
               <div style={styles.visualCardHeader}>
                 <div>
                   <h3 style={styles.visualTitle}>Department Performance</h3>
@@ -1241,7 +1327,7 @@ export default function ManagerDashboard() {
               )}
             </article>
 
-            <article style={styles.visualCard}>
+            <article className="manager-visual-card" style={styles.visualCard}>
               <div style={styles.visualCardHeader}>
                 <div>
                   <h3 style={styles.visualTitle}>{metrics.groupLabel} Distribution</h3>
@@ -1282,7 +1368,7 @@ export default function ManagerDashboard() {
               )}
             </article>
 
-            <article style={styles.visualCard}>
+            <article className="manager-visual-card" style={styles.visualCard}>
               <div style={styles.visualCardHeader}>
                 <div>
                   <h3 style={styles.visualTitle}>Alert Severity</h3>
@@ -1459,6 +1545,7 @@ export default function ManagerDashboard() {
       ) : null}
 
       {activeView === "insights" ? (
+      <>
       <section
         ref={insightsRef}
         className={insightsFlash ? "active-section" : undefined}
@@ -1531,9 +1618,96 @@ export default function ManagerDashboard() {
           </div>
         )}
       </section>
+      <section style={styles.analyticsPanel}>
+        <div style={styles.sectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>Insight Drilldown Analytics</h2>
+            <p style={styles.sectionSubtitle}>
+              Recommendation priority, risk balance, and strongest signals for this range.
+            </p>
+          </div>
+          <span style={styles.sectionMeta}>{insights.length} insight{insights.length === 1 ? "" : "s"}</span>
+        </div>
+        {insights.length === 0 ? (
+          <div style={styles.emptyState}>No chartable activity for this range yet.</div>
+        ) : (
+          <div style={styles.analyticsGrid}>
+            <article className="manager-analytics-card" style={styles.visualCard}>
+              <h3 style={styles.visualTitle}>Risk vs Opportunity</h3>
+              <div style={styles.visualBarStack}>
+                {[
+                  { label: "Risks", value: riskInsightCount, tone: "loss" },
+                  { label: "Warnings", value: warningInsightCount, tone: "expenses" },
+                  { label: "Positives", value: positiveInsightCount, tone: "profit" },
+                ].map((row) => (
+                  <div key={row.label} style={styles.visualBarRow}>
+                    <div style={styles.visualBarLabel}>{row.label}</div>
+                    <div style={styles.visualBarTrack}>
+                      <div
+                        style={{
+                          ...styles.visualBarFill,
+                          ...styles[`visualBar${labelize(row.tone)}`],
+                          width: `${row.value === 0 ? 0 : Math.max(8, (row.value / Math.max(insights.length, 1)) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <div style={styles.visualBarValue}>{row.value}</div>
+                  </div>
+                ))}
+              </div>
+            </article>
+            <article className="manager-analytics-card" style={styles.visualCard}>
+              <h3 style={styles.visualTitle}>Follow-up Priority</h3>
+              <div style={styles.visualBarStack}>
+                {insightPriorityRows.map((row) => (
+                  <div key={row.id} style={styles.visualBarRow}>
+                    <div style={styles.visualBarLabel}>{row.title}</div>
+                    <div style={styles.visualBarTrack}>
+                      <div
+                        style={{
+                          ...styles.visualBarFill,
+                          ...styles[`visualBar${row.type === "risk" ? "Loss" : row.type === "warning" ? "Expenses" : row.type === "positive" ? "Profit" : "Collections"}`],
+                          width: `${row.score}%`,
+                        }}
+                      />
+                    </div>
+                    <div style={styles.visualBarValue}>{row.score}</div>
+                  </div>
+                ))}
+              </div>
+            </article>
+            <article className="manager-analytics-card" style={styles.visualCard}>
+              <h3 style={styles.visualTitle}>Strongest Performer</h3>
+              <div style={styles.drilldownFocusValue}>
+                {strongestDepartment ? strongestDepartment.name : "No active leader"}
+              </div>
+              <p style={styles.visualSub}>
+                {strongestDepartment
+                  ? `${money(strongestDepartment.total)} across ${strongestDepartment.transactions} transaction${strongestDepartment.transactions === 1 ? "" : "s"}.`
+                  : "No chartable activity for this range yet."}
+              </p>
+            </article>
+            <article className="manager-analytics-card" style={styles.visualCard}>
+              <h3 style={styles.visualTitle}>Weakest Area</h3>
+              <div style={styles.drilldownFocusValue}>
+                {weakestDepartment ? weakestDepartment.name : weakestGroupedRow?.name || "No weak area"}
+              </div>
+              <p style={styles.visualSub}>
+                {weakestDepartment
+                  ? `${weakestDepartment.status} with ${weakestDepartment.transactions} transaction${weakestDepartment.transactions === 1 ? "" : "s"}.`
+                  : weakestGroupedRow
+                    ? `Lowest grouped net: ${money(weakestGroupedRow.netProfit)}.`
+                    : "No chartable activity for this range yet."}
+              </p>
+            </article>
+          </div>
+        )}
+      </section>
+      </>
       ) : null}
 
       {activeView === "operations" || activeView === "front-desk" || activeView === "closings" ? (
+      <>
       <section
         ref={operationsRef}
         className={operationsFlash ? "active-section" : undefined}
@@ -1581,9 +1755,77 @@ export default function ManagerDashboard() {
           ))}
         </div>
       </section>
+      <section style={styles.analyticsPanel}>
+        <div style={styles.sectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>Operations Drilldown Analytics</h2>
+            <p style={styles.sectionSubtitle}>
+              Readiness indicators for shifts, closings, front desk, and departments.
+            </p>
+          </div>
+          <span style={styles.sectionMeta}>{getRangeLabel(activeRange)}</span>
+        </div>
+        <div style={styles.analyticsGrid}>
+          <article className="manager-analytics-card" style={styles.visualCard}>
+            <h3 style={styles.visualTitle}>Operational Readiness</h3>
+            <div style={styles.visualBarStack}>
+              {operationsReadinessRows.map((row) => (
+                <div key={row.label} style={styles.visualBarRow}>
+                  <div style={styles.visualBarLabel}>{row.label}</div>
+                  <div style={styles.visualBarTrack}>
+                    <div
+                      style={{
+                        ...styles.visualBarFill,
+                        ...styles[`visualBar${labelize(row.tone)}`],
+                        width: `${row.value === 0 ? 8 : Math.max(12, (row.value / maxOperationsValue) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <div style={styles.visualBarValue}>{row.helper}</div>
+                </div>
+              ))}
+            </div>
+          </article>
+          <article className="manager-analytics-card" style={styles.visualCard}>
+            <h3 style={styles.visualTitle}>Closing Readiness</h3>
+            <div style={styles.drilldownMetricGrid}>
+              <DetailMetric label="Pending Closings" value={String(pendingClosings.length)} />
+              <DetailMetric label="Open Shifts" value={String(openShifts.length)} />
+              <DetailMetric label="Cash Desk Signal" value={pendingClosings.length ? "Review" : "Ready"} />
+            </div>
+          </article>
+          <article className="manager-analytics-card" style={styles.visualCard}>
+            <h3 style={styles.visualTitle}>Front Desk State</h3>
+            <div style={styles.drilldownFocusValue}>
+              {unpaidBookings.length ? `${unpaidBookings.length} unpaid balance${unpaidBookings.length === 1 ? "" : "s"}` : "Settled"}
+            </div>
+            <p style={styles.visualSub}>
+              Room balance signal is based on existing front desk booking data for this range.
+            </p>
+          </article>
+          <article className="manager-analytics-card" style={styles.visualCard}>
+            <h3 style={styles.visualTitle}>Department Health</h3>
+            <div style={styles.collectionTrack}>
+              <div
+                style={{
+                  ...styles.collectionFill,
+                  width: `${Math.max(4, activeDepartmentPercent)}%`,
+                }}
+              />
+            </div>
+            <div style={styles.visualSplit}>
+              <span>Active: {activeDepartments}</span>
+              <span>Quiet: {quietDepartments}</span>
+              <strong>{activeDepartmentPercent.toFixed(0)}%</strong>
+            </div>
+          </article>
+        </div>
+      </section>
+      </>
       ) : null}
 
       {activeView === "department-activity" ? (
+      <>
       <section
         ref={departmentActivityRef}
         className={departmentActivityFlash ? "active-section" : undefined}
@@ -1670,9 +1912,95 @@ export default function ManagerDashboard() {
           </>
         )}
       </section>
+      <section style={styles.analyticsPanel}>
+        <div style={styles.sectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>Department Drilldown Analytics</h2>
+            <p style={styles.sectionSubtitle}>
+              Contribution, activity ranking, and operational load by department.
+            </p>
+          </div>
+          <span style={styles.sectionMeta}>{activeDepartments}/{enabledDepartments.length} active</span>
+        </div>
+        {departmentPerformance.length === 0 ? (
+          <div style={styles.emptyState}>No chartable activity for this range yet.</div>
+        ) : (
+          <div style={styles.analyticsGrid}>
+            <article className="manager-analytics-card" style={styles.visualCard}>
+              <h3 style={styles.visualTitle}>Active vs Quiet Departments</h3>
+              <div style={styles.collectionTrack}>
+                <div
+                  style={{
+                    ...styles.collectionFill,
+                    width: `${Math.max(4, activeDepartmentPercent)}%`,
+                  }}
+                />
+              </div>
+              <div style={styles.visualSplit}>
+                <span>Active: {activeDepartments}</span>
+                <span>Quiet: {quietDepartments}</span>
+                <strong>{activeDepartmentPercent.toFixed(0)}%</strong>
+              </div>
+            </article>
+            <article className="manager-analytics-card" style={styles.visualCard}>
+              <h3 style={styles.visualTitle}>Department Contribution</h3>
+              <div style={styles.visualBarStack}>
+                {departmentRankingRows.slice(0, 6).map((department) => (
+                  <div key={department.key} style={styles.visualBarRow}>
+                    <div style={styles.visualBarLabel}>{department.name}</div>
+                    <div style={styles.visualBarTrack}>
+                      <div
+                        style={{
+                          ...styles.visualBarFill,
+                          ...styles.visualBarRevenue,
+                          width: `${department.total === 0 ? 0 : Math.max(6, (department.total / maxDepartmentTotal) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <div style={styles.visualBarValue}>{money(department.total)}</div>
+                  </div>
+                ))}
+              </div>
+            </article>
+            <article className="manager-analytics-card" style={styles.visualCard}>
+              <h3 style={styles.visualTitle}>Operational Load</h3>
+              <div style={styles.visualBarStack}>
+                {departmentRankingRows.slice(0, 6).map((department) => (
+                  <div key={department.key} style={styles.visualBarRow}>
+                    <div style={styles.visualBarLabel}>{department.name}</div>
+                    <div style={styles.visualBarTrack}>
+                      <div
+                        style={{
+                          ...styles.visualBarFill,
+                          ...styles.visualBarCollections,
+                          width: `${department.transactions === 0 ? 0 : Math.max(6, (department.transactions / maxDepartmentTransactions) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <div style={styles.visualBarValue}>{department.transactions}</div>
+                  </div>
+                ))}
+              </div>
+            </article>
+            <article className="manager-analytics-card" style={styles.visualCard}>
+              <h3 style={styles.visualTitle}>Department Activity Ranking</h3>
+              <div style={styles.drilldownList}>
+                {departmentRankingRows.slice(0, 5).map((department, index) => (
+                  <div key={department.key} style={styles.drilldownListRow}>
+                    <span>#{index + 1} {department.name}</span>
+                    <strong>{department.status}</strong>
+                  </div>
+                ))}
+              </div>
+            </article>
+          </div>
+        )}
+      </section>
+      </>
       ) : null}
 
       {activeView === "sales-summary" ? (
+      <>
       <section
         ref={groupedPerformanceRef}
         className={groupedPerformanceFlash ? "active-section" : undefined}
@@ -1729,9 +2057,96 @@ export default function ManagerDashboard() {
           </button>
         ) : null}
       </section>
+      <section style={styles.analyticsPanel}>
+        <div style={styles.sectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>Sales Summary Drilldown Analytics</h2>
+            <p style={styles.sectionSubtitle}>
+              Grouped ranking, collection gaps, and performance spread for the current view.
+            </p>
+          </div>
+          <span style={styles.sectionMeta}>Grouped by {metrics.groupLabel}</span>
+        </div>
+        {metrics.groupedRows.length === 0 ? (
+          <div style={styles.emptyState}>No chartable activity for this range yet.</div>
+        ) : (
+          <div style={styles.analyticsGrid}>
+            <article className="manager-analytics-card" style={styles.visualCard}>
+              <h3 style={styles.visualTitle}>Revenue vs Collections Gap</h3>
+              <div style={styles.visualBarStack}>
+                {[
+                  { label: "Revenue", value: metrics.totals.revenue, tone: "revenue" },
+                  { label: "Collections", value: metrics.totals.collections, tone: "collections" },
+                  { label: "Gap", value: collectionGap, tone: collectionGap > 0 ? "expenses" : "profit" },
+                ].map((row) => (
+                  <div key={row.label} style={styles.visualBarRow}>
+                    <div style={styles.visualBarLabel}>{row.label}</div>
+                    <div style={styles.visualBarTrack}>
+                      <div
+                        style={{
+                          ...styles.visualBarFill,
+                          ...styles[`visualBar${labelize(row.tone)}`],
+                          width: `${row.value === 0 ? 0 : Math.max(6, (row.value / maxFinancialVisualValue) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <div style={styles.visualBarValue}>{money(row.value)}</div>
+                  </div>
+                ))}
+              </div>
+            </article>
+            <article className="manager-analytics-card" style={styles.visualCard}>
+              <h3 style={styles.visualTitle}>Grouped Ranking</h3>
+              <div style={styles.visualBarStack}>
+                {groupedRankingRows.map((row) => (
+                  <div key={row.key} style={styles.visualBarRow}>
+                    <div style={styles.visualBarLabel}>{row.name}</div>
+                    <div style={styles.visualBarTrack}>
+                      <div
+                        style={{
+                          ...styles.visualBarFill,
+                          ...styles.visualBarRevenue,
+                          width: `${row.revenue === 0 ? 0 : Math.max(6, (row.revenue / maxGroupedRevenue) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <div style={styles.visualBarValue}>{money(row.revenue)}</div>
+                  </div>
+                ))}
+              </div>
+            </article>
+            <article className="manager-analytics-card" style={styles.visualCard}>
+              <h3 style={styles.visualTitle}>Top vs Lowest Performance</h3>
+              <div style={styles.drilldownMetricGrid}>
+                <DetailMetric
+                  label="Top Group"
+                  value={metrics.groupedRows[0] ? `${metrics.groupedRows[0].name}: ${money(metrics.groupedRows[0].netProfit)}` : "None"}
+                />
+                <DetailMetric
+                  label="Lowest Group"
+                  value={weakestGroupedRow ? `${weakestGroupedRow.name}: ${money(weakestGroupedRow.netProfit)}` : "None"}
+                />
+              </div>
+            </article>
+            <article className="manager-analytics-card" style={styles.visualCard}>
+              <h3 style={styles.visualTitle}>Trend-style Rows</h3>
+              <div style={styles.drilldownList}>
+                {groupedRankingRows.slice(0, 5).map((row) => (
+                  <div key={row.key} style={styles.drilldownListRow}>
+                    <span>{row.name}</span>
+                    <strong>{row.collections >= row.expenses ? "Healthy" : "Review"}</strong>
+                  </div>
+                ))}
+              </div>
+            </article>
+          </div>
+        )}
+      </section>
+      </>
       ) : null}
 
       {activeView === "alerts" ? (
+      <>
       <section style={styles.twoColumn}>
         <div
           ref={managerAlertsRef}
@@ -1896,6 +2311,86 @@ export default function ManagerDashboard() {
           </div>
         </div>
       </section>
+      <section style={styles.analyticsPanel}>
+        <div style={styles.sectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>Alert Drilldown Analytics</h2>
+            <p style={styles.sectionSubtitle}>
+              Severity distribution, risk concentration, and unresolved alert emphasis.
+            </p>
+          </div>
+          <span style={styles.sectionMeta}>{alerts.length} alert{alerts.length === 1 ? "" : "s"}</span>
+        </div>
+        {alerts.length === 0 ? (
+          <div style={styles.emptyState}>No chartable activity for this range yet.</div>
+        ) : (
+          <div style={styles.analyticsGrid}>
+            <article className="manager-analytics-card" style={styles.visualCard}>
+              <h3 style={styles.visualTitle}>Severity Distribution</h3>
+              <div style={styles.visualBarStack}>
+                {alertSeverityRows.map((row) => (
+                  <div key={row.label} style={styles.visualBarRow}>
+                    <div style={styles.visualBarLabel}>{row.label}</div>
+                    <div style={styles.visualBarTrack}>
+                      <div
+                        style={{
+                          ...styles.visualBarFill,
+                          ...styles[`visualBar${labelize(row.tone)}`],
+                          width: `${row.count === 0 ? 0 : Math.max(8, (row.count / maxAlertSeverityCount) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <div style={styles.visualBarValue}>{row.count}</div>
+                  </div>
+                ))}
+              </div>
+            </article>
+            <article className="manager-analytics-card" style={styles.visualCard}>
+              <h3 style={styles.visualTitle}>Risk Hotspots</h3>
+              {alertHotspots.length === 0 ? (
+                <div style={styles.visualEmpty}>No chartable activity for this range yet.</div>
+              ) : (
+                <div style={styles.visualBarStack}>
+                  {alertHotspots.map((row) => (
+                    <div key={row.label} style={styles.visualBarRow}>
+                      <div style={styles.visualBarLabel}>{row.label}</div>
+                      <div style={styles.visualBarTrack}>
+                        <div
+                          style={{
+                            ...styles.visualBarFill,
+                            ...styles.visualBarLoss,
+                            width: `${Math.max(8, (row.count / maxAlertHotspotCount) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                      <div style={styles.visualBarValue}>{row.count}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </article>
+            <article className="manager-analytics-card" style={styles.visualCard}>
+              <h3 style={styles.visualTitle}>Unresolved Emphasis</h3>
+              <div style={styles.drilldownFocusValue}>{alerts.length}</div>
+              <p style={styles.visualSub}>
+                Current manager alerts remain active until the underlying operating signal changes.
+              </p>
+            </article>
+            <article className="manager-analytics-card" style={styles.visualCard}>
+              <h3 style={styles.visualTitle}>Alert Concentration</h3>
+              <div style={styles.drilldownList}>
+                {alerts.slice(0, 5).map((alert) => (
+                  <div key={alert.id} style={styles.drilldownListRow}>
+                    <span>{alert.title}</span>
+                    <strong>{labelize(alert.type)}</strong>
+                  </div>
+                ))}
+              </div>
+            </article>
+          </div>
+        )}
+      </section>
+      </>
       ) : null}
     </main>
   );
@@ -2249,6 +2744,48 @@ const styles: Record<string, CSSProperties> = {
     color: "#607486",
     fontSize: 13,
     padding: "18px 0",
+  },
+  analyticsPanel: {
+    background: "#ffffff",
+    border: "1px solid #dce5ec",
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 20,
+    boxShadow: "0 10px 24px rgba(15, 38, 55, 0.05)",
+  },
+  analyticsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+    gap: 12,
+  },
+  drilldownMetricGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+    gap: 10,
+    marginTop: 12,
+  },
+  drilldownFocusValue: {
+    marginTop: 14,
+    color: "#17364b",
+    fontSize: 22,
+    fontWeight: 900,
+    lineHeight: 1.15,
+  },
+  drilldownList: {
+    display: "grid",
+    gap: 8,
+    marginTop: 12,
+  },
+  drilldownListRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    borderBottom: "1px solid #edf2f6",
+    paddingBottom: 8,
+    color: "#354b5d",
+    fontSize: 12,
+    fontWeight: 800,
   },
   filterBar: {
     display: "grid",
