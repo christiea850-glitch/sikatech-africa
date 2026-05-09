@@ -22,6 +22,7 @@ type DatePreset = "today" | "yesterday" | "week" | "month" | "custom";
 type GroupBy = DashboardGroupBy;
 type ManagerDashboardView =
   | "overview"
+  | "operations"
   | "front-desk"
   | "department-activity"
   | "sales-summary"
@@ -38,6 +39,7 @@ const DATE_PRESETS: DatePreset[] = ["today", "yesterday", "week", "month", "cust
 const GROUP_BY_OPTIONS: GroupBy[] = ["department", "payment", "shift", "staff", "room_customer"];
 const DASHBOARD_VIEWS: ManagerDashboardView[] = [
   "overview",
+  "operations",
   "front-desk",
   "department-activity",
   "sales-summary",
@@ -318,6 +320,7 @@ export default function ManagerDashboard() {
   const {
     ref: operationsRef,
     flash: operationsFlash,
+    trigger: triggerOperationsHighlight,
   } = useScrollHighlight<HTMLElement>({
     durationMs: 2000,
     block: "start",
@@ -408,6 +411,8 @@ export default function ManagerDashboard() {
   function triggerDashboardView(view: ManagerDashboardView) {
     if (view === "overview") {
       triggerOverviewHighlight();
+    } else if (view === "operations") {
+      triggerOperationsHighlight();
     } else if (view === "front-desk") {
       triggerFrontDeskHighlight();
     } else if (view === "department-activity") {
@@ -440,6 +445,7 @@ export default function ManagerDashboard() {
     triggerGroupedPerformanceHighlight,
     triggerInsightsHighlight,
     triggerManagerAlertsHighlight,
+    triggerOperationsHighlight,
     triggerOverviewHighlight,
   ]);
 
@@ -659,6 +665,7 @@ export default function ManagerDashboard() {
   const receivablesTotal = metrics.totals.receivables || Math.max(0, metrics.totals.revenue - metrics.totals.collections);
   const dataConfidenceLabel = getDataConfidenceLabel(metrics.entries);
   const dataConfidenceHint = getDataConfidenceHint(dataConfidenceLabel);
+  const isOverviewView = activeView === "overview";
   const topPriorityAlert = alerts[0] || null;
   const topPriorityText =
     topPriorityAlert?.message ||
@@ -782,9 +789,15 @@ export default function ManagerDashboard() {
     });
 
     shouldScrollViewRef.current = true;
-    handledViewRef.current = view;
+    if (view === activeView) {
+      handledViewRef.current = view;
+      setSearchParams(next);
+      triggerDashboardView(view);
+      return;
+    }
+
+    handledViewRef.current = null;
     setSearchParams(next);
-    triggerDashboardView(view);
   }
 
   function managerSafeReviewPath(path?: string | null) {
@@ -968,6 +981,8 @@ export default function ManagerDashboard() {
         </div>
       </section>
 
+      {isOverviewView ? (
+      <>
       <section style={styles.decisionCenter} aria-label="Manager Decision Center">
         <div style={styles.sectionHeader}>
           <div>
@@ -1030,6 +1045,86 @@ export default function ManagerDashboard() {
         </div>
       </section>
 
+      <section style={styles.section}>
+        <div style={styles.sectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>Manager Alerts Preview</h2>
+            <p style={styles.sectionSubtitle}>
+              Compact alert status for the selected range.
+            </p>
+          </div>
+          <span style={{ ...styles.badge, ...alertStyle(businessHealthTone) }}>
+            {alerts.length} alert{alerts.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <div style={styles.previewPanel}>
+          {topPriorityAlert ? (
+            <>
+              <div style={styles.alertTitle}>{topPriorityAlert.title}</div>
+              <div style={styles.alertText}>{topPriorityAlert.message}</div>
+            </>
+          ) : (
+            <>
+              <div style={styles.alertTitle}>No major issues detected.</div>
+              <div style={styles.alertText}>Performance and operations look steady for this range.</div>
+            </>
+          )}
+          <button
+            type="button"
+            style={styles.showMoreButton}
+            onClick={() => openDashboardView("alerts")}
+          >
+            Review Alerts
+          </button>
+        </div>
+      </section>
+
+      <section style={styles.section}>
+        <div style={styles.sectionHeader}>
+          <h2 style={styles.sectionTitle}>Manager Review Shortcuts</h2>
+        </div>
+        <div style={styles.quickActions}>
+          <button
+            type="button"
+            style={styles.quickActionButton}
+            onClick={() => openDashboardView("sales-summary")}
+          >
+            Review Sales Summary
+          </button>
+          <button
+            type="button"
+            style={styles.quickActionButton}
+            onClick={() => openDashboardView("alerts")}
+          >
+            Review Alerts
+          </button>
+          <button
+            type="button"
+            style={styles.quickActionButton}
+            onClick={() => openDashboardView("insights")}
+          >
+            Review Insights
+          </button>
+          <button
+            type="button"
+            style={styles.quickActionButton}
+            onClick={() => openDashboardView("department-activity")}
+          >
+            Review Department Activity
+          </button>
+          <button
+            type="button"
+            style={styles.quickActionButton}
+            onClick={() => openDashboardView("operations")}
+          >
+            Operations / Status
+          </button>
+        </div>
+      </section>
+      </>
+      ) : null}
+
+      {activeView === "insights" ? (
       <section
         ref={insightsRef}
         className={insightsFlash ? "active-section" : undefined}
@@ -1102,7 +1197,9 @@ export default function ManagerDashboard() {
           </div>
         )}
       </section>
+      ) : null}
 
+      {activeView === "operations" || activeView === "front-desk" || activeView === "closings" ? (
       <section
         ref={operationsRef}
         className={operationsFlash ? "active-section" : undefined}
@@ -1150,7 +1247,9 @@ export default function ManagerDashboard() {
           ))}
         </div>
       </section>
+      ) : null}
 
+      {activeView === "department-activity" ? (
       <section
         ref={departmentActivityRef}
         className={departmentActivityFlash ? "active-section" : undefined}
@@ -1237,7 +1336,9 @@ export default function ManagerDashboard() {
           </>
         )}
       </section>
+      ) : null}
 
+      {activeView === "sales-summary" ? (
       <section
         ref={groupedPerformanceRef}
         className={groupedPerformanceFlash ? "active-section" : undefined}
@@ -1294,7 +1395,9 @@ export default function ManagerDashboard() {
           </button>
         ) : null}
       </section>
+      ) : null}
 
+      {activeView === "alerts" ? (
       <section style={styles.twoColumn}>
         <div
           ref={managerAlertsRef}
@@ -1459,6 +1562,7 @@ export default function ManagerDashboard() {
           </div>
         </div>
       </section>
+      ) : null}
     </main>
   );
 }
@@ -1905,6 +2009,15 @@ const styles: Record<string, CSSProperties> = {
   alertText: {
     fontSize: 13,
     lineHeight: 1.4,
+  },
+  previewPanel: {
+    display: "grid",
+    gap: 10,
+    background: "#ffffff",
+    border: "1px solid #dce5ec",
+    borderRadius: 8,
+    padding: 14,
+    boxShadow: "0 8px 20px rgba(15, 38, 55, 0.04)",
   },
   alertRecommendation: {
     marginTop: 8,
