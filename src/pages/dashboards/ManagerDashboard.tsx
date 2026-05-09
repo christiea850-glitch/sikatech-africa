@@ -54,6 +54,12 @@ type DateRange = {
   endDate: string;
 };
 
+type DashboardReturnState = {
+  fromView: ManagerDashboardView;
+  fromParams: string;
+  fromLabel: string;
+};
+
 const DATE_PRESETS: DatePreset[] = ["today", "yesterday", "week", "month", "custom"];
 const GROUP_BY_OPTIONS: GroupBy[] = ["department", "payment", "shift", "staff", "room_customer"];
 const DASHBOARD_VIEWS: ManagerDashboardView[] = [
@@ -363,6 +369,7 @@ export default function ManagerDashboard() {
   const [showGroupedPerformance, setShowGroupedPerformance] = useState(false);
   const [selectedExecutiveBrief, setSelectedExecutiveBrief] =
     useState<ManagerExecutiveBriefCard | null>(null);
+  const [returnState, setReturnState] = useState<DashboardReturnState | null>(null);
   const previousGroupByRef = useRef<GroupBy>(groupBy);
   const handledViewRef = useRef<ManagerDashboardView | null>(null);
   const shouldScrollViewRef = useRef(searchParams.has("view"));
@@ -1138,6 +1145,41 @@ export default function ManagerDashboard() {
     setSearchParams(next);
   }
 
+  function openDashboardViewWithReturn(nextView: ManagerDashboardView, fromLabel: string) {
+    if (nextView === activeView) {
+      openDashboardView(nextView);
+      return;
+    }
+
+    const currentParams = buildDashboardParams({
+      source: searchParams,
+      datePreset,
+      activeRange,
+      groupBy,
+      view: activeView,
+    });
+
+    setReturnState({
+      fromView: activeView,
+      fromParams: currentParams.toString(),
+      fromLabel,
+    });
+    openDashboardView(nextView);
+  }
+
+  function returnToPreviousDashboardView() {
+    if (!returnState) return;
+
+    const previousParams = new URLSearchParams(returnState.fromParams);
+    const previousView = readDashboardView(previousParams.get("view"));
+
+    shouldScrollViewRef.current = true;
+    handledViewRef.current = null;
+    setReturnState(null);
+    setSearchParams(previousParams);
+    triggerDashboardView(previousView);
+  }
+
   function updateDashboardFilters(nextInput: {
     datePreset?: DatePreset;
     customRange?: DateRange;
@@ -1190,12 +1232,17 @@ export default function ManagerDashboard() {
     return path;
   }
 
-  function openManagerSafeReviewPath(path?: string | null) {
+  function openManagerSafeReviewPath(path?: string | null, fromLabel?: string) {
     const safePath = managerSafeReviewPath(path);
 
     if (safePath.startsWith("/app/dashboard")) {
       const next = new URLSearchParams(safePath.split("?")[1] || "");
-      openDashboardView(readDashboardView(next.get("view")));
+      const nextView = readDashboardView(next.get("view"));
+      if (fromLabel) {
+        openDashboardViewWithReturn(nextView, fromLabel);
+      } else {
+        openDashboardView(nextView);
+      }
       return;
     }
 
@@ -1210,7 +1257,7 @@ export default function ManagerDashboard() {
       setSelectedAlert(alerts.find((alert) => alert.id === alertId) || null);
     }
 
-    openDashboardView(card.targetView);
+    openDashboardViewWithReturn(card.targetView, "Executive Brief");
   }
 
   const snapshot = [
@@ -1350,6 +1397,18 @@ export default function ManagerDashboard() {
         </div>
       </section>
 
+      {returnState ? (
+        <div style={styles.returnBar}>
+          <button
+            type="button"
+            style={styles.returnButton}
+            onClick={returnToPreviousDashboardView}
+          >
+            Return to {returnState.fromLabel}
+          </button>
+        </div>
+      ) : null}
+
       {!isOverviewView ? (
         !isOverviewSummaryLayerView ? (
         <ManagerIntelligenceSections
@@ -1414,7 +1473,7 @@ export default function ManagerDashboard() {
             ...styles.reviewSourceButton,
             ...alertStyle(executiveBriefTone(selectedExecutiveBrief.tone)),
           }}
-          onClick={() => openDashboardView(selectedExecutiveBrief.targetView)}
+          onClick={() => openDashboardViewWithReturn(selectedExecutiveBrief.targetView, "Executive Brief")}
         >
           Open {labelize(selectedExecutiveBrief.targetView)}
         </button>
@@ -1470,7 +1529,7 @@ export default function ManagerDashboard() {
         dataConfidenceLabel={dataConfidenceLabel}
         businessHealthTone={businessHealthTone}
         alertStyle={alertStyle}
-        openDashboardView={openDashboardView}
+        openDashboardView={(view) => openDashboardViewWithReturn(view, "Decision Center")}
       />
 
       <section
@@ -1528,7 +1587,7 @@ export default function ManagerDashboard() {
           <button
             type="button"
             style={styles.showMoreButton}
-            onClick={() => openDashboardView("alerts")}
+            onClick={() => openDashboardViewWithReturn("alerts", "Overview")}
           >
             Review Alerts
           </button>
@@ -1551,35 +1610,35 @@ export default function ManagerDashboard() {
           <button
             type="button"
             style={styles.quickActionButton}
-            onClick={() => openDashboardView("sales-summary")}
+            onClick={() => openDashboardViewWithReturn("sales-summary", "Overview")}
           >
             Review Sales Summary
           </button>
           <button
             type="button"
             style={styles.quickActionButton}
-            onClick={() => openDashboardView("alerts")}
+            onClick={() => openDashboardViewWithReturn("alerts", "Overview")}
           >
             Review Alerts
           </button>
           <button
             type="button"
             style={styles.quickActionButton}
-            onClick={() => openDashboardView("insights")}
+            onClick={() => openDashboardViewWithReturn("insights", "Overview")}
           >
             Review Insights
           </button>
           <button
             type="button"
             style={styles.quickActionButton}
-            onClick={() => openDashboardView("department-activity")}
+            onClick={() => openDashboardViewWithReturn("department-activity", "Overview")}
           >
             Review Department Activity
           </button>
           <button
             type="button"
             style={styles.quickActionButton}
-            onClick={() => openDashboardView("operations")}
+            onClick={() => openDashboardViewWithReturn("operations", "Overview")}
           >
             Operations / Status
           </button>
@@ -1641,7 +1700,7 @@ export default function ManagerDashboard() {
         dataConfidenceLabel={dataConfidenceLabel}
         businessHealthTone={businessHealthTone}
         alertStyle={alertStyle}
-        openDashboardView={openDashboardView}
+        openDashboardView={(view) => openDashboardViewWithReturn(view, "Decision Center")}
       />
       ) : null}
 
@@ -1687,7 +1746,7 @@ export default function ManagerDashboard() {
           weakestDepartment={weakestDepartment}
           money={money}
           labelize={labelize}
-          openDashboardView={openDashboardView}
+          openDashboardView={(view) => openDashboardViewWithReturn(view, "Visual Insights")}
         />
       </section>
       ) : null}
@@ -2251,7 +2310,7 @@ export default function ManagerDashboard() {
                 <button
                   type="button"
                   style={styles.reviewSourceButton}
-                  onClick={() => openManagerSafeReviewPath(selectedAlert.reviewPath)}
+                  onClick={() => openManagerSafeReviewPath(selectedAlert.reviewPath, "Alert Detail")}
                 >
                   {selectedAlert.reviewLabel || "Review Related Section"}
                 </button>
@@ -2317,6 +2376,23 @@ const styles: Record<string, CSSProperties> = {
     color: "#607486",
     fontSize: 12,
     lineHeight: 1.35,
+  },
+  returnBar: {
+    display: "flex",
+    justifyContent: "flex-start",
+    marginBottom: 14,
+  },
+  returnButton: {
+    border: "1px solid #cfdbe4",
+    borderRadius: 8,
+    background: "#ffffff",
+    color: "#17364b",
+    minHeight: 36,
+    padding: "0 12px",
+    fontSize: 13,
+    fontWeight: 900,
+    cursor: "pointer",
+    boxShadow: "0 8px 20px rgba(15, 38, 55, 0.04)",
   },
   executivePanel: {
     background: "#ffffff",
