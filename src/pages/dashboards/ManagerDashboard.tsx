@@ -697,6 +697,70 @@ export default function ManagerDashboard() {
     { label: "Alerts", value: String(alerts.length), hint: "Items needing attention" },
   ];
 
+  const bestDepartment = topDepartments[0] || null;
+  const priorityFocusTarget: ManagerDashboardView = topPriorityAlert ? "alerts" : "insights";
+  const nextReviewTarget: ManagerDashboardView = topPriorityAlert
+    ? "alerts"
+    : featuredInsight
+      ? "insights"
+      : topDepartments.length || quietDepartments
+        ? "department-activity"
+        : "overview";
+  const collectionWatchHasRisk = receivablesTotal > 0 || pendingClosings.length > 0;
+  const decisionCards: Array<{
+    title: string;
+    text: string;
+    status: string;
+    tone: AlertTone;
+    actionLabel: string;
+    target: ManagerDashboardView;
+  }> = [
+    {
+      title: "Priority Focus",
+      text: topPriorityAlert
+        ? topPriorityAlert.message
+        : featuredInsight?.message || "No urgent issue is currently flagged for this range.",
+      status: topPriorityAlert ? "Needs review" : businessHealthLabel,
+      tone: businessHealthTone,
+      actionLabel: topPriorityAlert ? "Review alerts" : "Review insights",
+      target: priorityFocusTarget,
+    },
+    {
+      title: "Best Performer",
+      text: bestDepartment
+        ? `${bestDepartment.name} leads active departments with ${money(bestDepartment.total)} in sales.`
+        : "No active department leader is available for this range yet.",
+      status: bestDepartment ? "Leading" : "No leader yet",
+      tone: bestDepartment ? "green" : "blue",
+      actionLabel: "Review departments",
+      target: "department-activity",
+    },
+    {
+      title: "Collection / Cash Watch",
+      text: collectionWatchHasRisk
+        ? `${money(receivablesTotal)} in receivables and ${pendingClosings.length} pending closing${pendingClosings.length === 1 ? "" : "s"} are visible for this range.`
+        : "Collections and cash desk signals look steady for this range.",
+      status: collectionWatchHasRisk ? "Watch" : "Steady",
+      tone: collectionWatchHasRisk ? "amber" : "green",
+      actionLabel: "Review alerts",
+      target: "alerts",
+    },
+    {
+      title: "Next Review Step",
+      text: topPriorityAlert
+        ? "Start with the ranked manager alerts before moving into supporting details."
+        : featuredInsight
+          ? "Start with manager insights to understand the strongest signal in this range."
+          : topDepartments.length || quietDepartments
+            ? "Review department activity to confirm performance and quiet areas."
+            : "Use supporting KPI details as the baseline for this range.",
+      status: labelize(nextReviewTarget),
+      tone: topPriorityAlert ? smartAlertTone(topPriorityAlert.type) : "blue",
+      actionLabel: "Open review panel",
+      target: nextReviewTarget,
+    },
+  ];
+
   const dashboardPathFor = (view: ManagerDashboardView) => {
     const params = buildDashboardParams({
       source: searchParams,
@@ -901,6 +965,40 @@ export default function ManagerDashboard() {
             <DetailMetric label="Pending Closings" value={String(pendingClosings.length)} />
             <DetailMetric label="Alerts" value={String(alerts.length)} />
           </div>
+        </div>
+      </section>
+
+      <section style={styles.decisionCenter} aria-label="Manager Decision Center">
+        <div style={styles.sectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>Manager Decision Center</h2>
+            <p style={styles.sectionSubtitle}>
+              Fast read on attention areas, strengths, next action, and data confidence.
+            </p>
+          </div>
+          <span style={{ ...styles.badge, ...alertStyle(businessHealthTone) }}>
+            {dataConfidenceLabel}
+          </span>
+        </div>
+        <div style={styles.decisionGrid}>
+          {decisionCards.map((card) => (
+            <article key={card.title} style={styles.decisionCard}>
+              <div style={styles.decisionCardTop}>
+                <h3 style={styles.decisionTitle}>{card.title}</h3>
+                <span style={{ ...styles.decisionPill, ...alertStyle(card.tone) }}>
+                  {card.status}
+                </span>
+              </div>
+              <p style={styles.decisionText}>{card.text}</p>
+              <button
+                type="button"
+                style={styles.decisionButton}
+                onClick={() => openDashboardView(card.target)}
+              >
+                {card.actionLabel}
+              </button>
+            </article>
+          ))}
         </div>
       </section>
 
@@ -1444,6 +1542,68 @@ const styles: Record<string, CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
     gap: 10,
+  },
+  decisionCenter: {
+    background: "#ffffff",
+    border: "1px solid #dce5ec",
+    borderRadius: 8,
+    padding: 18,
+    marginBottom: 20,
+    boxShadow: "0 10px 24px rgba(15, 38, 55, 0.05)",
+  },
+  decisionGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 14,
+  },
+  decisionCard: {
+    border: "1px solid #edf2f6",
+    borderRadius: 8,
+    padding: 14,
+    background: "#f8fafc",
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    minHeight: 180,
+  },
+  decisionCardTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  decisionTitle: {
+    margin: 0,
+    color: "#17364b",
+    fontSize: 15,
+  },
+  decisionPill: {
+    display: "inline-flex",
+    alignItems: "center",
+    border: "1px solid",
+    borderRadius: 999,
+    padding: "4px 8px",
+    fontSize: 11,
+    fontWeight: 900,
+    whiteSpace: "nowrap",
+  },
+  decisionText: {
+    margin: 0,
+    color: "#354b5d",
+    fontSize: 13,
+    lineHeight: 1.45,
+    flex: 1,
+  },
+  decisionButton: {
+    alignSelf: "flex-start",
+    minHeight: 34,
+    border: "1px solid #cfdbe4",
+    borderRadius: 8,
+    background: "#ffffff",
+    color: "#17364b",
+    fontWeight: 800,
+    padding: "0 11px",
+    cursor: "pointer",
   },
   filterBar: {
     display: "grid",
