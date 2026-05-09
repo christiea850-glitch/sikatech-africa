@@ -9,7 +9,10 @@ import { useScrollHighlight } from "../../hooks/useScrollHighlight";
 import { useSales } from "../../sales/SalesContext";
 import { useShift } from "../../shifts/ShiftContext";
 import { loadShiftClosings } from "../../shifts/shiftClosingStore";
-import { getManagerInsights } from "../../utils/managerInsights";
+import {
+  getManagerExecutiveBriefCards,
+  getManagerInsights,
+} from "../../utils/managerInsights";
 import { getSmartAlerts, type SmartAlert } from "../../utils/smartAlerts";
 import {
   dashboardDateInRange,
@@ -916,72 +919,23 @@ export default function ManagerDashboard() {
       : metrics.totals.revenue > 0
         ? 100
         : 0;
-  const aiExecutiveBriefItems = [
-    metrics.totals.revenue > 0
-      ? {
-          text:
-            revenueChange > 0
-              ? `Revenue is up ${Math.abs(revenueChangePercent).toFixed(0)}% compared with the prior matching range.`
-              : revenueChange < 0
-                ? `Revenue is down ${Math.abs(revenueChangePercent).toFixed(0)}% compared with the prior matching range.`
-                : "Revenue is steady compared with the prior matching range.",
-          tone: revenueChange > 0 ? "opportunity" : revenueChange < 0 ? "watch" : "healthy",
-        }
-      : null,
-    bestDepartment
-      ? {
-          text: `${bestDepartment.name} is the strongest department signal in this period.`,
-          tone: "opportunity",
-        }
-      : null,
-    metrics.totals.revenue > 0
-      ? {
-          text:
-            collectionPercent >= 90 && receivablesTotal === 0
-              ? "Collections remain healthy with low receivable pressure."
-              : collectionPercent >= 70
-                ? "Collections are covering most recorded revenue, but receivables remain visible."
-                : "Collections are trailing recorded revenue and should stay on the manager watch list.",
-          tone: collectionPercent >= 90 && receivablesTotal === 0 ? "healthy" : collectionPercent >= 70 ? "watch" : "risk",
-        }
-      : null,
-    quietDepartments > 0
-      ? {
-          text: `${quietDepartments} department${quietDepartments === 1 ? "" : "s"} show no activity and may require review.`,
-          tone: "watch",
-        }
-      : activeDepartments > 0
-        ? {
-            text: "All enabled departments show activity in this range.",
-            tone: "healthy",
-          }
-        : null,
-    pendingClosings.length > 0
-      ? {
-          text: `${pendingClosings.length} pending closing${pendingClosings.length === 1 ? "" : "s"} need cash desk follow-up.`,
-          tone: "risk",
-        }
-      : metrics.transactions > 0
-        ? {
-            text: "Cash desk closing pressure looks controlled for this range.",
-            tone: "healthy",
-          }
-        : null,
-    alerts.length > 0
-      ? {
-          text: `${alerts.length} manager alert${alerts.length === 1 ? "" : "s"} remain active for review.`,
-          tone: alerts.some((alert) => alert.type === "critical") ? "risk" : "watch",
-        }
-      : metrics.transactions > 0
-        ? {
-            text: "No active manager alerts are currently blocking the operating read.",
-            tone: "healthy",
-          }
-        : null,
-  ].filter(Boolean).slice(0, 5) as Array<{
-    text: string;
-    tone: "healthy" | "watch" | "risk" | "opportunity";
-  }>;
+  const aiExecutiveBriefItems = getManagerExecutiveBriefCards({
+    metrics,
+    previousMetrics,
+    alerts,
+    insights,
+    departmentPerformance,
+    strongestDepartment,
+    weakestDepartment,
+    receivablesTotal,
+    collectionPercent,
+    collectionGap,
+    pendingClosings,
+    openShifts,
+    unpaidBookings,
+    revenueChange,
+    revenueChangePercent,
+  });
   const decisionCards: Array<{
     title: string;
     text: string;
