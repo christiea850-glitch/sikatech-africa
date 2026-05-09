@@ -16,6 +16,7 @@ import {
   getDashboardMetrics,
   type DashboardGroupBy,
 } from "./dashboardMetrics";
+import AIExecutiveBrief from "./manager/AIExecutiveBrief";
 import AlertAnalytics from "./manager/AlertAnalytics";
 import DepartmentAnalytics from "./manager/DepartmentAnalytics";
 import ExecutiveAnalyticsExpansion from "./manager/ExecutiveAnalyticsExpansion";
@@ -886,6 +887,79 @@ export default function ManagerDashboard() {
         ? "department-activity"
         : "overview";
   const collectionWatchHasRisk = receivablesTotal > 0 || pendingClosings.length > 0;
+  const revenueChange = roundLedgerMoney(metrics.totals.revenue - previousMetrics.totals.revenue);
+  const revenueChangePercent =
+    previousMetrics.totals.revenue > 0
+      ? (revenueChange / previousMetrics.totals.revenue) * 100
+      : metrics.totals.revenue > 0
+        ? 100
+        : 0;
+  const aiExecutiveBriefItems = [
+    metrics.totals.revenue > 0
+      ? {
+          text:
+            revenueChange > 0
+              ? `Revenue is up ${Math.abs(revenueChangePercent).toFixed(0)}% compared with the prior matching range.`
+              : revenueChange < 0
+                ? `Revenue is down ${Math.abs(revenueChangePercent).toFixed(0)}% compared with the prior matching range.`
+                : "Revenue is steady compared with the prior matching range.",
+          tone: revenueChange > 0 ? "opportunity" : revenueChange < 0 ? "watch" : "healthy",
+        }
+      : null,
+    bestDepartment
+      ? {
+          text: `${bestDepartment.name} is the strongest department signal in this period.`,
+          tone: "opportunity",
+        }
+      : null,
+    metrics.totals.revenue > 0
+      ? {
+          text:
+            collectionPercent >= 90 && receivablesTotal === 0
+              ? "Collections remain healthy with low receivable pressure."
+              : collectionPercent >= 70
+                ? "Collections are covering most recorded revenue, but receivables remain visible."
+                : "Collections are trailing recorded revenue and should stay on the manager watch list.",
+          tone: collectionPercent >= 90 && receivablesTotal === 0 ? "healthy" : collectionPercent >= 70 ? "watch" : "risk",
+        }
+      : null,
+    quietDepartments > 0
+      ? {
+          text: `${quietDepartments} department${quietDepartments === 1 ? "" : "s"} show no activity and may require review.`,
+          tone: "watch",
+        }
+      : activeDepartments > 0
+        ? {
+            text: "All enabled departments show activity in this range.",
+            tone: "healthy",
+          }
+        : null,
+    pendingClosings.length > 0
+      ? {
+          text: `${pendingClosings.length} pending closing${pendingClosings.length === 1 ? "" : "s"} need cash desk follow-up.`,
+          tone: "risk",
+        }
+      : metrics.transactions > 0
+        ? {
+            text: "Cash desk closing pressure looks controlled for this range.",
+            tone: "healthy",
+          }
+        : null,
+    alerts.length > 0
+      ? {
+          text: `${alerts.length} manager alert${alerts.length === 1 ? "" : "s"} remain active for review.`,
+          tone: alerts.some((alert) => alert.type === "critical") ? "risk" : "watch",
+        }
+      : metrics.transactions > 0
+        ? {
+            text: "No active manager alerts are currently blocking the operating read.",
+            tone: "healthy",
+          }
+        : null,
+  ].filter(Boolean).slice(0, 5) as Array<{
+    text: string;
+    tone: "healthy" | "watch" | "risk" | "opportunity";
+  }>;
   const decisionCards: Array<{
     title: string;
     text: string;
@@ -1253,6 +1327,11 @@ export default function ManagerDashboard() {
 
       {isOverviewView ? (
       <>
+      <AIExecutiveBrief
+        styles={styles}
+        items={aiExecutiveBriefItems}
+      />
+
       <ManagerDecisionCenter
         styles={styles}
         cards={decisionCards}
@@ -2478,6 +2557,75 @@ const styles: Record<string, CSSProperties> = {
     height: "100%",
     borderRadius: 999,
     transition: "width 420ms ease, opacity 160ms ease",
+  },
+  aiBrief: {
+    background: "#ffffff",
+    border: "1px solid #dce5ec",
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 20,
+    boxShadow: "0 10px 24px rgba(15, 38, 55, 0.05)",
+  },
+  aiBriefBadge: {
+    border: "1px solid #d7e2ea",
+    borderRadius: 999,
+    background: "#f8fafc",
+    color: "#354b5d",
+    fontSize: 11,
+    fontWeight: 900,
+    padding: "5px 9px",
+    textTransform: "uppercase",
+  },
+  aiBriefGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 12,
+  },
+  aiBriefCard: {
+    border: "1px solid #edf2f6",
+    borderRadius: 8,
+    padding: 14,
+    background: "#f8fafc",
+    minHeight: 126,
+    display: "grid",
+    alignContent: "start",
+    gap: 10,
+  },
+  aiBriefPill: {
+    justifySelf: "start",
+    border: "1px solid",
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: 900,
+    padding: "5px 8px",
+    textTransform: "uppercase",
+  },
+  aiBriefPillHealthy: {
+    background: "#ecfdf5",
+    borderColor: "#bbf7d0",
+    color: "#166534",
+  },
+  aiBriefPillWatch: {
+    background: "#fffbeb",
+    borderColor: "#fde68a",
+    color: "#92400e",
+  },
+  aiBriefPillRisk: {
+    background: "#fff1f2",
+    borderColor: "#fecdd3",
+    color: "#9f1239",
+  },
+  aiBriefPillOpportunity: {
+    background: "#eff6ff",
+    borderColor: "#bfdbfe",
+    color: "#1d4ed8",
+  },
+  aiBriefText: {
+    margin: 0,
+    color: "#24394a",
+    fontSize: 14,
+    lineHeight: 1.45,
+    fontWeight: 800,
   },
   drilldownMetricGrid: {
     display: "grid",
