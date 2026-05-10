@@ -1760,41 +1760,38 @@ export default function ManagerDashboard() {
           ...(visualInsightsFlash ? styles.sectionFlash : {}),
         }}
       >
-        <div style={styles.sectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>Visual Insights Hub</h2>
-            <p style={styles.sectionSubtitle}>
-              Power BI-style charts, trends, and manager visual analytics for the selected range.
-            </p>
-          </div>
-          <span style={styles.sectionMeta}>Grouped by {metrics.groupLabel}</span>
-        </div>
-        <VisualInsightsHub
-          styles={styles}
-          activeRangeLabel={getRangeLabel(activeRange)}
-          groupLabel={metrics.groupLabel}
-          hasVisualActivity={hasVisualActivity}
-          collectionPercent={collectionPercent}
-          totals={metrics.totals}
-          financialVisualRows={financialVisualRows}
-          maxFinancialVisualValue={maxFinancialVisualValue}
-          topDepartmentVisualRows={topDepartmentVisualRows}
-          maxDepartmentVisualValue={maxDepartmentVisualValue}
-          groupedVisualRows={groupedVisualRows}
-          maxGroupedVisualValue={maxGroupedVisualValue}
-          alertSeverityRows={alertSeverityRows}
-          maxAlertSeverityCount={maxAlertSeverityCount}
-          receivablesTotal={receivablesTotal}
-          alertsLength={alerts.length}
-          riskInsightCount={riskInsightCount}
-          warningInsightCount={warningInsightCount}
-          activeDepartmentPercent={activeDepartmentPercent}
-          strongestDepartment={strongestDepartment}
-          weakestDepartment={weakestDepartment}
-          money={money}
-          labelize={labelize}
-          openDashboardView={(view) => openDashboardViewWithReturn(view, "Visual Insights")}
-        />
+        <ManagerWorkspaceShell
+          title="Visual Insights Hub"
+          subtitle="Power BI-style charts, trends, and manager visual analytics for the selected range."
+          meta={<span style={styles.sectionMeta}>Grouped by {metrics.groupLabel}</span>}
+        >
+          <VisualInsightsHub
+            styles={styles}
+            activeRangeLabel={getRangeLabel(activeRange)}
+            groupLabel={metrics.groupLabel}
+            hasVisualActivity={hasVisualActivity}
+            collectionPercent={collectionPercent}
+            totals={metrics.totals}
+            financialVisualRows={financialVisualRows}
+            maxFinancialVisualValue={maxFinancialVisualValue}
+            topDepartmentVisualRows={topDepartmentVisualRows}
+            maxDepartmentVisualValue={maxDepartmentVisualValue}
+            groupedVisualRows={groupedVisualRows}
+            maxGroupedVisualValue={maxGroupedVisualValue}
+            alertSeverityRows={alertSeverityRows}
+            maxAlertSeverityCount={maxAlertSeverityCount}
+            receivablesTotal={receivablesTotal}
+            alertsLength={alerts.length}
+            riskInsightCount={riskInsightCount}
+            warningInsightCount={warningInsightCount}
+            activeDepartmentPercent={activeDepartmentPercent}
+            strongestDepartment={strongestDepartment}
+            weakestDepartment={weakestDepartment}
+            money={money}
+            labelize={labelize}
+            openDashboardView={(view) => openDashboardViewWithReturn(view, "Visual Insights")}
+          />
+        </ManagerWorkspaceShell>
       </section>
       ) : null}
 
