@@ -1886,7 +1886,6 @@ export default function ManagerDashboard() {
       ) : null}
 
       {activeView === "operations" ? (
-      <>
       <section
         ref={operationsRef}
         className={operationsFlash ? "active-section" : undefined}
@@ -1895,60 +1894,58 @@ export default function ManagerDashboard() {
           ...(operationsFlash ? styles.sectionFlash : {}),
         }}
       >
-        <div style={styles.sectionHeader}>
-          <h2 style={styles.sectionTitle}>Operations Snapshot</h2>
-        </div>
-        <div style={styles.snapshotGrid}>
-          {snapshot.map((item) => (
-            <article
-              key={item.title}
-              className={
-                (item.title === "Cash Desk Readiness" && closingStatusFlash) ||
-                (item.title === "Front Desk Status" && frontDeskFlash)
-                  ? "active-section"
-                  : undefined
-              }
-              ref={
-                item.title === "Cash Desk Readiness"
-                  ? closingStatusRef
-                  : item.title === "Front Desk Status"
-                    ? frontDeskRef
+        <ManagerWorkspaceShell title="Operations Snapshot">
+          <div style={styles.snapshotGrid}>
+            {snapshot.map((item) => (
+              <article
+                key={item.title}
+                className={
+                  (item.title === "Cash Desk Readiness" && closingStatusFlash) ||
+                  (item.title === "Front Desk Status" && frontDeskFlash)
+                    ? "active-section"
                     : undefined
-              }
-              style={{
-                ...styles.card,
-                ...(item.title === "Cash Desk Readiness" && closingStatusFlash
-                  ? styles.sectionFlash
-                  : {}),
-                ...(item.title === "Front Desk Status" && frontDeskFlash
-                  ? styles.sectionFlash
-                  : {}),
-              }}
-            >
-              <span style={{ ...styles.badge, ...alertStyle(item.tone as AlertTone) }}>
-                {labelize(item.tone)}
-              </span>
-              <h3 style={styles.cardTitle}>{item.title}</h3>
-              <p style={styles.cardText}>{item.text}</p>
-            </article>
-          ))}
-        </div>
+                }
+                ref={
+                  item.title === "Cash Desk Readiness"
+                    ? closingStatusRef
+                    : item.title === "Front Desk Status"
+                      ? frontDeskRef
+                      : undefined
+                }
+                style={{
+                  ...styles.card,
+                  ...(item.title === "Cash Desk Readiness" && closingStatusFlash
+                    ? styles.sectionFlash
+                    : {}),
+                  ...(item.title === "Front Desk Status" && frontDeskFlash
+                    ? styles.sectionFlash
+                    : {}),
+                }}
+              >
+                <span style={{ ...styles.badge, ...alertStyle(item.tone as AlertTone) }}>
+                  {labelize(item.tone)}
+                </span>
+                <h3 style={styles.cardTitle}>{item.title}</h3>
+                <p style={styles.cardText}>{item.text}</p>
+              </article>
+            ))}
+          </div>
+          <OperationsAnalytics
+            styles={styles}
+            rangeLabel={getRangeLabel(activeRange)}
+            operationsReadinessRows={operationsReadinessRows}
+            maxOperationsValue={maxOperationsValue}
+            pendingClosingsLength={pendingClosings.length}
+            openShiftsLength={openShifts.length}
+            unpaidBookingsLength={unpaidBookings.length}
+            activeDepartmentPercent={activeDepartmentPercent}
+            activeDepartments={activeDepartments}
+            quietDepartments={quietDepartments}
+            DetailMetric={DetailMetric}
+            labelize={labelize}
+          />
+        </ManagerWorkspaceShell>
       </section>
-      <OperationsAnalytics
-        styles={styles}
-        rangeLabel={getRangeLabel(activeRange)}
-        operationsReadinessRows={operationsReadinessRows}
-        maxOperationsValue={maxOperationsValue}
-        pendingClosingsLength={pendingClosings.length}
-        openShiftsLength={openShifts.length}
-        unpaidBookingsLength={unpaidBookings.length}
-        activeDepartmentPercent={activeDepartmentPercent}
-        activeDepartments={activeDepartments}
-        quietDepartments={quietDepartments}
-        DetailMetric={DetailMetric}
-        labelize={labelize}
-      />
-      </>
       ) : null}
 
       {activeView === "front-desk" ? (
