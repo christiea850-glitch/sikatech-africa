@@ -2047,7 +2047,6 @@ export default function ManagerDashboard() {
       ) : null}
 
       {activeView === "department-activity" ? (
-      <>
       <section
         ref={departmentActivityRef}
         className={departmentActivityFlash ? "active-section" : undefined}
@@ -2056,15 +2055,11 @@ export default function ManagerDashboard() {
           ...(departmentActivityFlash ? styles.sectionFlash : {}),
         }}
       >
-        <div style={styles.sectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>Department Performance Preview</h2>
-            <p style={styles.sectionSubtitle}>
-              Quick department totals before opening the full department cards.
-            </p>
-          </div>
-          <span style={styles.sectionMeta}>{getRangeLabel(activeRange)}</span>
-        </div>
+        <ManagerWorkspaceShell
+          title="Department Performance Preview"
+          subtitle="Quick department totals before opening the full department cards."
+          meta={<span style={styles.sectionMeta}>{getRangeLabel(activeRange)}</span>}
+        >
         {departmentPerformance.length === 0 ? (
           <div style={styles.emptyState}>No department activity yet.</div>
         ) : (
@@ -2133,20 +2128,20 @@ export default function ManagerDashboard() {
             ) : null}
           </>
         )}
+        <DepartmentAnalytics
+          styles={styles}
+          departmentPerformance={departmentPerformance}
+          departmentRankingRows={departmentRankingRows}
+          activeDepartments={activeDepartments}
+          enabledDepartmentsLength={enabledDepartments.length}
+          quietDepartments={quietDepartments}
+          activeDepartmentPercent={activeDepartmentPercent}
+          maxDepartmentTotal={maxDepartmentTotal}
+          maxDepartmentTransactions={maxDepartmentTransactions}
+          money={money}
+        />
+        </ManagerWorkspaceShell>
       </section>
-      <DepartmentAnalytics
-        styles={styles}
-        departmentPerformance={departmentPerformance}
-        departmentRankingRows={departmentRankingRows}
-        activeDepartments={activeDepartments}
-        enabledDepartmentsLength={enabledDepartments.length}
-        quietDepartments={quietDepartments}
-        activeDepartmentPercent={activeDepartmentPercent}
-        maxDepartmentTotal={maxDepartmentTotal}
-        maxDepartmentTransactions={maxDepartmentTransactions}
-        money={money}
-      />
-      </>
       ) : null}
 
       {activeView === "sales-summary" ? (
