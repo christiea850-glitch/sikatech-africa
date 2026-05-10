@@ -1721,15 +1721,18 @@ export default function ManagerDashboard() {
       ) : null}
 
       {activeView === "ai-brief" ? (
-      <>
-      <AIExecutiveBrief
-        styles={styles}
-        items={aiExecutiveBriefItems}
-        activeItemId={selectedExecutiveBrief?.id || null}
-        onSelectItem={(item) => handleExecutiveBriefClick(item as ManagerExecutiveBriefCard)}
-      />
-      <TrendIntelligenceSection trendIntelligence={trendIntelligence} />
-      </>
+      <ManagerWorkspaceShell
+        title="AI Brief"
+        subtitle="Deterministic manager observations from the current dashboard signals."
+      >
+        <AIExecutiveBrief
+          styles={styles}
+          items={aiExecutiveBriefItems}
+          activeItemId={selectedExecutiveBrief?.id || null}
+          onSelectItem={(item) => handleExecutiveBriefClick(item as ManagerExecutiveBriefCard)}
+        />
+        <TrendIntelligenceSection trendIntelligence={trendIntelligence} />
+      </ManagerWorkspaceShell>
       ) : null}
 
       {activeView === "decision-center" ? (
